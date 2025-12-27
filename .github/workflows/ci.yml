@@ -82,10 +82,20 @@ jobs:
       - name: Install ALSA dev (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-      - name: Run tests
+
+      # Run tests - exclude ASIO on Windows (separate job handles that)
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
         run: cargo test --all-features --workspace
-      - name: Run doc tests
+      - name: Run tests (Windows - no ASIO)
+        if: runner.os == 'Windows'
+        run: cargo test --workspace
+      - name: Run doc tests (Unix)
+        if: runner.os != 'Windows'
         run: cargo test --doc --all-features
+      - name: Run doc tests (Windows)
+        if: runner.os == 'Windows'
+        run: cargo test --doc
 
   # Windows ASIO build verification
   test-windows-asio:
