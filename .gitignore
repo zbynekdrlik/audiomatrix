@@ -17,6 +17,7 @@
 *.pem
 *.key
 api_token.txt
+TARGETS.md
 
 # Coverage reports
 lcov.info

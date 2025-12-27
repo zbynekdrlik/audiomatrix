@@ -21,6 +21,8 @@ authors = ["Zbynek Drlik <drlik.zbynek@gmail.com>"]
 tokio = { version = "1.43", features = ["full"] }
 
 # Audio
+# Note: asio feature requires ASIO SDK. On Windows CI without SDK, builds still work
+# but ASIO devices won't be enumerated. Users need ASIO4ALL or native ASIO driver.
 cpal = "0.15"
 dasp = "0.11"
 rubato = "0.16"

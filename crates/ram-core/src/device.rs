@@ -330,43 +330,66 @@ impl DeviceManager {
     }
 
     /// Refreshes the device list by enumerating all available devices.
+    ///
+    /// On Windows, this enumerates devices from ALL available hosts (WASAPI, ASIO, etc.)
+    /// On Linux/macOS, this enumerates from the default host (ALSA, `CoreAudio`).
     pub fn refresh(&self) {
-        let host = cpal::default_host();
         let now = Instant::now();
         let mut current_ids = std::collections::HashSet::new();
 
-        // Get default devices
-        let default_input = host.default_input_device().and_then(|d| d.name().ok());
-        let default_output = host.default_output_device().and_then(|d| d.name().ok());
+        // Enumerate devices from ALL available hosts (WASAPI, ASIO, CoreAudio, ALSA, etc.)
+        for host_id in cpal::available_hosts() {
+            let host = match cpal::host_from_id(host_id) {
+                Ok(h) => h,
+                Err(e) => {
+                    tracing::warn!("Failed to initialize host {:?}: {}", host_id, e);
+                    continue;
+                },
+            };
 
-        // Enumerate input devices
-        if let Ok(devices) = host.input_devices() {
-            for device in devices {
-                if let Some(info) = Self::device_to_info(
-                    &device,
-                    DeviceDirection::Input,
-                    default_input.as_ref(),
-                    now,
-                ) {
-                    current_ids.insert(info.id.clone());
-                    self.update_device(info);
+            let host_name = host_id.name();
+
+            // Get default devices for this host
+            let default_input = host.default_input_device().and_then(|d| d.name().ok());
+            let default_output = host.default_output_device().and_then(|d| d.name().ok());
+
+            // Enumerate input devices
+            if let Ok(devices) = host.input_devices() {
+                for device in devices {
+                    if let Some(info) = Self::device_to_info_with_host(
+                        &device,
+                        DeviceDirection::Input,
+                        default_input.as_ref(),
+                        host_name,
+                        now,
+                    ) {
+                        current_ids.insert(info.id.clone());
+                        self.update_device(info);
+                    }
                 }
             }
-        }
 
-        // Enumerate output devices
-        if let Ok(devices) = host.output_devices() {
-            for device in devices {
-                if let Some(info) = Self::device_to_info(
-                    &device,
-                    DeviceDirection::Output,
-                    default_output.as_ref(),
-                    now,
-                ) {
-                    current_ids.insert(info.id.clone());
-                    self.update_device(info);
+            // Enumerate output devices
+            if let Ok(devices) = host.output_devices() {
+                for device in devices {
+                    if let Some(info) = Self::device_to_info_with_host(
+                        &device,
+                        DeviceDirection::Output,
+                        default_output.as_ref(),
+                        host_name,
+                        now,
+                    ) {
+                        current_ids.insert(info.id.clone());
+                        self.update_device(info);
+                    }
                 }
             }
+
+            tracing::debug!(
+                "Enumerated devices from host '{}': {} devices",
+                host_name,
+                current_ids.len()
+            );
         }
 
         // Detect removed devices
@@ -375,14 +398,32 @@ impl DeviceManager {
         *self.last_refresh.write() = now;
     }
 
+    #[allow(dead_code)] // Used in tests
     fn device_to_info(
         device: &cpal::Device,
         direction: DeviceDirection,
         default_name: Option<&String>,
         now: Instant,
     ) -> Option<DeviceInfo> {
+        Self::device_to_info_with_host(
+            device,
+            direction,
+            default_name,
+            cpal::default_host().id().name(),
+            now,
+        )
+    }
+
+    fn device_to_info_with_host(
+        device: &cpal::Device,
+        direction: DeviceDirection,
+        default_name: Option<&String>,
+        host_name: &str,
+        now: Instant,
+    ) -> Option<DeviceInfo> {
         let name = device.name().ok()?;
-        let id = format!("{direction}:{name}");
+        // Include host in ID to differentiate WASAPI vs ASIO devices with same name
+        let id = format!("{host_name}:{direction}:{name}");
         let is_default = default_name.is_some_and(|d| d == &name);
 
         let configs = Self::get_device_configs(device, direction);
@@ -391,7 +432,7 @@ impl DeviceManager {
             id,
             name,
             direction,
-            host: cpal::default_host().id().name().to_string(),
+            host: host_name.to_string(),
             is_default,
             configs,
             last_seen: now,
