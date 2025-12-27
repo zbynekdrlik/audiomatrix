@@ -434,9 +434,9 @@ mod tests {
         let mut samples = [-2.0, -1.5, -1.0, 0.0, 1.0, 1.5, 2.0];
         DestinationChannel::apply_clip(&mut samples);
 
-        assert!(samples[0] - (-1.0) < f32::EPSILON);
-        assert!(samples[1] - (-1.0) < f32::EPSILON);
-        assert!(samples[2] - (-1.0) < f32::EPSILON);
+        assert!((samples[0] - (-1.0)).abs() < f32::EPSILON);
+        assert!((samples[1] - (-1.0)).abs() < f32::EPSILON);
+        assert!((samples[2] - (-1.0)).abs() < f32::EPSILON);
         assert!(samples[3].abs() < f32::EPSILON);
         assert!((samples[4] - 1.0).abs() < f32::EPSILON);
         assert!((samples[5] - 1.0).abs() < f32::EPSILON);

@@ -159,7 +159,7 @@ mod tests {
         // All reads should be valid floats (not corrupted)
         for &v in &reads {
             assert!(!v.is_nan(), "Corrupted read detected");
-            assert!(v >= 0.0 && v < 1000.0, "Value out of expected range: {v}");
+            assert!((0.0..1000.0).contains(&v), "Value out of expected range: {v}");
         }
     }
 
