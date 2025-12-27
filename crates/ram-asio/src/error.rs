@@ -38,11 +38,7 @@ pub enum AsioError {
 
     /// Buffer size not supported.
     #[error("buffer size {requested} not supported (min: {min}, max: {max})")]
-    BufferSizeNotSupported {
-        requested: u32,
-        min: u32,
-        max: u32,
-    },
+    BufferSizeNotSupported { requested: u32, min: u32, max: u32 },
 
     /// Sample rate not supported.
     #[error("sample rate {0} Hz not supported by device")]

@@ -383,10 +383,14 @@ impl DeviceManager {
                         }
                     }
                     tracing::info!("Host '{}' has {} input device(s)", host_name, count);
-                }
+                },
                 Err(e) => {
-                    tracing::warn!("Failed to enumerate input devices from host '{}': {}", host_name, e);
-                }
+                    tracing::warn!(
+                        "Failed to enumerate input devices from host '{}': {}",
+                        host_name,
+                        e
+                    );
+                },
             }
 
             // Enumerate output devices
@@ -411,10 +415,14 @@ impl DeviceManager {
                         }
                     }
                     tracing::info!("Host '{}' has {} output device(s)", host_name, count);
-                }
+                },
                 Err(e) => {
-                    tracing::warn!("Failed to enumerate output devices from host '{}': {}", host_name, e);
-                }
+                    tracing::warn!(
+                        "Failed to enumerate output devices from host '{}': {}",
+                        host_name,
+                        e
+                    );
+                },
             }
 
             tracing::info!(

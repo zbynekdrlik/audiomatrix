@@ -55,23 +55,13 @@ impl AsioHost {
                 // Get input channels
                 let input_channels = device
                     .supported_input_configs()
-                    .map(|configs| {
-                        configs
-                            .map(|c| c.channels())
-                            .max()
-                            .unwrap_or(0)
-                    })
+                    .map(|configs| configs.map(|c| c.channels()).max().unwrap_or(0))
                     .unwrap_or(0);
 
                 // Get output channels
                 let output_channels = device
                     .supported_output_configs()
-                    .map(|configs| {
-                        configs
-                            .map(|c| c.channels())
-                            .max()
-                            .unwrap_or(0)
-                    })
+                    .map(|configs| configs.map(|c| c.channels()).max().unwrap_or(0))
                     .unwrap_or(0);
 
                 // Get supported sample rates

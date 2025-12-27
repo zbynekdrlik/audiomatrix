@@ -30,15 +30,15 @@
 //! }
 //! ```
 
-pub mod host;
 pub mod device;
-pub mod stream;
 pub mod error;
+pub mod host;
+pub mod stream;
 
-pub use host::AsioHost;
 pub use device::{AsioDevice, AsioDeviceInfo};
-pub use stream::AsioStream;
 pub use error::{AsioError, AsioResult};
+pub use host::AsioHost;
+pub use stream::AsioStream;
 
 /// Check if ASIO support is available at runtime.
 ///
