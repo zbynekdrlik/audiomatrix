@@ -1,0 +1,75 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+api_token.txt
+
+# Coverage reports
+lcov.info
+*.profraw
+*.profdata
+tarpaulin-report.html
+coverage/
+
+# Benchmark results
+criterion/
+
+# Documentation build
+/docs/book/
+/target/doc/
+
+# Log files
+*.log
+logs/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# AudioMatrix specific
+/config.toml
+/devices/
+/subscriptions.toml
+/cache/
+/presets/
+*.toml.bak
+
+# Virtual ASIO build artifacts (Windows)
+*.dll
+*.lib
+*.exp
+*.pdb
+
+# Controller (web UI) dependencies
+controller/node_modules/
+controller/dist/
+controller/.parcel-cache/
+
+# Test artifacts
+test_output/
+*.wav
+*.mp3
+
+# Profiling
+perf.data
+perf.data.old
+flamegraph.svg

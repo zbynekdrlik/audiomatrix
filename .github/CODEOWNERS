@@ -1,0 +1,12 @@
+# Default owners for everything in the repo
+* @YOUR_USERNAME
+
+# Architecture changes require explicit review
+ARCHITECTURE.md @YOUR_USERNAME
+CLAUDE.md @YOUR_USERNAME
+
+# Core audio engine
+crates/ram-core/ @YOUR_USERNAME
+
+# CI/CD configuration
+.github/ @YOUR_USERNAME

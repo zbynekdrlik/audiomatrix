@@ -1,0 +1,839 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
+# AudioMatrix - Claude Code Project Guidelines
+
+## Project Identity
+
+**Name:** AudioMatrix
+**Type:** Professional audio routing system (Dante-like)
+**Language:** Rust (2021 edition, MSRV 1.75+)
+**Architecture:** See `ARCHITECTURE.md`
+
+## Development Philosophy
+
+### Core Principles
+
+1. **Architecture-First**: `ARCHITECTURE.md` is the single source of truth. Code follows architecture, never the reverse.
+2. **Architecture-Always-Updated**: When design or architectural changes are discovered during development, `ARCHITECTURE.md` MUST be updated immediately to reflect the change. Never let implementation diverge from documentation.
+3. **Test-Driven Development (TDD)**: Write tests before implementation. No PR merges without tests.
+4. **Audio-Grade Quality**: Lock-free audio paths, zero allocations in hot paths, deterministic latency.
+5. **SOTA 2025 Rust**: Use modern idioms, async/await, zero-cost abstractions, compile-time guarantees.
+
+### Senior Developer Mindset
+
+- **Think before coding**: Understand the problem deeply before writing a single line
+- **Design for change**: Anticipate future requirements, use trait-based abstractions
+- **Fail fast, fail loud**: Errors should be caught early and be informative
+- **Measure everything**: Performance claims must be backed by benchmarks
+
+### Audio Expert Considerations
+
+- **Latency is king**: Every microsecond matters in real-time audio
+- **Lock-free or die**: Mutexes in audio callbacks cause glitches
+- **Buffer management**: Pre-allocate everything, use ring buffers
+- **Sample rate handling**: Always consider resampling implications
+- **Thread priority**: Audio threads need real-time scheduling
+
+---
+
+## OpenSpec Workflow
+
+This project uses **OpenSpec** for spec-driven development. All significant changes go through a proposal process.
+
+### When to Create a Proposal
+
+Create a change proposal (`openspec/changes/<change-id>/`) for:
+- New audio routing features
+- API endpoint additions/modifications
+- VBAN protocol changes
+- WebSocket event schema changes
+- Architecture pattern changes
+- Breaking changes of any kind
+
+### When to Skip Proposals
+
+Proceed directly with code for:
+- Bug fixes restoring documented behavior
+- Test additions for existing functionality
+- Documentation updates
+- Dependency updates (non-breaking)
+- Internal refactoring without behavior change
+
+### Proposal Workflow
+
+```bash
+# 1. Check existing specs and active changes
+openspec list --specs
+openspec list
+
+# 2. Create proposal structure
+mkdir -p openspec/changes/add-feature-name/specs/capability-name
+# Create: proposal.md, tasks.md, specs/capability/spec.md
+
+# 3. Write spec deltas with ADDED/MODIFIED/REMOVED sections
+# Each requirement needs at least one #### Scenario:
+
+# 4. Validate before requesting approval
+openspec validate add-feature-name --strict
+
+# 5. Request approval before implementation
+# 6. Implement per tasks.md
+# 7. Archive after deployment
+openspec archive add-feature-name --yes
+```
+
+### Key Files
+
+- `openspec/project.md` - Project context and conventions
+- `openspec/AGENTS.md` - Full OpenSpec instructions
+- `openspec/specs/` - Current truth (what IS built)
+- `openspec/changes/` - Proposals (what SHOULD change)
+
+---
+
+## Keeping ARCHITECTURE.md Up-to-Date
+
+`ARCHITECTURE.md` is the **single source of truth** for system design. It must always reflect reality.
+
+### When to Update ARCHITECTURE.md
+
+Update immediately when:
+- Discovering a design flaw that requires a different approach
+- Implementation reveals a better pattern than documented
+- Adding new components, APIs, or data structures
+- Changing thread models, synchronization, or data flow
+- Modifying network protocols or message formats
+- Updating configuration file schemas
+- Finding edge cases that change expected behavior
+
+### Update Process
+
+1. **Before coding the change**: Update ARCHITECTURE.md with the new design
+2. **Create OpenSpec proposal if significant**: Major changes need spec deltas
+3. **Reference the section**: Note which ARCHITECTURE.md section was updated in commit message
+4. **Keep diagrams current**: ASCII diagrams and tables must match implementation
+
+### What NOT to Change Without Discussion
+
+These sections require team review before modification:
+- Core threading model (ASIO callback → Router → Network)
+- Destination-owned subscription model
+- VBAN packet format (protocol compatibility)
+- Connection ID format
+- API versioning strategy
+
+### Consistency Checks
+
+During code review, verify:
+- [ ] New structs/enums match ARCHITECTURE.md data models
+- [ ] API endpoints match documented routes
+- [ ] Config file fields match documented schema
+- [ ] Error handling follows documented patterns
+
+---
+
+## Code Organization
+
+### File Size Limits
+
+**Maximum 1000 lines per file.** Split larger files by:
+- Extracting types to separate modules
+- Moving implementations to dedicated files
+- Using feature-based module organization
+
+### Module Structure
+
+```
+crates/{crate_name}/
+├── src/
+│   ├── lib.rs              # Public API, re-exports only (< 100 lines)
+│   ├── error.rs            # Error types for this crate
+│   ├── types.rs            # Shared types and traits
+│   ├── {feature}/
+│   │   ├── mod.rs          # Feature module (< 200 lines)
+│   │   ├── {component}.rs  # Individual components (< 500 lines)
+│   │   └── tests.rs        # Feature tests
+│   └── tests/              # Integration tests
+├── benches/                # Benchmarks (criterion)
+└── Cargo.toml
+```
+
+### Naming Conventions
+
+```rust
+// Types: PascalCase
+pub struct AudioBuffer { }
+pub trait StreamProcessor { }
+pub enum ConnectionState { }
+
+// Functions/methods: snake_case
+fn process_audio_block() { }
+impl AudioBuffer {
+    pub fn read_samples(&self) -> &[f32] { }
+}
+
+// Constants: SCREAMING_SNAKE_CASE
+const MAX_CHANNELS: usize = 256;
+const BUFFER_SIZE_MS: f32 = 1.33;
+
+// Modules: snake_case
+mod audio_buffer;
+mod vban_protocol;
+```
+
+---
+
+## Testing Strategy
+
+### Test Pyramid
+
+```
+         /\
+        /  \     E2E Tests (10%)
+       /    \    - Full system integration
+      /      \   - Real audio device tests
+     /--------\
+    /          \ Integration Tests (30%)
+   /            \ - Cross-crate communication
+  /              \ - Network protocol tests
+ /----------------\
+/                  \ Unit Tests (60%)
+                    - Pure function tests
+                    - Component isolation
+```
+
+### Test Requirements
+
+1. **Every PR must have tests** - No exceptions
+2. **Coverage target: 80%+** - Enforced by CI
+3. **Audio path tests**: Must verify lock-free behavior
+4. **Benchmark regressions**: CI fails on performance degradation
+
+### Test File Organization
+
+```rust
+// src/buffer/tests.rs - Unit tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ring_buffer_write_read_roundtrip() {
+        // Arrange
+        let buffer = RingBuffer::new(1024);
+        let samples = [0.5f32; 64];
+
+        // Act
+        let written = buffer.write(&samples);
+        let mut output = [0.0f32; 64];
+        let read = buffer.read(&mut output);
+
+        // Assert
+        assert_eq!(written, 64);
+        assert_eq!(read, 64);
+        assert_eq!(output, samples);
+    }
+}
+
+// tests/integration/vban_roundtrip.rs - Integration test
+#[tokio::test]
+async fn vban_sender_receiver_roundtrip() {
+    // Full VBAN send/receive cycle
+}
+
+// tests/e2e/full_routing.rs - E2E test
+#[tokio::test]
+#[ignore] // Requires real audio hardware
+async fn route_audio_between_virtual_devices() {
+    // Full system test with virtual ASIO
+}
+```
+
+### Property-Based Testing
+
+Use `proptest` for complex invariants:
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn ring_buffer_never_loses_samples(
+        samples in prop::collection::vec(any::<f32>(), 0..1024)
+    ) {
+        let buffer = RingBuffer::new(2048);
+        buffer.write(&samples);
+        let mut output = vec![0.0; samples.len()];
+        let read = buffer.read(&mut output);
+        prop_assert_eq!(read, samples.len());
+    }
+}
+```
+
+### Miri for Unsafe Code
+
+```bash
+# Run under Miri for undefined behavior detection
+cargo +nightly miri test -p ram-core
+```
+
+---
+
+## GitHub Workflow
+
+### Branch Strategy
+
+```
+main (protected)
+├── develop (integration)
+│   ├── feature/xxx-description
+│   ├── fix/xxx-description
+│   └── refactor/xxx-description
+└── release/v1.x.x
+```
+
+### Branch Protection Rules (main)
+
+- **Require PR reviews**: Minimum 1 approval
+- **Require status checks**:
+  - `test` (all platforms)
+  - `lint` (clippy, fmt)
+  - `coverage` (>= 80%)
+  - `audit` (security vulnerabilities)
+  - `benchmark` (no regression)
+- **Require linear history**: Squash or rebase only
+- **No direct pushes**: All changes via PR
+
+### PR Template
+
+```markdown
+## Summary
+<!-- Brief description of changes -->
+
+## Type
+- [ ] Feature
+- [ ] Bug fix
+- [ ] Refactor
+- [ ] Documentation
+- [ ] CI/CD
+
+## Testing
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated
+- [ ] Manual testing performed
+
+## Checklist
+- [ ] Code follows project style guidelines
+- [ ] No files exceed 1000 lines
+- [ ] All tests pass locally
+- [ ] Documentation updated
+- [ ] CHANGELOG updated (if applicable)
+
+## Related Issues
+Closes #XXX
+```
+
+### Commit Message Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+Types: `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `perf`, `chore`
+
+Example:
+```
+feat(vban): implement adaptive jitter buffer
+
+- Add dynamic buffer sizing based on network conditions
+- Implement packet reordering within jitter window
+- Add metrics for buffer underrun/overrun tracking
+
+Closes #42
+```
+
+---
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflow
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Format check - fast fail
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  # Clippy lints
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic
+
+  # Tests on all platforms
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features --workspace
+
+  # Coverage enforcement
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(cargo llvm-cov --all-features --workspace --json | jq '.data[0].totals.lines.percent')
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "Coverage $COVERAGE% is below 80% threshold"
+            exit 1
+          fi
+
+  # Security audit
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Benchmark regression check
+  benchmark:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run benchmarks
+        run: cargo bench --workspace -- --save-baseline pr
+      - name: Compare with main
+        run: |
+          git fetch origin main
+          git checkout origin/main
+          cargo bench --workspace -- --save-baseline main
+          git checkout -
+          cargo bench --workspace -- --baseline main --load-baseline pr
+          # Fail if any benchmark regressed by more than 10%
+
+  # Miri for unsafe code
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - run: cargo miri test -p ram-core
+
+  # Documentation build
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+```
+
+### Required Status Checks
+
+All PRs to `main` must pass:
+- `fmt`
+- `clippy`
+- `test` (all matrix entries)
+- `coverage`
+- `audit`
+- `benchmark` (if performance-sensitive)
+
+---
+
+## Claude Code Integration
+
+### MCP Servers (Recommended)
+
+Configure in `~/.config/claude-code/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "rust-analyzer": {
+      "command": "rust-analyzer",
+      "args": ["--lsp"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-memory"]
+    }
+  }
+}
+```
+
+### Custom Skills (`.claude/skills/`)
+
+Create project-specific skills:
+
+```markdown
+# .claude/skills/run-tests.md
+---
+name: test
+description: Run project tests with coverage
+---
+
+Run the following test workflow:
+
+1. Run unit tests: `cargo test --workspace`
+2. Check coverage: `cargo llvm-cov --workspace`
+3. Report any failing tests with their error messages
+4. Summarize coverage percentage by crate
+```
+
+```markdown
+# .claude/skills/review-audio.md
+---
+name: review-audio
+description: Review audio code for real-time safety
+---
+
+Analyze the provided audio code for:
+
+1. **Lock-free safety**: No mutex/rwlock in audio callbacks
+2. **Allocation-free**: No heap allocations in hot paths
+3. **Atomic correctness**: Proper memory ordering
+4. **Buffer safety**: No panics, proper bounds checking
+5. **Latency impact**: Estimate additional latency
+
+Report issues as: CRITICAL, WARNING, or INFO
+```
+
+### Hooks (`.claude/hooks/`)
+
+```json
+// .claude/hooks/pre-commit.json
+{
+  "event": "pre-commit",
+  "command": "cargo fmt --check && cargo clippy -- -D warnings",
+  "failOnError": true
+}
+```
+
+### Memory/Context Optimization
+
+For long sessions, use structured memory:
+
+```
+/mem-search "VBAN protocol implementation"
+/mem-search "ring buffer design decisions"
+```
+
+Key patterns to remember:
+- Connection ID format: `{src}:{dev}:{ch}>{dst}:{dev}:{ch}`
+- 1-based channel indexing in API/UI
+- Destination-owned subscription model
+- LOCAL placeholder in subscriptions.toml
+
+---
+
+## Performance Requirements
+
+### Latency Budgets
+
+| Operation | Target | Max Acceptable |
+|-----------|--------|----------------|
+| Local route (buffer copy) | < 0.1ms | 0.5ms |
+| Full local path | < 3ms | 5ms |
+| Network path (LAN) | < 5ms | 10ms |
+| ASIO callback processing | < 0.5ms | 1ms |
+
+### Benchmarking
+
+Every performance-critical component needs benchmarks:
+
+```rust
+// benches/ring_buffer.rs
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+
+fn bench_ring_buffer_throughput(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ring_buffer");
+
+    for size in [64, 256, 1024, 4096] {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_function(format!("write_{}", size), |b| {
+            let buffer = RingBuffer::new(8192);
+            let samples = vec![0.5f32; size];
+            b.iter(|| buffer.write(&samples));
+        });
+    }
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_ring_buffer_throughput);
+criterion_main!(benches);
+```
+
+---
+
+## Code Quality Gates
+
+### Pre-commit Checks (Local)
+
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+
+set -e
+
+echo "Running format check..."
+cargo fmt --check
+
+echo "Running clippy..."
+cargo clippy --all-targets -- -D warnings
+
+echo "Running tests..."
+cargo test --workspace
+
+echo "All checks passed!"
+```
+
+### Clippy Configuration
+
+```toml
+# clippy.toml
+avoid-breaking-exported-api = false
+cognitive-complexity-threshold = 15
+too-many-arguments-threshold = 6
+type-complexity-threshold = 200
+```
+
+### rustfmt Configuration
+
+```toml
+# rustfmt.toml
+edition = "2021"
+max_width = 100
+use_small_heuristics = "Default"
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+```
+
+---
+
+## Documentation Requirements
+
+### Code Documentation
+
+```rust
+/// Processes incoming audio samples through the routing matrix.
+///
+/// This function is called from the audio thread and MUST be lock-free.
+/// Any blocking operation here will cause audio glitches.
+///
+/// # Arguments
+///
+/// * `input` - Input samples from source device (interleaved if multi-channel)
+/// * `output` - Output buffer to fill (same format as input)
+///
+/// # Returns
+///
+/// Number of samples processed, which may be less than `input.len()` if
+/// the internal buffer is full.
+///
+/// # Safety
+///
+/// This function uses unsafe internally for performance but maintains
+/// the following invariants:
+/// - No heap allocations
+/// - No system calls
+/// - No blocking operations
+///
+/// # Example
+///
+/// ```
+/// let router = AudioRouter::new(config);
+/// let input = [0.5f32; 64];
+/// let mut output = [0.0f32; 64];
+/// let processed = router.process(&input, &mut output);
+/// assert_eq!(processed, 64);
+/// ```
+pub fn process(&self, input: &[f32], output: &mut [f32]) -> usize {
+    // Implementation
+}
+```
+
+### Architecture Decision Records (ADRs)
+
+Store in `docs/adr/`:
+
+```markdown
+# ADR-001: Use VBAN for Network Audio Transport
+
+## Status
+Accepted
+
+## Context
+We need a network audio protocol that is:
+- Low latency (< 5ms)
+- Compatible with existing software
+- Well-documented
+
+## Decision
+Use VBAN protocol as the transport layer.
+
+## Consequences
+- Good: Compatible with VB-Audio ecosystem
+- Good: Simple UDP-based protocol
+- Bad: No built-in authentication
+- Mitigation: Document security requirements
+```
+
+---
+
+## Development Workflow
+
+### Starting New Feature
+
+```bash
+# 1. Create feature branch
+git checkout develop
+git pull
+git checkout -b feature/xxx-description
+
+# 2. Write failing tests first (TDD)
+# ... write tests ...
+cargo test --workspace  # Should fail
+
+# 3. Implement feature
+# ... implement ...
+cargo test --workspace  # Should pass
+
+# 4. Run full check
+cargo fmt
+cargo clippy -- -D warnings
+cargo test --workspace
+cargo bench --workspace
+
+# 5. Create PR
+git push -u origin feature/xxx-description
+gh pr create --base develop
+```
+
+### Reviewing PRs
+
+Checklist for reviewers:
+
+- [ ] Tests cover new functionality
+- [ ] No files exceed 1000 lines
+- [ ] Audio code is lock-free
+- [ ] Error handling is appropriate
+- [ ] Documentation is updated
+- [ ] Benchmarks added for perf-critical code
+- [ ] No clippy warnings
+- [ ] Clean commit history
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Clippy too strict?**
+```bash
+# Allow specific lint temporarily (add comment explaining why)
+#[allow(clippy::too_many_arguments)]  // Builder pattern pending refactor
+fn complex_function(/* 7 args */) { }
+```
+
+**Coverage too low?**
+```bash
+# Find uncovered lines
+cargo llvm-cov --html
+open target/llvm-cov/html/index.html
+```
+
+**Benchmark flaky?**
+```bash
+# Run with more samples
+cargo bench -- --sample-size 100
+```
+
+---
+
+## Contact & Resources
+
+- **Architecture**: `ARCHITECTURE.md`
+- **API Reference**: `cargo doc --open`
+- **Issues**: GitHub Issues
+- **Discussions**: GitHub Discussions
+
+---
+
+*This document is the development contract. All contributors must follow these guidelines.*

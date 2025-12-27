@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # Fast format check - fail early
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  # Clippy lints with pedantic mode
+  clippy:
+    name: Clippy Lints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::module_name_repetitions
+
+  # Tests on all platforms
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA dev (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Run tests
+        run: cargo test --all-features --workspace
+      - name: Run doc tests
+        run: cargo test --doc --all-features
+
+  # Coverage enforcement
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install ALSA dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Generate coverage report
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(cargo llvm-cov --all-features --workspace --json 2>/dev/null | jq -r '.data[0].totals.lines.percent // 0')
+          echo "Coverage: $COVERAGE%"
+          if [ -z "$COVERAGE" ] || [ "$COVERAGE" = "null" ]; then
+            echo "Warning: Could not determine coverage, skipping threshold check"
+            exit 0
+          fi
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "::error::Coverage $COVERAGE% is below 80% threshold"
+            exit 1
+          fi
+
+  # Security audit
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Benchmark regression check (PRs only)
+  benchmark:
+    name: Benchmark Regression
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Install critcmp
+        run: cargo install critcmp
+      - name: Run benchmarks (PR)
+        run: cargo bench --workspace -- --save-baseline pr 2>/dev/null || echo "No benchmarks yet"
+      - name: Checkout base branch
+        run: git checkout ${{ github.base_ref }}
+      - name: Run benchmarks (base)
+        run: cargo bench --workspace -- --save-baseline base 2>/dev/null || echo "No benchmarks yet"
+      - name: Compare benchmarks
+        run: |
+          critcmp base pr || echo "Benchmark comparison completed"
+          # Future: Add threshold check for >10% regression
+
+  # Miri for undefined behavior detection
+  miri:
+    name: Miri (UB Detection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@v2
+      - name: Run Miri on ram-core
+        run: cargo miri test -p ram-core 2>/dev/null || echo "ram-core not yet available"
+        continue-on-error: true  # Until crate exists
+
+  # Documentation build check
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install ALSA dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Build documentation
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # File size check
+  file-size:
+    name: File Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for oversized files
+        run: |
+          OVERSIZED=$(find . -name "*.rs" -type f -exec wc -l {} + | awk '$1 > 1000 {print $2 ": " $1 " lines"}' | grep -v target || true)
+          if [ -n "$OVERSIZED" ]; then
+            echo "::error::Files exceeding 1000 lines:"
+            echo "$OVERSIZED"
+            exit 1
+          fi
+          echo "All Rust files are within size limits"
+
+  # All checks must pass
+  ci-complete:
+    name: CI Complete
+    needs: [fmt, clippy, test, coverage, audit, docs, file-size]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [ "${{ needs.fmt.result }}" != "success" ] || \
+             [ "${{ needs.clippy.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.coverage.result }}" != "success" ] || \
+             [ "${{ needs.audit.result }}" != "success" ] || \
+             [ "${{ needs.docs.result }}" != "success" ] || \
+             [ "${{ needs.file-size.result }}" != "success" ]; then
+            echo "::error::One or more required checks failed"
+            exit 1
+          fi
+          echo "All checks passed!"

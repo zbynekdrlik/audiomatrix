@@ -1,0 +1,30 @@
+# AudioMatrix Clippy Configuration
+# See: https://doc.rust-lang.org/clippy/configuration.html
+
+# Complexity thresholds
+cognitive-complexity-threshold = 15
+too-many-arguments-threshold = 6
+too-many-lines-threshold = 100
+type-complexity-threshold = 200
+
+# Large types (audio buffers can be large)
+trivial-copy-size-limit = 64
+
+# Allow breaking API changes (we're pre-1.0)
+avoid-breaking-exported-api = false
+
+# MSRV for lint suggestions
+msrv = "1.75"
+
+# Docs
+missing-docs-in-crate-items = true
+
+# Disallowed methods (avoid in audio path)
+# disallowed-methods = [
+#     { path = "std::thread::sleep", reason = "Use async sleep instead" },
+# ]
+
+# Disallowed types (avoid allocations in hot path)
+# disallowed-types = [
+#     { path = "std::collections::HashMap", reason = "Use hashbrown for no_std compat" },
+# ]
