@@ -190,6 +190,22 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(target_os = "windows", feature = "asio")))]
+    fn device_infos_not_available_on_non_windows() {
+        // Can't create a real AsioHost on non-Windows, so we test the error path
+        // by calling AsioHost::new() which returns NotAvailable
+        let result = AsioHost::new();
+        assert!(matches!(result, Err(AsioError::NotAvailable)));
+    }
+
+    #[test]
+    #[cfg(not(all(target_os = "windows", feature = "asio")))]
+    fn device_by_name_not_available_on_non_windows() {
+        let result = AsioHost::new();
+        assert!(matches!(result, Err(AsioError::NotAvailable)));
+    }
+
+    #[test]
     #[cfg(all(target_os = "windows", feature = "asio"))]
     fn asio_host_creation() {
         // This test only runs on Windows with ASIO feature

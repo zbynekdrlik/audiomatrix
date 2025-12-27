@@ -80,3 +80,28 @@ pub fn get_asio_host() -> Option<AsioHost> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(not(all(target_os = "windows", feature = "asio")))]
+    fn is_asio_available_returns_false_on_non_windows() {
+        assert!(!is_asio_available());
+    }
+
+    #[test]
+    #[cfg(not(all(target_os = "windows", feature = "asio")))]
+    fn get_asio_host_returns_none_on_non_windows() {
+        assert!(get_asio_host().is_none());
+    }
+
+    #[test]
+    fn re_exports_are_accessible() {
+        // Verify re-exports work correctly
+        let _: fn() -> error::AsioResult<host::AsioHost> = host::AsioHost::new;
+        let config = device::AsioDeviceConfig::default();
+        assert_eq!(config.sample_rate, 48000);
+    }
+}
