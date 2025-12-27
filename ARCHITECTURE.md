@@ -11,6 +11,36 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 - **Ultra-Low Latency**: Lock-free audio paths, optimized buffers, real-time priorities
 - **Dante-Like UX**: Expandable/collapsible devices, filtering, familiar workflow
 
+## Implementation Status
+
+> **Current Version:** 0.1.0-dev
+> **Last Updated:** 2025-12-27
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **Device Enumeration** | 🟡 Partial | WASAPI/CoreAudio/ALSA working. ASIO requires SDK. |
+| **Virtual ASIO Devices** | 🔴 Not Started | `ram-asio` crate not yet implemented |
+| **Audio Routing Matrix** | 🟡 Partial | Data structures complete, no audio processing |
+| **Real-time Audio Loop** | 🔴 Not Started | No ASIO callback integration yet |
+| **VBAN Protocol** | 🟢 Complete | Full protocol parsing/generation working |
+| **VBAN Integration** | 🔴 Not Started | Protocol not connected to routing engine |
+| **Cross-computer Routing** | 🔴 Not Started | Network audio path not implemented |
+| **mDNS Discovery** | 🟢 Complete | Full service announcement and browsing |
+| **REST API** | 🟡 Partial | Endpoints exist, limited functionality |
+| **WebSocket Events** | 🟡 Partial | Events defined, metering not implemented |
+| **Configuration Persistence** | 🟢 Complete | Routes and settings persist to disk |
+| **Per-connection Controls** | 🟡 Partial | Gain/mute atomics exist, not applied |
+| **Resampling** | 🔴 Not Started | Rubato included but never called |
+| **Latency Measurement** | 🔴 Not Started | No measurement infrastructure |
+
+**Legend:** 🟢 Complete | 🟡 Partial | 🔴 Not Started
+
+### Platform Notes
+
+- **Windows**: Enumerates all hosts (WASAPI + ASIO if SDK installed). ASIO4ALL or native ASIO driver recommended for low latency.
+- **Linux**: ALSA only. PipeWire/PulseAudio may work through ALSA compatibility.
+- **macOS**: CoreAudio only.
+
 ## System Architecture
 
 ```

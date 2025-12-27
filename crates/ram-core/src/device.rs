@@ -337,8 +337,16 @@ impl DeviceManager {
         let now = Instant::now();
         let mut current_ids = std::collections::HashSet::new();
 
+        // Get all available audio hosts
+        let hosts = cpal::available_hosts();
+        tracing::info!("Available audio hosts: {:?}", hosts);
+
+        if hosts.is_empty() {
+            tracing::warn!("No audio hosts available - audio subsystem may not be initialized");
+        }
+
         // Enumerate devices from ALL available hosts (WASAPI, ASIO, CoreAudio, ALSA, etc.)
-        for host_id in cpal::available_hosts() {
+        for host_id in hosts {
             let host = match cpal::host_from_id(host_id) {
                 Ok(h) => h,
                 Err(e) => {
@@ -385,8 +393,8 @@ impl DeviceManager {
                 }
             }
 
-            tracing::debug!(
-                "Enumerated devices from host '{}': {} devices",
+            tracing::info!(
+                "Enumerated from host '{}': {} total devices so far",
                 host_name,
                 current_ids.len()
             );
