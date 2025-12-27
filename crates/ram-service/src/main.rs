@@ -1,6 +1,6 @@
-//! AudioMatrix Service
+//! `AudioMatrix` Service
 //!
-//! Main entry point for the AudioMatrix audio routing system.
+//! Main entry point for the `AudioMatrix` audio routing system.
 
 use std::net::SocketAddr;
 
