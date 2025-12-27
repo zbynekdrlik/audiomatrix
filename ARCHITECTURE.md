@@ -16,34 +16,36 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 > **Current Version:** 0.1.0-dev
 > **Last Updated:** 2025-12-27
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **Device Enumeration** | 🟡 Partial | WASAPI/CoreAudio/ALSA working. ASIO requires SDK. |
-| **Virtual ASIO Devices** | 🔴 Not Started | `ram-asio` crate not yet implemented |
-| **Audio Routing Matrix** | 🟡 Partial | Data structures complete, no audio processing |
-| **Real-time Audio Loop** | 🔴 Not Started | No ASIO callback integration yet |
-| **VBAN Protocol** | 🟢 Complete | Full protocol parsing/generation working |
-| **VBAN Integration** | 🔴 Not Started | Protocol not connected to routing engine |
-| **Cross-computer Routing** | 🔴 Not Started | Network audio path not implemented |
-| **mDNS Discovery** | 🟢 Complete | Full service announcement and browsing |
-| **REST API** | 🟡 Partial | Endpoints exist, limited functionality |
-| **WebSocket Events** | 🟡 Partial | Events defined, metering not implemented |
-| **Configuration Persistence** | 🟢 Complete | Routes and settings persist to disk |
-| **Per-connection Controls** | 🟡 Partial | Gain/mute atomics exist, not applied |
-| **Resampling** | 🔴 Not Started | Rubato included but never called |
-| **Latency Measurement** | 🔴 Not Started | No measurement infrastructure |
+| Component | Status | Priority | Notes |
+|-----------|--------|----------|-------|
+| **ASIO Device Support** | 🔴 Not Started | **CRITICAL** | Primary target - requires ASIO SDK |
+| **Virtual ASIO Devices** | 🔴 Not Started | **CRITICAL** | `ram-asio` crate - core feature for DAW integration |
+| **Real-time Audio Loop** | 🔴 Not Started | **CRITICAL** | ASIO callback integration |
+| **Device Enumeration** | 🟡 Partial | High | WASAPI/ALSA working. ASIO enumeration pending. |
+| **Audio Routing Matrix** | 🟡 Partial | High | Data structures complete, no audio processing |
+| **VBAN Protocol** | 🟢 Complete | Medium | Full protocol parsing/generation working |
+| **VBAN Integration** | 🔴 Not Started | Medium | Protocol not connected to routing engine |
+| **Cross-computer Routing** | 🔴 Not Started | Medium | Network audio path not implemented |
+| **mDNS Discovery** | 🟢 Complete | Low | Full service announcement and browsing |
+| **REST API** | 🟡 Partial | Low | Endpoints exist, limited functionality |
+| **WebSocket Events** | 🟡 Partial | Low | Events defined, metering not implemented |
+| **Configuration Persistence** | 🟢 Complete | Low | Routes and settings persist to disk |
+| **Per-connection Controls** | 🟡 Partial | Medium | Gain/mute atomics exist, not applied |
+| **Resampling** | 🔴 Not Started | Medium | Rubato included but never called |
+| **Latency Measurement** | 🔴 Not Started | Low | No measurement infrastructure |
 
 **Legend:** 🟢 Complete | 🟡 Partial | 🔴 Not Started
 
 ### Platform Notes
 
-- **Windows**:
-  - Enumerates all hosts (WASAPI + ASIO if SDK installed)
-  - ASIO4ALL or native ASIO driver recommended for low latency
-  - **Important**: Audio devices are only accessible from interactive user sessions (not Session 0/services). Running via SSH or as a service without user context will show 0 devices.
-  - **Known Issue**: Some Windows configurations may show 0 WASAPI devices even in interactive sessions. This appears to be environment-specific. Use Windows Task Scheduler with `/IT` flag to run in console session.
-- **Linux**: ALSA only. PipeWire/PulseAudio may work through ALSA compatibility.
-- **macOS**: CoreAudio only.
+- **Windows** (Primary Target):
+  - **ASIO is the primary audio backend** - designed for professional low-latency audio production
+  - Creates virtual ASIO devices that DAWs (Ableton, etc.) can use as audio I/O
+  - WASAPI is secondary/fallback only (production machines typically have it disabled)
+  - **Important**: Audio devices only accessible from interactive user sessions (not Session 0/services)
+  - Requires ASIO SDK for compilation (see Cargo.toml notes)
+- **Linux** (Secondary): ALSA backend. PipeWire/PulseAudio via ALSA compatibility.
+- **macOS** (Lowest Priority): CoreAudio. May not be implemented.
 
 ## System Architecture
 
