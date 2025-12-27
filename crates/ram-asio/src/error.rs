@@ -98,3 +98,112 @@ impl From<cpal::PauseStreamError> for AsioError {
         Self::StreamError(format!("pause error: {e}"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_display_not_available() {
+        let err = AsioError::NotAvailable;
+        assert_eq!(
+            err.to_string(),
+            "ASIO is not available (Windows only with 'asio' feature)"
+        );
+    }
+
+    #[test]
+    fn error_display_host_init_failed() {
+        let err = AsioError::HostInitFailed("test error".to_string());
+        assert_eq!(err.to_string(), "failed to initialize ASIO host: test error");
+    }
+
+    #[test]
+    fn error_display_device_not_found() {
+        let err = AsioError::DeviceNotFound("MyDevice".to_string());
+        assert_eq!(err.to_string(), "ASIO device not found: MyDevice");
+    }
+
+    #[test]
+    fn error_display_device_open_failed() {
+        let err = AsioError::DeviceOpenFailed {
+            name: "MyDevice".to_string(),
+            reason: "busy".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to open ASIO device 'MyDevice': busy"
+        );
+    }
+
+    #[test]
+    fn error_display_stream_start_failed() {
+        let err = AsioError::StreamStartFailed("timeout".to_string());
+        assert_eq!(err.to_string(), "failed to start ASIO stream: timeout");
+    }
+
+    #[test]
+    fn error_display_stream_error() {
+        let err = AsioError::StreamError("underrun".to_string());
+        assert_eq!(err.to_string(), "ASIO stream error: underrun");
+    }
+
+    #[test]
+    fn error_display_config_error() {
+        let err = AsioError::ConfigError("invalid rate".to_string());
+        assert_eq!(err.to_string(), "invalid ASIO configuration: invalid rate");
+    }
+
+    #[test]
+    fn error_display_buffer_size_not_supported() {
+        let err = AsioError::BufferSizeNotSupported {
+            requested: 32,
+            min: 64,
+            max: 4096,
+        };
+        assert_eq!(
+            err.to_string(),
+            "buffer size 32 not supported (min: 64, max: 4096)"
+        );
+    }
+
+    #[test]
+    fn error_display_sample_rate_not_supported() {
+        let err = AsioError::SampleRateNotSupported(22050);
+        assert_eq!(err.to_string(), "sample rate 22050 Hz not supported by device");
+    }
+
+    #[test]
+    fn error_display_channel_count_exceeded() {
+        let err = AsioError::ChannelCountExceeded {
+            requested: 64,
+            max: 32,
+        };
+        assert_eq!(
+            err.to_string(),
+            "channel count 64 exceeds device maximum 32"
+        );
+    }
+
+    #[test]
+    fn error_display_device_busy() {
+        let err = AsioError::DeviceBusy("Dante".to_string());
+        assert_eq!(
+            err.to_string(),
+            "ASIO device 'Dante' is busy (in use by another application)"
+        );
+    }
+
+    #[test]
+    fn error_display_cpal_error() {
+        let err = AsioError::CpalError("unknown".to_string());
+        assert_eq!(err.to_string(), "cpal error: unknown");
+    }
+
+    #[test]
+    fn error_debug_impl() {
+        let err = AsioError::NotAvailable;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("NotAvailable"));
+    }
+}
