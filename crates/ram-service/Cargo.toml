@@ -1,0 +1,26 @@
+[package]
+name = "ram-service"
+description = "AudioMatrix service binary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "audiomatrix"
+path = "src/main.rs"
+
+[dependencies]
+ram-core = { path = "../ram-core" }
+ram-vban = { path = "../ram-vban" }
+ram-discovery = { path = "../ram-discovery" }
+ram-api = { path = "../ram-api" }
+axum.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]

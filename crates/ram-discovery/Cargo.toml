@@ -1,0 +1,20 @@
+[package]
+name = "ram-discovery"
+description = "Service discovery (mDNS/DNS-SD) for AudioMatrix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+mdns-sd.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+hostname.workspace = true
+serde.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]

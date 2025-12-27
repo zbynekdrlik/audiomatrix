@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ram-core",
+    "crates/ram-vban",
+    "crates/ram-discovery",
+    "crates/ram-api",
+    "crates/ram-service",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/zbynekdrlik/audiomatrix"
+authors = ["Zbynek Drlik <drlik.zbynek@gmail.com>"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+
+# Audio
+cpal = "0.15"
+dasp = "0.11"
+rubato = "0.16"
+
+# Networking
+socket2 = "0.5"
+mdns-sd = "0.12"
+
+# Web framework
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+hostname = "0.4"
+
+# Testing
+proptest = "1.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+lto = true
+codegen-units = 1

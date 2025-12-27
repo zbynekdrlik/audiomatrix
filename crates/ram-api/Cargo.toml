@@ -1,0 +1,25 @@
+[package]
+name = "ram-api"
+description = "REST and WebSocket API for AudioMatrix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+ram-core = { path = "../ram-core" }
+ram-discovery = { path = "../ram-discovery" }
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+hostname.workspace = true
+
+[dev-dependencies]
