@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn error_debug_impl() {
         let err = AsioError::NotAvailable;
-        let debug = format!("{:?}", err);
+        let debug = format!("{err:?}");
         assert!(debug.contains("NotAvailable"));
     }
 }
