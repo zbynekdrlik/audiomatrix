@@ -9,10 +9,21 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
+pub mod atomic;
 pub mod buffer;
+pub mod connection;
+pub mod destination;
+pub mod engine;
 pub mod error;
 pub mod mixer;
+pub mod resampler;
 pub mod routing;
+
+pub use atomic::AtomicF32;
+pub use connection::{ConnectionId, SourceConnection};
+pub use destination::{DestinationChannel, HeadroomMode};
+pub use engine::{AudioEngine, EngineConfig};
+pub use resampler::{Resampler, ResamplerQuality};
 
 pub use error::{Error, Result};
 

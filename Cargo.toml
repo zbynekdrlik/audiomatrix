@@ -49,6 +49,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Utilities
 parking_lot = "0.12"
 crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 hostname = "0.4"
 

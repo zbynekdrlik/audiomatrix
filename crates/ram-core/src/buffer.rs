@@ -2,17 +2,29 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crossbeam_utils::CachePadded;
+
 use crate::Sample;
 
 /// A lock-free single-producer single-consumer ring buffer.
 ///
 /// This buffer is designed for real-time audio where one thread produces
 /// samples and another consumes them without any locking.
+///
+/// # Cache Line Optimization
+///
+/// The read and write positions are wrapped in `CachePadded` to prevent
+/// false sharing. Without this, the positions could share a cache line,
+/// causing cache invalidation whenever either position is updated.
+/// This is critical for audio where producer and consumer run on
+/// separate threads with tight latency requirements.
 pub struct RingBuffer {
     data: Box<[Sample]>,
     capacity: usize,
-    read_pos: AtomicUsize,
-    write_pos: AtomicUsize,
+    /// Reader position - padded to its own cache line
+    read_pos: CachePadded<AtomicUsize>,
+    /// Writer position - padded to its own cache line
+    write_pos: CachePadded<AtomicUsize>,
 }
 
 impl RingBuffer {
@@ -26,9 +38,15 @@ impl RingBuffer {
         Self {
             data: vec![0.0; capacity].into_boxed_slice(),
             capacity,
-            read_pos: AtomicUsize::new(0),
-            write_pos: AtomicUsize::new(0),
+            read_pos: CachePadded::new(AtomicUsize::new(0)),
+            write_pos: CachePadded::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Returns the capacity of the buffer.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 
     /// Returns the number of samples available to read.

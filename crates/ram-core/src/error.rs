@@ -33,4 +33,24 @@ pub enum Error {
     /// Route not found.
     #[error("route not found: {0}")]
     RouteNotFound(String),
+
+    /// Invalid connection ID format.
+    #[error("invalid connection ID: {0}")]
+    InvalidConnectionId(String),
+
+    /// Connection already exists.
+    #[error("connection already exists: {0}")]
+    ConnectionExists(String),
+
+    /// Connection not found.
+    #[error("connection not found: {0}")]
+    ConnectionNotFound(String),
+
+    /// Destination not found.
+    #[error("destination not found: {0}")]
+    DestinationNotFound(String),
+
+    /// Resampler configuration or processing error.
+    #[error("resampler: {0}")]
+    Resampler(String),
 }
