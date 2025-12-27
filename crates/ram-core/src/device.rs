@@ -771,6 +771,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "cpal cleanup causes access violation on Windows CI")]
     fn device_manager_refresh() {
         let manager = DeviceManager::with_defaults();
 
@@ -806,6 +807,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "cpal cleanup causes access violation on Windows CI")]
     fn device_manager_by_direction() {
         let manager = DeviceManager::with_defaults();
 
