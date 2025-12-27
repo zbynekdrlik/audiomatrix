@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn error_debug_impl() {
         let err = Error::Mdns("test".to_string());
-        let debug = format!("{:?}", err);
+        let debug = format!("{err:?}");
         assert!(debug.contains("Mdns"));
     }
 }
