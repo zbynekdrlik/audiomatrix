@@ -75,38 +75,18 @@ jobs:
           choco install llvm -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      # Try to download ASIO SDK (may fail - Steinberg requires license acceptance)
-      - name: Download ASIO SDK (Windows)
+      # Clone ASIO SDK from GitHub (now GPLv3 licensed)
+      - name: Clone ASIO SDK (Windows)
         if: runner.os == 'Windows'
-        id: asio_sdk
         run: |
-          $sdkPath = "$env:TEMP\asio_sdk"
-          try {
-            Write-Host "Attempting ASIO SDK download..."
-            $zipPath = "$env:TEMP\asiosdk.zip"
-            Invoke-WebRequest -Uri "https://www.steinberg.net/asiosdk" -OutFile $zipPath -UseBasicParsing -TimeoutSec 30
-            Expand-Archive -Path $zipPath -DestinationPath $sdkPath -Force
-            echo "CPAL_ASIO_DIR=$sdkPath" >> $env:GITHUB_ENV
-            echo "asio_available=true" >> $env:GITHUB_OUTPUT
-            Write-Host "ASIO SDK downloaded successfully"
-          } catch {
-            Write-Host "ASIO SDK download failed - building without ASIO"
-            Write-Host "For ASIO support, use a self-hosted runner with ASIO SDK installed"
-            echo "asio_available=false" >> $env:GITHUB_OUTPUT
-          }
-        continue-on-error: true
+          git clone https://github.com/audiosdk/asio.git $env:RUNNER_TEMP\asio_sdk
+          echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
+          Write-Host "ASIO SDK cloned to $env:RUNNER_TEMP\asio_sdk"
 
-      # Build with ASIO if SDK available, otherwise without
+      # Build with ASIO on Windows, standard build on other platforms
       - name: Build release binary (Windows with ASIO)
-        if: runner.os == 'Windows' && steps.asio_sdk.outputs.asio_available == 'true'
+        if: runner.os == 'Windows'
         run: cargo build --release --target ${{ matrix.target }} -p ram-service --features asio
-
-      - name: Build release binary (Windows without ASIO)
-        if: runner.os == 'Windows' && steps.asio_sdk.outputs.asio_available != 'true'
-        run: |
-          Write-Host "Building WITHOUT ASIO support"
-          Write-Host "For ASIO builds, use self-hosted runner or build locally"
-          cargo build --release --target ${{ matrix.target }} -p ram-service
 
       - name: Build release binary (Unix)
         if: runner.os != 'Windows'

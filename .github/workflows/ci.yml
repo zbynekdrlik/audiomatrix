@@ -98,11 +98,10 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test --doc
 
-  # Windows ASIO build verification (optional - requires ASIO SDK)
+  # Windows ASIO build verification
   test-windows-asio:
     name: Test Windows ASIO
     runs-on: windows-latest
-    continue-on-error: true  # ASIO SDK may not be available in CI
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -116,24 +115,12 @@ jobs:
           choco install llvm -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      # Download ASIO SDK (Steinberg may require license acceptance)
-      - name: Download ASIO SDK
+      # Clone ASIO SDK from GitHub (now GPLv3 licensed)
+      - name: Clone ASIO SDK
         run: |
-          $sdkPath = "$env:TEMP\asio_sdk"
-          if (-not (Test-Path $sdkPath)) {
-            Write-Host "Downloading ASIO SDK..."
-            $zipPath = "$env:TEMP\asiosdk.zip"
-            try {
-              Invoke-WebRequest -Uri "https://www.steinberg.net/asiosdk" -OutFile $zipPath -UseBasicParsing
-              Expand-Archive -Path $zipPath -DestinationPath $sdkPath -Force
-              Write-Host "ASIO SDK downloaded to $sdkPath"
-            } catch {
-              Write-Host "Warning: Could not download ASIO SDK. Build may fail."
-              Write-Host $_
-            }
-          }
-          echo "CPAL_ASIO_DIR=$sdkPath" >> $env:GITHUB_ENV
-        continue-on-error: true
+          git clone https://github.com/audiosdk/asio.git $env:RUNNER_TEMP\asio_sdk
+          echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
+          Write-Host "ASIO SDK cloned to $env:RUNNER_TEMP\asio_sdk"
 
       # Build with ASIO feature
       - name: Build with ASIO feature
