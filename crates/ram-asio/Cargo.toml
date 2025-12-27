@@ -1,0 +1,45 @@
+[package]
+name = "ram-asio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "ASIO device support for AudioMatrix - Windows ASIO driver integration"
+
+[features]
+default = []
+# Enable ASIO support on Windows. Requires:
+# - Steinberg ASIO SDK (auto-downloaded or set CPAL_ASIO_DIR)
+# - LLVM/Clang (set LIBCLANG_PATH)
+# - Windows only
+asio = ["cpal/asio"]
+
+[dependencies]
+# Audio - cpal with optional ASIO feature
+cpal = { workspace = true }
+
+# Core types
+ram-core = { path = "../ram-core" }
+
+# Async
+tokio = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utilities
+parking_lot = { workspace = true }
+crossbeam-channel = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# Windows-specific dependencies for ASIO
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Com"] }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -5,6 +5,7 @@ members = [
     "crates/ram-vban",
     "crates/ram-discovery",
     "crates/ram-api",
+    "crates/ram-asio",
     "crates/ram-service",
 ]
 

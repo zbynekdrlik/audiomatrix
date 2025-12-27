@@ -87,6 +87,31 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --all-features
 
+  # Windows ASIO build verification
+  test-windows-asio:
+    name: Test Windows ASIO
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-asio
+
+      # Install LLVM/Clang (required for ASIO SDK compilation)
+      - name: Install LLVM
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      # Build with ASIO feature (SDK auto-downloads via cpal)
+      - name: Build with ASIO feature
+        run: cargo build --release -p ram-asio --features asio
+
+      # Run unit tests (no device tests - those need real ASIO hardware)
+      - name: Run ASIO unit tests
+        run: cargo test -p ram-asio --features asio
+
   # Coverage enforcement
   coverage:
     name: Code Coverage

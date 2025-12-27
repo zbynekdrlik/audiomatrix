@@ -68,7 +68,20 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
-      - name: Build release binary
+      # Install LLVM/Clang for ASIO SDK (Windows only)
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      # Build with ASIO on Windows, standard build on other platforms
+      - name: Build release binary (Windows with ASIO)
+        if: runner.os == 'Windows'
+        run: cargo build --release --target ${{ matrix.target }} -p ram-service --features asio
+
+      - name: Build release binary (Unix)
+        if: runner.os != 'Windows'
         run: cargo build --release --target ${{ matrix.target }} -p ram-service
 
       - name: Prepare artifacts (Unix)

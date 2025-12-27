@@ -12,11 +12,17 @@ authors.workspace = true
 name = "audiomatrix"
 path = "src/main.rs"
 
+[features]
+default = []
+# Enable Windows ASIO support - requires ASIO SDK and LLVM/Clang
+asio = ["ram-asio/asio"]
+
 [dependencies]
 ram-core = { path = "../ram-core" }
 ram-vban = { path = "../ram-vban" }
 ram-discovery = { path = "../ram-discovery" }
 ram-api = { path = "../ram-api" }
+ram-asio = { path = "../ram-asio", optional = true }
 axum.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
