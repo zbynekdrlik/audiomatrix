@@ -362,34 +362,58 @@ impl DeviceManager {
             let default_output = host.default_output_device().and_then(|d| d.name().ok());
 
             // Enumerate input devices
-            if let Ok(devices) = host.input_devices() {
-                for device in devices {
-                    if let Some(info) = Self::device_to_info_with_host(
-                        &device,
-                        DeviceDirection::Input,
-                        default_input.as_ref(),
-                        host_name,
-                        now,
-                    ) {
-                        current_ids.insert(info.id.clone());
-                        self.update_device(info);
+            match host.input_devices() {
+                Ok(devices) => {
+                    let mut count = 0;
+                    for device in devices {
+                        count += 1;
+                        match device.name() {
+                            Ok(name) => tracing::debug!("Found input device: {}", name),
+                            Err(e) => tracing::warn!("Input device has no name: {}", e),
+                        }
+                        if let Some(info) = Self::device_to_info_with_host(
+                            &device,
+                            DeviceDirection::Input,
+                            default_input.as_ref(),
+                            host_name,
+                            now,
+                        ) {
+                            current_ids.insert(info.id.clone());
+                            self.update_device(info);
+                        }
                     }
+                    tracing::info!("Host '{}' has {} input device(s)", host_name, count);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to enumerate input devices from host '{}': {}", host_name, e);
                 }
             }
 
             // Enumerate output devices
-            if let Ok(devices) = host.output_devices() {
-                for device in devices {
-                    if let Some(info) = Self::device_to_info_with_host(
-                        &device,
-                        DeviceDirection::Output,
-                        default_output.as_ref(),
-                        host_name,
-                        now,
-                    ) {
-                        current_ids.insert(info.id.clone());
-                        self.update_device(info);
+            match host.output_devices() {
+                Ok(devices) => {
+                    let mut count = 0;
+                    for device in devices {
+                        count += 1;
+                        match device.name() {
+                            Ok(name) => tracing::debug!("Found output device: {}", name),
+                            Err(e) => tracing::warn!("Output device has no name: {}", e),
+                        }
+                        if let Some(info) = Self::device_to_info_with_host(
+                            &device,
+                            DeviceDirection::Output,
+                            default_output.as_ref(),
+                            host_name,
+                            now,
+                        ) {
+                            current_ids.insert(info.id.clone());
+                            self.update_device(info);
+                        }
                     }
+                    tracing::info!("Host '{}' has {} output device(s)", host_name, count);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to enumerate output devices from host '{}': {}", host_name, e);
                 }
             }
 
