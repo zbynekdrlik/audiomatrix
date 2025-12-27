@@ -115,7 +115,10 @@ mod tests {
     #[test]
     fn error_display_host_init_failed() {
         let err = AsioError::HostInitFailed("test error".to_string());
-        assert_eq!(err.to_string(), "failed to initialize ASIO host: test error");
+        assert_eq!(
+            err.to_string(),
+            "failed to initialize ASIO host: test error"
+        );
     }
 
     #[test]
@@ -170,7 +173,10 @@ mod tests {
     #[test]
     fn error_display_sample_rate_not_supported() {
         let err = AsioError::SampleRateNotSupported(22050);
-        assert_eq!(err.to_string(), "sample rate 22050 Hz not supported by device");
+        assert_eq!(
+            err.to_string(),
+            "sample rate 22050 Hz not supported by device"
+        );
     }
 
     #[test]
