@@ -5,6 +5,7 @@
 //! - Sample rate conversion
 //! - Volume control and mixing
 //! - Ring buffers for inter-thread communication
+//! - Audio device enumeration and management
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
@@ -13,16 +14,20 @@ pub mod atomic;
 pub mod buffer;
 pub mod connection;
 pub mod destination;
+pub mod device;
 pub mod engine;
 pub mod error;
 pub mod mixer;
+pub mod persistence;
 pub mod resampler;
 pub mod routing;
 
 pub use atomic::AtomicF32;
-pub use connection::{ConnectionId, SourceConnection};
+pub use connection::{ConnectionId, ConnectionManager, ConnectionState, SourceConnection};
 pub use destination::{DestinationChannel, HeadroomMode};
+pub use device::{DeviceDirection, DeviceEvent, DeviceInfo, DeviceManager, DeviceState};
 pub use engine::{AudioEngine, EngineConfig};
+pub use persistence::{ConfigStore, PersistedConfig, PersistedRoute};
 pub use resampler::{Resampler, ResamplerQuality};
 
 pub use error::{Error, Result};

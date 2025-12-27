@@ -7,19 +7,32 @@
 //!
 //! VBAN uses UDP for transport with a 28-byte header followed by audio data.
 //! The protocol supports multiple sample rates, formats, and channel counts.
+//!
+//! # Features
+//!
+//! - Lock-free packet pool for allocation-free transmission
+//! - Adaptive jitter buffer for smooth reception
+//! - Sequence tracking and packet reordering
+//! - Stream lifecycle management with timeout detection
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
 pub mod error;
+pub mod jitter;
+pub mod pool;
 pub mod protocol;
 pub mod receiver;
 pub mod sender;
+pub mod stream;
 
 pub use error::{Error, Result};
+pub use jitter::{JitterBuffer, JitterBufferConfig, JitterBufferState, JitterStats};
+pub use pool::{PacketBuffer, PacketPool, PooledPacket};
 pub use protocol::{VbanHeader, VbanProtocol, VbanSampleRate, VbanSubProtocol};
 pub use receiver::VbanReceiver;
 pub use sender::VbanSender;
+pub use stream::{ManagedReceiveStream, StreamEvent, StreamManager, StreamState};
 
 /// Default VBAN port.
 pub const DEFAULT_PORT: u16 = 6980;

@@ -52,6 +52,10 @@ crossbeam-channel = "0.5"
 crossbeam-utils = "0.8"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 hostname = "0.4"
+flume = "0.11"
+futures-util = "0.3"
+rand = "0.9"
+base64 = "0.22"
 
 # Testing
 proptest = "1.5"

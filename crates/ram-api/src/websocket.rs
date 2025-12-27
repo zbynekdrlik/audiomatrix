@@ -1,9 +1,14 @@
 //! WebSocket handler for real-time events.
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::State;
 use axum::response::IntoResponse;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
 use tracing::{debug, warn};
+
+use crate::state::AppState;
 
 /// WebSocket event types.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +23,9 @@ pub enum WsEvent {
     /// Node discovered/lost.
     #[serde(rename = "node_status")]
     NodeStatus(NodeStatusUpdate),
+    /// Device state changed.
+    #[serde(rename = "device_status")]
+    DeviceStatus(DeviceStatusUpdate),
     /// Error occurred.
     #[serde(rename = "error")]
     Error(ErrorUpdate),
@@ -52,6 +60,15 @@ pub struct NodeStatusUpdate {
     pub online: bool,
 }
 
+/// Device status update.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceStatusUpdate {
+    /// Device identifier.
+    pub device: String,
+    /// Device state (idle, running, error, disconnected).
+    pub state: String,
+}
+
 /// Error update.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorUpdate {
@@ -61,33 +78,74 @@ pub struct ErrorUpdate {
     pub message: String,
 }
 
+/// WebSocket command from client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "command", content = "data")]
+pub enum WsCommand {
+    /// Subscribe to metering for a device.
+    #[serde(rename = "subscribe_metering")]
+    SubscribeMetering { node: String, device: String },
+    /// Unsubscribe from metering.
+    #[serde(rename = "unsubscribe_metering")]
+    UnsubscribeMetering { node: String, device: String },
+    /// Ping for keepalive.
+    #[serde(rename = "ping")]
+    Ping,
+}
+
 /// WebSocket upgrade handler.
-pub async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_socket)
+pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
 /// Handle WebSocket connection.
-async fn handle_socket(mut socket: WebSocket) {
+async fn handle_socket(socket: WebSocket, state: AppState) {
     debug!("WebSocket client connected");
+
+    let (mut sender, mut receiver) = socket.split();
+
+    // Subscribe to broadcast events
+    let mut event_rx = state.subscribe_events();
 
     // Send initial connection acknowledgment
     let ack = WsEvent::NodeStatus(NodeStatusUpdate {
-        node: "LOCAL".into(),
+        node: state.local_node().id,
         online: true,
     });
 
     if let Ok(json) = serde_json::to_string(&ack) {
-        if socket.send(Message::Text(json)).await.is_err() {
+        if sender.send(Message::Text(json)).await.is_err() {
             return;
         }
     }
 
+    // Spawn task to forward broadcast events to this client
+    let send_task = tokio::spawn(async move {
+        loop {
+            match event_rx.recv().await {
+                Ok(event) => {
+                    if let Ok(json) = serde_json::to_string(&event) {
+                        if sender.send(Message::Text(json)).await.is_err() {
+                            break;
+                        }
+                    }
+                },
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    warn!("WebSocket client lagged by {n} messages");
+                },
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+
     // Handle incoming messages
-    while let Some(msg) = socket.recv().await {
+    while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
                 debug!("Received: {text}");
-                // TODO: Handle client commands
+                if let Ok(cmd) = serde_json::from_str::<WsCommand>(&text) {
+                    handle_command(cmd);
+                }
             },
             Ok(Message::Close(_)) => {
                 debug!("Client disconnected");
@@ -100,6 +158,28 @@ async fn handle_socket(mut socket: WebSocket) {
             _ => {},
         }
     }
+
+    // Clean up
+    send_task.abort();
+    debug!("WebSocket handler finished");
+}
+
+/// Handle a WebSocket command from client.
+fn handle_command(cmd: WsCommand) {
+    match cmd {
+        WsCommand::SubscribeMetering { node, device } => {
+            debug!("Subscribe metering: {node}/{device}");
+            // TODO: Implement metering subscription
+        },
+        WsCommand::UnsubscribeMetering { node, device } => {
+            debug!("Unsubscribe metering: {node}/{device}");
+            // TODO: Implement metering unsubscription
+        },
+        WsCommand::Ping => {
+            debug!("Ping received");
+            // Pong is handled automatically by axum
+        },
+    }
 }
 
 #[cfg(test)]
@@ -107,7 +187,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ws_event_serializes() {
+    fn ws_event_metering_serializes() {
         let event = WsEvent::Metering(MeteringUpdate {
             node: "host1".into(),
             device: "Device A".into(),
@@ -115,6 +195,93 @@ mod tests {
         });
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("metering"));
+        assert!(json.contains("\"type\":\"metering\""));
+        assert!(json.contains("\"node\":\"host1\""));
+    }
+
+    #[test]
+    fn ws_event_route_changed_serializes() {
+        let event = WsEvent::RouteChanged(RouteUpdate {
+            action: "added".into(),
+            route_id: "route-1".into(),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"type\":\"route_changed\""));
+        assert!(json.contains("\"action\":\"added\""));
+    }
+
+    #[test]
+    fn ws_event_node_status_serializes() {
+        let event = WsEvent::NodeStatus(NodeStatusUpdate {
+            node: "node-1".into(),
+            online: true,
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"type\":\"node_status\""));
+        assert!(json.contains("\"online\":true"));
+    }
+
+    #[test]
+    fn ws_event_device_status_serializes() {
+        let event = WsEvent::DeviceStatus(DeviceStatusUpdate {
+            device: "device-1".into(),
+            state: "running".into(),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"type\":\"device_status\""));
+        assert!(json.contains("\"state\":\"running\""));
+    }
+
+    #[test]
+    fn ws_event_error_serializes() {
+        let event = WsEvent::Error(ErrorUpdate {
+            code: "DEVICE_ERROR".into(),
+            message: "Device disconnected".into(),
+        });
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"type\":\"error\""));
+        assert!(json.contains("\"code\":\"DEVICE_ERROR\""));
+    }
+
+    #[test]
+    fn ws_command_subscribe_deserializes() {
+        let json =
+            r#"{"command":"subscribe_metering","data":{"node":"node-1","device":"device-1"}}"#;
+        let cmd: WsCommand = serde_json::from_str(json).unwrap();
+
+        match cmd {
+            WsCommand::SubscribeMetering { node, device } => {
+                assert_eq!(node, "node-1");
+                assert_eq!(device, "device-1");
+            },
+            _ => panic!("Wrong command type"),
+        }
+    }
+
+    #[test]
+    fn ws_command_unsubscribe_deserializes() {
+        let json =
+            r#"{"command":"unsubscribe_metering","data":{"node":"node-1","device":"device-1"}}"#;
+        let cmd: WsCommand = serde_json::from_str(json).unwrap();
+
+        match cmd {
+            WsCommand::UnsubscribeMetering { node, device } => {
+                assert_eq!(node, "node-1");
+                assert_eq!(device, "device-1");
+            },
+            _ => panic!("Wrong command type"),
+        }
+    }
+
+    #[test]
+    fn ws_command_ping_deserializes() {
+        let json = r#"{"command":"ping"}"#;
+        let cmd: WsCommand = serde_json::from_str(json).unwrap();
+
+        assert!(matches!(cmd, WsCommand::Ping));
     }
 }

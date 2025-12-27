@@ -1,16 +1,17 @@
 //! API router configuration.
 
-use axum::routing::get;
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers;
+use crate::state::AppState;
 use crate::websocket::ws_handler;
 use crate::API_VERSION;
 
-/// Creates the API router.
-pub fn create_router() -> Router {
+/// Creates the API router with the given application state.
+pub fn create_router_with_state(state: AppState) -> Router {
     let api_routes = Router::new()
         // Health
         .route("/health", get(handlers::health))
@@ -23,13 +24,25 @@ pub fn create_router() -> Router {
             "/nodes/{node_id}/devices/{device_id}",
             get(handlers::get_device),
         )
+        // Routes
+        .route("/routes", get(handlers::list_routes))
+        .route("/routes", post(handlers::create_route))
+        .route("/routes/{id}", get(handlers::get_route))
+        .route("/routes/{id}", put(handlers::update_route))
+        .route("/routes/{id}", delete(handlers::delete_route))
         // WebSocket
-        .route("/ws", get(ws_handler));
+        .route("/ws", get(ws_handler))
+        .with_state(state);
 
     Router::new()
         .nest(&format!("/api/{API_VERSION}"), api_routes)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
+}
+
+/// Creates the API router with default state.
+pub fn create_router() -> Router {
+    create_router_with_state(AppState::default())
 }
 
 #[cfg(test)]
@@ -54,5 +67,73 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn nodes_endpoint_works() {
+        let app = create_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/nodes")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn routes_endpoint_works() {
+        let app = create_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/routes")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn get_node_not_found() {
+        let app = create_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/nodes/nonexistent")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn get_route_not_found() {
+        let app = create_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/routes/nonexistent")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

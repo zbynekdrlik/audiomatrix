@@ -14,7 +14,7 @@ pub struct HealthResponse {
 }
 
 /// Node information.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
     /// Node identifier.
     pub id: String,
@@ -31,7 +31,7 @@ pub struct NodeInfo {
 }
 
 /// Device information.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceInfo {
     /// Device identifier.
     pub id: String,
@@ -58,7 +58,7 @@ pub enum DeviceType {
 }
 
 /// Route definition.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteDefinition {
     /// Source node.
     pub source_node: String,

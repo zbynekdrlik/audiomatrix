@@ -16,5 +16,7 @@ tracing.workspace = true
 hostname.workspace = true
 serde.workspace = true
 parking_lot.workspace = true
+crossbeam-channel.workspace = true
+flume.workspace = true
 
 [dev-dependencies]
