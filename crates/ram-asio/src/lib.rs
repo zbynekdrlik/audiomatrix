@@ -1,4 +1,9 @@
-//! ASIO device support for AudioMatrix.
+//! ASIO device support for `AudioMatrix`.
+//!
+// Clippy pedantic lints relaxed for conditional compilation:
+// - unused_self: methods use self on Windows with ASIO feature but not on other platforms
+// - missing_errors_doc: error conditions are platform-dependent
+#![allow(clippy::unused_self, clippy::missing_errors_doc)]
 //!
 //! This crate provides Windows ASIO driver integration:
 //! - Hardware ASIO device enumeration and connection
