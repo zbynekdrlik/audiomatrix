@@ -309,6 +309,31 @@ main (protected)
 └── release/v1.x.x
 ```
 
+### Git Workflow Rules (CRITICAL)
+
+**ALWAYS commit and push your work:**
+- Commit frequently with meaningful messages
+- Push to remote after every significant change (backup + visibility)
+- NEVER skip pushing - remote serves as backup and enables CI validation
+
+**NEVER push directly to `main`:**
+- All work happens on `develop` or feature branches
+- Create PRs from `develop` → `main`
+- Only the user merges PRs via GitHub web interface
+- Claude creates PRs but does NOT merge them
+
+**Monitor GitHub Actions:**
+- After every push, verify CI pipeline succeeds
+- If CI fails, fix issues immediately before continuing
+- Never leave the repository in a broken state
+
+**Keep repository clean:**
+- Every file in git MUST have a purpose for current implementation
+- NO temporary files, experiments, or obsolete code
+- NO archiving old versions in git - use git history instead
+- Delete files that are no longer needed
+- If unsure whether to keep a file, ask the user
+
 ### Branch Protection Rules (main)
 
 - **Require PR reviews**: Minimum 1 approval
