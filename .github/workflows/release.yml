@@ -3,10 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'  # Only release tags (no -dev)
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 permissions:
   contents: write
@@ -19,12 +20,12 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Extract and validate version
         id: version
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          CARGO_VERSION=$(grep -m1 'version = ' Cargo.toml | cut -d'"' -f2)
+          CARGO_VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
 
           echo "Tag version: $TAG_VERSION"
           echo "Cargo.toml version: $CARGO_VERSION"
@@ -53,18 +54,22 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: linux-x64
+            ext: ""
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: windows-x64
+            ext: ".exe"
           - target: x86_64-apple-darwin
             os: macos-latest
             name: macos-x64
+            ext: ""
           - target: aarch64-apple-darwin
             os: macos-latest
             name: macos-arm64
+            ext: ""
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -85,7 +90,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/ram-service dist/audiomatrix
+          cp target/${{ matrix.target }}/release/audiomatrix dist/audiomatrix
           chmod +x dist/audiomatrix
           cd dist
           tar -czvf audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.tar.gz audiomatrix
@@ -96,10 +101,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Copy-Item "target/${{ matrix.target }}/release/ram-service.exe" "dist/audiomatrix.exe"
+          Copy-Item "target/${{ matrix.target }}/release/audiomatrix.exe" "dist/audiomatrix.exe"
+          # Create both zip and standalone exe
           Compress-Archive -Path "dist/audiomatrix.exe" -DestinationPath "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip"
-          $hash = (Get-FileHash "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip" | Out-File -Encoding ASCII "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip.sha256"
+          Copy-Item "dist/audiomatrix.exe" "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.exe"
+          # Generate checksums
+          $zipHash = (Get-FileHash "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip" -Algorithm SHA256).Hash.ToLower()
+          $exeHash = (Get-FileHash "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.exe" -Algorithm SHA256).Hash.ToLower()
+          "$zipHash  audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip" | Out-File -Encoding ASCII "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip.sha256"
+          "$exeHash  audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.exe" | Out-File -Encoding ASCII "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.exe.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -107,13 +117,13 @@ jobs:
           name: audiomatrix-${{ matrix.name }}
           path: dist/audiomatrix-*
 
-  # Create GitHub Release
+  # Create GitHub Release with IRM installer
   release:
     name: Create Release
     needs: [validate, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -123,7 +133,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.exe" \) -exec cp {} release/ \;
 
           # Create combined SHA256SUMS
           cd release
@@ -131,10 +141,103 @@ jobs:
           echo "Release files:"
           ls -la
 
+      - name: Generate IRM installer script
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          cat > release/install.ps1 << 'INSTALLER_SCRIPT'
+          #Requires -Version 5.1
+          <#
+          .SYNOPSIS
+              AudioMatrix Windows Installer
+          .DESCRIPTION
+              Downloads and installs AudioMatrix audio routing system
+          .PARAMETER InstallDir
+              Installation directory (default: $env:LOCALAPPDATA\AudioMatrix)
+          .PARAMETER NoPath
+              Skip adding to PATH
+          .EXAMPLE
+              irm https://github.com/zbynekdrlik/audiomatrix/releases/latest/download/install.ps1 | iex
+          #>
+          param(
+              [string]$InstallDir = "$env:LOCALAPPDATA\AudioMatrix",
+              [switch]$NoPath
+          )
+
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+
+          $Version = "__VERSION__"
+          $Repo = "zbynekdrlik/audiomatrix"
+          $Asset = "audiomatrix-$Version-windows-x64.exe"
+
+          Write-Host ""
+          Write-Host "======================================================" -ForegroundColor Cyan
+          Write-Host "  AudioMatrix Installer v$Version" -ForegroundColor Cyan
+          Write-Host "  Professional Audio Routing System" -ForegroundColor Cyan
+          Write-Host "======================================================" -ForegroundColor Cyan
+          Write-Host ""
+
+          Write-Host "[1/4] Creating install directory..." -ForegroundColor Yellow
+          if (-not (Test-Path $InstallDir)) {
+              New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+          }
+          Write-Host "      Location: $InstallDir" -ForegroundColor Gray
+
+          Write-Host "[2/4] Downloading AudioMatrix v$Version..." -ForegroundColor Yellow
+          $DownloadUrl = "https://github.com/$Repo/releases/download/v$Version/$Asset"
+          $ExePath = Join-Path $InstallDir "audiomatrix.exe"
+
+          try {
+              Invoke-WebRequest -Uri $DownloadUrl -OutFile $ExePath -UseBasicParsing
+          } catch {
+              Write-Host "      ERROR: Download failed" -ForegroundColor Red
+              Write-Host "      URL: $DownloadUrl" -ForegroundColor Gray
+              Write-Host "      $_" -ForegroundColor Red
+              exit 1
+          }
+          Write-Host "      OK: Downloaded successfully" -ForegroundColor Green
+
+          Write-Host "[3/4] Verifying installation..." -ForegroundColor Yellow
+          if (-not (Test-Path $ExePath)) {
+              Write-Host "      ERROR: Binary not found" -ForegroundColor Red
+              exit 1
+          }
+          $FileSize = [math]::Round((Get-Item $ExePath).Length / 1MB, 2)
+          Write-Host "      Size: $FileSize MB" -ForegroundColor Gray
+          Write-Host "      OK: Verification passed" -ForegroundColor Green
+
+          Write-Host "[4/4] Configuring PATH..." -ForegroundColor Yellow
+          if (-not $NoPath) {
+              $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+              if ($UserPath -notlike "*$InstallDir*") {
+                  [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
+                  Write-Host "      OK: Added to PATH" -ForegroundColor Green
+                  Write-Host "      Note: Restart terminal to use 'audiomatrix' command" -ForegroundColor Gray
+              } else {
+                  Write-Host "      Already in PATH" -ForegroundColor Gray
+              }
+          } else {
+              Write-Host "      Skipped (--NoPath)" -ForegroundColor Gray
+          }
+
+          Write-Host ""
+          Write-Host "======================================================" -ForegroundColor Green
+          Write-Host "  Installation Complete!" -ForegroundColor Green
+          Write-Host "======================================================" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "  Version:  v$Version" -ForegroundColor White
+          Write-Host "  Location: $ExePath" -ForegroundColor White
+          Write-Host ""
+          Write-Host "  Usage: audiomatrix --help" -ForegroundColor Cyan
+          Write-Host ""
+          INSTALLER_SCRIPT
+
+          # Replace version placeholder
+          sed -i "s/__VERSION__/$VERSION/g" release/install.ps1
+
       - name: Generate changelog
         id: changelog
         run: |
-          # Get commits since last tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
             CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
@@ -152,16 +255,27 @@ jobs:
           body: |
             ## AudioMatrix v${{ needs.validate.outputs.version }}
 
-            ### Installation
+            Professional audio routing system for Windows, macOS, and Linux.
+
+            ### Quick Install
 
             **Windows (PowerShell):**
             ```powershell
-            irm https://raw.githubusercontent.com/zbynekdrlik/audiomatrix/main/scripts/install.ps1 | iex
+            irm https://github.com/zbynekdrlik/audiomatrix/releases/download/v${{ needs.validate.outputs.version }}/install.ps1 | iex
             ```
 
-            **Linux/macOS:**
+            **Linux:**
             ```bash
-            curl -sSL https://raw.githubusercontent.com/zbynekdrlik/audiomatrix/main/scripts/install.sh | bash
+            curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/v${{ needs.validate.outputs.version }}/audiomatrix-${{ needs.validate.outputs.version }}-linux-x64.tar.gz
+            tar xzf audiomatrix-${{ needs.validate.outputs.version }}-linux-x64.tar.gz
+            sudo mv audiomatrix /usr/local/bin/
+            ```
+
+            **macOS:**
+            ```bash
+            curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/v${{ needs.validate.outputs.version }}/audiomatrix-${{ needs.validate.outputs.version }}-macos-x64.tar.gz
+            tar xzf audiomatrix-${{ needs.validate.outputs.version }}-macos-x64.tar.gz
+            sudo mv audiomatrix /usr/local/bin/
             ```
 
             ### Changes

@@ -346,6 +346,59 @@ main (protected)
 - **Require linear history**: Squash or rebase only
 - **No direct pushes**: All changes via PR
 
+### Versioning Rules (STRICT)
+
+**Single Source of Truth:** Version is defined ONLY in the root `Cargo.toml` workspace section. All crates inherit via `version.workspace = true`.
+
+**Develop Branch (MANDATORY):**
+- Version MUST be in format: `X.Y.Z-dev.N` (e.g., `0.1.0-dev.1`, `0.2.0-dev.5`)
+- The `-dev.N` suffix is REQUIRED - CI will REJECT versions without it
+- Increment `N` for each significant change (features, fixes)
+- NEVER have a release version (without `-dev`) on develop branch
+
+**Main Branch (RELEASES ONLY):**
+- Version MUST be in format: `X.Y.Z` (e.g., `0.1.0`, `1.0.0`)
+- NO `-dev` suffix allowed - CI will REJECT dev versions
+- Version must match the release tag exactly
+
+**Release Process:**
+1. On develop: Version is `X.Y.Z-dev.N`
+2. Create PR from develop → main
+3. In PR: Update version from `X.Y.Z-dev.N` → `X.Y.Z`
+4. Merge PR to main
+5. Tag main with `vX.Y.Z`
+6. Release workflow builds and publishes binaries + IRM installer
+7. Immediately after: On develop, bump to next dev version (e.g., `0.2.0-dev.1`)
+
+**Version Bump Examples:**
+```bash
+# Current: 0.1.0-dev.3 → Adding a feature
+# New: 0.1.0-dev.4
+
+# Current: 0.1.0-dev.15 → Ready for release
+# PR to main: 0.1.0
+# After release on develop: 0.2.0-dev.1
+```
+
+**CI Enforcement:**
+- `version-check` job validates version format per branch
+- Develop push with `0.1.0` (no -dev) → CI FAILS
+- Main push with `0.1.0-dev.1` → CI FAILS
+- Release tag `v0.1.0-dev.1` → Release workflow REJECTS
+
+### IRM Installer (Windows)
+
+Releases include a PowerShell installer script that displays version on startup:
+```powershell
+irm https://github.com/zbynekdrlik/audiomatrix/releases/latest/download/install.ps1 | iex
+```
+
+The installer:
+1. Prints `AudioMatrix Installer vX.Y.Z` on start
+2. Downloads the correct version binary
+3. Installs to `$env:LOCALAPPDATA\AudioMatrix`
+4. Adds to PATH
+
 ### PR Template
 
 ```markdown
