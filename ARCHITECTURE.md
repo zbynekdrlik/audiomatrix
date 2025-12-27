@@ -37,7 +37,10 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ### Platform Notes
 
-- **Windows**: Enumerates all hosts (WASAPI + ASIO if SDK installed). ASIO4ALL or native ASIO driver recommended for low latency.
+- **Windows**:
+  - Enumerates all hosts (WASAPI + ASIO if SDK installed)
+  - ASIO4ALL or native ASIO driver recommended for low latency
+  - **Important**: Audio devices are only accessible from interactive user sessions (not Session 0/services). Running via SSH or as a service without user context will show 0 devices.
 - **Linux**: ALSA only. PipeWire/PulseAudio may work through ALSA compatibility.
 - **macOS**: CoreAudio only.
 
