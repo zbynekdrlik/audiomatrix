@@ -400,6 +400,110 @@ Closes #42
 
 ---
 
+## Versioning and Release Management
+
+### Single Version Source
+
+The project version is defined **ONLY** in the workspace `Cargo.toml`:
+
+```toml
+[workspace.package]
+version = "0.1.0"  # or "0.1.0-dev.1" on develop
+```
+
+All crates inherit this version:
+
+```toml
+[package]
+version.workspace = true
+```
+
+**NEVER** hardcode versions in individual crate Cargo.toml files.
+
+### Version Format Rules (STRICT)
+
+| Branch | Version Format | Example |
+|--------|---------------|---------|
+| `develop` | `X.Y.Z-dev.N` | `0.1.0-dev.1`, `0.1.0-dev.2` |
+| `main` | `X.Y.Z` | `0.1.0`, `0.2.0`, `1.0.0` |
+| `release/*` | `X.Y.Z` | `0.1.0` |
+
+**CI Enforcement:**
+- Push to `develop` with non-dev version → **CI FAILS**
+- Push to `main` with dev version → **CI FAILS**
+- PR from `develop` to `main` must bump version to release format
+- Version must increment (never go backwards)
+
+### Dev Branch Workflow
+
+```bash
+# On develop, version must be -dev.N
+# After each significant change, increment dev number:
+# 0.1.0-dev.1 → 0.1.0-dev.2 → 0.1.0-dev.3
+
+# When ready for release:
+# 1. Create PR from develop → main
+# 2. In PR, update version: 0.1.0-dev.5 → 0.1.0
+# 3. After merge, tag: git tag v0.1.0
+# 4. CI creates release with binaries
+# 5. Back on develop, bump to next dev: 0.2.0-dev.1
+```
+
+### Release Artifacts
+
+Each GitHub Release includes:
+- `audiomatrix-x.y.z-windows-x64.exe` - Windows installer
+- `audiomatrix-x.y.z-windows-x64.zip` - Windows portable
+- `audiomatrix-x.y.z-linux-x64.tar.gz` - Linux binary
+- `audiomatrix-x.y.z-macos-x64.tar.gz` - macOS binary
+- `audiomatrix-x.y.z-macos-arm64.tar.gz` - macOS Apple Silicon
+- `SHA256SUMS.txt` - Checksums for verification
+
+### Windows Installation (irm)
+
+Install on Windows using PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/zbynekdrlik/audiomatrix/main/scripts/install.ps1 | iex
+```
+
+The installer script:
+1. **Always prints version** at start
+2. Downloads latest release binary
+3. Verifies SHA256 checksum
+4. Installs to `%LOCALAPPDATA%\AudioMatrix`
+5. Adds to PATH
+6. Creates Start Menu shortcut
+
+### Version Validation in CI
+
+```yaml
+# .github/workflows/ci.yml - version check job
+version-check:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Check version format
+      run: |
+        VERSION=$(grep -m1 'version = ' Cargo.toml | cut -d'"' -f2)
+        BRANCH="${GITHUB_REF#refs/heads/}"
+
+        if [[ "$BRANCH" == "develop" ]]; then
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
+            echo "::error::Develop branch must have -dev.N version, got: $VERSION"
+            exit 1
+          fi
+        elif [[ "$BRANCH" == "main" ]]; then
+          if [[ "$VERSION" =~ -dev ]]; then
+            echo "::error::Main branch cannot have dev version, got: $VERSION"
+            exit 1
+          fi
+        fi
+        echo "Version $VERSION is valid for branch $BRANCH"
+```
+
+---
+
 ## CI/CD Pipeline
 
 ### GitHub Actions Workflow

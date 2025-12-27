@@ -143,12 +143,70 @@ mod tests {
     }
 
     #[test]
+    fn volume_control_default_trait() {
+        let vc = VolumeControl::default();
+        assert!((vc.volume() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn volume_control_set_volume() {
+        let vc = VolumeControl::new();
+        vc.set_volume(0.5);
+        assert!((vc.volume() - 0.5).abs() < 0.001);
+
+        vc.set_volume(2.0);
+        assert!((vc.volume() - 2.0).abs() < 0.001);
+
+        // Negative values should clamp to 0
+        vc.set_volume(-1.0);
+        assert!(vc.volume().abs() < 0.001);
+    }
+
+    #[test]
     fn volume_control_mute() {
         let vc = VolumeControl::new();
         assert!((vc.effective_gain() - 1.0).abs() < 0.001);
 
         vc.set_muted(true);
+        assert!(vc.is_muted());
         assert!(vc.effective_gain().abs() < 0.001);
+
+        vc.set_muted(false);
+        assert!(!vc.is_muted());
+        assert!((vc.effective_gain() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn volume_control_apply_unity() {
+        let vc = VolumeControl::new();
+        let mut samples = [0.5_f32; 4];
+        vc.apply(&mut samples);
+        // Unity gain should not change samples
+        for sample in &samples {
+            assert!((*sample - 0.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn volume_control_apply_half() {
+        let vc = VolumeControl::new();
+        vc.set_volume(0.5);
+        let mut samples = [1.0_f32; 4];
+        vc.apply(&mut samples);
+        for sample in &samples {
+            assert!((*sample - 0.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn volume_control_apply_muted() {
+        let vc = VolumeControl::new();
+        vc.set_muted(true);
+        let mut samples = [1.0_f32; 4];
+        vc.apply(&mut samples);
+        for sample in &samples {
+            assert!(sample.abs() < 0.001);
+        }
     }
 
     #[test]
@@ -162,6 +220,63 @@ mod tests {
 
         for sample in &output {
             assert!((*sample - 0.8).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn mixer_empty_inputs() {
+        let mixer = Mixer::new(0.0);
+        let mut output = [1.0_f32; 4];
+        mixer.mix(&[], &mut output);
+        // Output should be cleared
+        for sample in &output {
+            assert!(sample.abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn mixer_default() {
+        let mixer = Mixer::default();
+        // Default is -6dB headroom
+        let gain = mixer.headroom_gain();
+        // -6dB = 10^(-6/20) ≈ 0.501
+        assert!((gain - 0.501).abs() < 0.01);
+    }
+
+    #[test]
+    fn mixer_headroom_calculation() {
+        let mixer = Mixer::new(-6.0);
+        let gain = mixer.headroom_gain();
+        assert!((gain - 0.501).abs() < 0.01);
+
+        let mixer_0db = Mixer::new(0.0);
+        assert!((mixer_0db.headroom_gain() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn mixer_different_length_inputs() {
+        let mixer = Mixer::new(0.0);
+        let input1 = [0.5_f32; 2];
+        let input2 = [0.3_f32; 4];
+        let mut output = [0.0_f32; 4];
+
+        mixer.mix(&[&input1, &input2], &mut output);
+
+        // First 2 samples should be summed
+        assert!((output[0] - 0.8).abs() < 0.001);
+        assert!((output[1] - 0.8).abs() < 0.001);
+        // Last 2 samples should only have input2
+        assert!((output[2] - 0.3).abs() < 0.001);
+        assert!((output[3] - 0.3).abs() < 0.001);
+    }
+
+    #[test]
+    fn volume_conversion_roundtrip() {
+        let values = [0.0, 0.5, 1.0, 1.5, 2.0];
+        for &v in &values {
+            let u = volume_to_u32(v);
+            let back = u32_to_volume(u);
+            assert!((back - v).abs() < 0.001);
         }
     }
 }

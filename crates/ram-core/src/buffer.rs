@@ -111,6 +111,7 @@ unsafe impl Send for RingBuffer {}
 unsafe impl Sync for RingBuffer {}
 
 #[cfg(test)]
+#[allow(clippy::cast_precision_loss)]
 mod tests {
     use super::*;
 
@@ -159,5 +160,120 @@ mod tests {
 
         buffer.clear();
         assert_eq!(buffer.available(), 0);
+    }
+
+    #[test]
+    fn read_from_empty_returns_zero() {
+        let buffer = RingBuffer::new(64);
+        let mut output = [1.0_f32; 16];
+        let read = buffer.read(&mut output);
+        assert_eq!(read, 0);
+    }
+
+    #[test]
+    fn write_to_full_returns_zero() {
+        let buffer = RingBuffer::new(64);
+        let samples = [0.5_f32; 64];
+        buffer.write(&samples);
+
+        // Buffer should be full now
+        let more_samples = [0.5_f32; 16];
+        let written = buffer.write(&more_samples);
+        assert_eq!(written, 0);
+    }
+
+    #[test]
+    fn partial_read() {
+        let buffer = RingBuffer::new(1024);
+        let samples = [0.5_f32; 64];
+        buffer.write(&samples);
+
+        // Read less than available
+        let mut output = [0.0_f32; 32];
+        let read = buffer.read(&mut output);
+        assert_eq!(read, 32);
+        assert_eq!(buffer.available(), 32);
+    }
+
+    #[test]
+    fn read_more_than_available() {
+        let buffer = RingBuffer::new(1024);
+        let samples = [0.5_f32; 32];
+        buffer.write(&samples);
+
+        let mut output = [0.0_f32; 64];
+        let read = buffer.read(&mut output);
+        assert_eq!(read, 32);
+    }
+
+    #[test]
+    fn wraparound_write_read() {
+        let buffer = RingBuffer::new(64);
+
+        // Fill partially
+        let samples1 = [0.25_f32; 48];
+        buffer.write(&samples1);
+
+        // Read some
+        let mut output1 = [0.0_f32; 32];
+        buffer.read(&mut output1);
+
+        // Write more (should wrap around)
+        let samples2 = [0.75_f32; 32];
+        let written = buffer.write(&samples2);
+        assert_eq!(written, 32);
+
+        // Read remaining samples1 data
+        let mut output2 = [0.0_f32; 16];
+        let read = buffer.read(&mut output2);
+        assert_eq!(read, 16);
+        for sample in &output2 {
+            assert!((*sample - 0.25).abs() < 0.001);
+        }
+
+        // Read samples2 data
+        let mut output3 = [0.0_f32; 32];
+        let read = buffer.read(&mut output3);
+        assert_eq!(read, 32);
+        for sample in &output3 {
+            assert!((*sample - 0.75).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn capacity_rounds_to_power_of_two() {
+        let buffer = RingBuffer::new(100);
+        // 100 rounds up to 128
+        assert!(buffer.free() >= 100);
+    }
+
+    #[test]
+    fn multiple_write_read_cycles() {
+        let buffer = RingBuffer::new(128);
+
+        for i in 0..10 {
+            let val = (i as f32) * 0.1;
+            let samples = [val; 32];
+            let written = buffer.write(&samples);
+            assert_eq!(written, 32);
+
+            let mut output = [0.0_f32; 32];
+            let read = buffer.read(&mut output);
+            assert_eq!(read, 32);
+            for sample in &output {
+                assert!((*sample - val).abs() < 0.001);
+            }
+        }
+    }
+
+    #[test]
+    fn free_space_decreases_after_write() {
+        let buffer = RingBuffer::new(128);
+        let initial_free = buffer.free();
+
+        let samples = [0.5_f32; 32];
+        buffer.write(&samples);
+
+        assert_eq!(buffer.free(), initial_free - 32);
     }
 }

@@ -102,3 +102,141 @@ pub struct MeteringData {
     /// Peak hold levels (dBFS).
     pub peaks: Vec<f32>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn health_response_serialization() {
+        let response = HealthResponse {
+            status: "ok".into(),
+            version: "1.0.0".into(),
+            hostname: "test-host".into(),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"status\":\"ok\""));
+        assert!(json.contains("\"version\":\"1.0.0\""));
+
+        let parsed: HealthResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.status, "ok");
+        assert_eq!(parsed.version, "1.0.0");
+        assert_eq!(parsed.hostname, "test-host");
+    }
+
+    #[test]
+    fn node_info_serialization() {
+        let node = NodeInfo {
+            id: "node-1".into(),
+            name: "Test Node".into(),
+            addresses: vec!["192.168.1.1".into()],
+            api_port: 8080,
+            vban_port: 6980,
+            online: true,
+        };
+
+        let json = serde_json::to_string(&node).unwrap();
+        let parsed: NodeInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.id, "node-1");
+        assert_eq!(parsed.name, "Test Node");
+        assert_eq!(parsed.addresses, vec!["192.168.1.1"]);
+        assert_eq!(parsed.api_port, 8080);
+        assert_eq!(parsed.vban_port, 6980);
+        assert!(parsed.online);
+    }
+
+    #[test]
+    fn device_info_serialization() {
+        let device = DeviceInfo {
+            id: "device-1".into(),
+            name: "Test Device".into(),
+            device_type: DeviceType::Input,
+            channels: 2,
+            sample_rate: 48000,
+            is_virtual: false,
+        };
+
+        let json = serde_json::to_string(&device).unwrap();
+        assert!(json.contains("\"device_type\":\"input\""));
+
+        let parsed: DeviceInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, "device-1");
+        assert_eq!(parsed.device_type, DeviceType::Input);
+    }
+
+    #[test]
+    fn device_type_output() {
+        let device = DeviceInfo {
+            id: "device-2".into(),
+            name: "Output Device".into(),
+            device_type: DeviceType::Output,
+            channels: 8,
+            sample_rate: 96000,
+            is_virtual: true,
+        };
+
+        let json = serde_json::to_string(&device).unwrap();
+        assert!(json.contains("\"device_type\":\"output\""));
+
+        let parsed: DeviceInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.device_type, DeviceType::Output);
+        assert!(parsed.is_virtual);
+    }
+
+    #[test]
+    fn route_definition_serialization() {
+        let route = RouteDefinition {
+            source_node: "node-a".into(),
+            source_device: "device-1".into(),
+            source_channel: 1,
+            destination_node: "node-b".into(),
+            destination_device: "device-2".into(),
+            destination_channel: 2,
+            volume: 0.8,
+            muted: false,
+        };
+
+        let json = serde_json::to_string(&route).unwrap();
+        let parsed: RouteDefinition = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.source_node, "node-a");
+        assert_eq!(parsed.destination_channel, 2);
+        assert!((parsed.volume - 0.8).abs() < 0.001);
+        assert!(!parsed.muted);
+    }
+
+    #[test]
+    fn subscription_request_serialization() {
+        let sub = SubscriptionRequest {
+            source_node: "remote-node".into(),
+            source_device: "input-device".into(),
+            source_channel: 3,
+        };
+
+        let json = serde_json::to_string(&sub).unwrap();
+        let parsed: SubscriptionRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.source_node, "remote-node");
+        assert_eq!(parsed.source_device, "input-device");
+        assert_eq!(parsed.source_channel, 3);
+    }
+
+    #[test]
+    fn metering_data_serialization() {
+        let metering = MeteringData {
+            node: "node-1".into(),
+            device: "device-1".into(),
+            levels: vec![-12.0, -18.0],
+            peaks: vec![-6.0, -9.0],
+        };
+
+        let json = serde_json::to_string(&metering).unwrap();
+        let parsed: MeteringData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.levels.len(), 2);
+        assert_eq!(parsed.peaks.len(), 2);
+        assert!((parsed.levels[0] - (-12.0)).abs() < 0.001);
+    }
+}

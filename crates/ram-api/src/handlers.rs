@@ -71,4 +71,43 @@ mod tests {
         let response = health().await;
         assert_eq!(response.status, "ok");
     }
+
+    #[tokio::test]
+    async fn health_contains_version() {
+        let response = health().await;
+        assert!(!response.version.is_empty());
+        assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[tokio::test]
+    async fn health_contains_hostname() {
+        let response = health().await;
+        assert!(!response.hostname.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_nodes_returns_empty() {
+        let result = list_nodes().await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_node_returns_not_found() {
+        let result = get_node(Path("test-node".into())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn list_devices_returns_empty() {
+        let result = list_devices(Path("test-node".into())).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_device_returns_not_found() {
+        let result = get_device(Path(("node".into(), "device".into()))).await;
+        assert!(result.is_err());
+    }
 }

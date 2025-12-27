@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  # Validate tag matches Cargo.toml version
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract and validate version
+        id: version
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          CARGO_VERSION=$(grep -m1 'version = ' Cargo.toml | cut -d'"' -f2)
+
+          echo "Tag version: $TAG_VERSION"
+          echo "Cargo.toml version: $CARGO_VERSION"
+
+          if [[ "$TAG_VERSION" != "$CARGO_VERSION" ]]; then
+            echo "::error::Tag version ($TAG_VERSION) doesn't match Cargo.toml ($CARGO_VERSION)"
+            exit 1
+          fi
+
+          if [[ "$CARGO_VERSION" =~ -dev ]]; then
+            echo "::error::Cannot release dev version: $CARGO_VERSION"
+            exit 1
+          fi
+
+          echo "version=$CARGO_VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Valid release version: $CARGO_VERSION"
+
+  # Build binaries for all platforms
+  build:
+    name: Build (${{ matrix.target }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-x64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: windows-x64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: macos-x64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install ALSA dev (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p ram-service
+
+      - name: Prepare artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/ram-service dist/audiomatrix
+          chmod +x dist/audiomatrix
+          cd dist
+          tar -czvf audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.tar.gz audiomatrix
+          sha256sum audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.tar.gz > audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.tar.gz.sha256
+
+      - name: Prepare artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item "target/${{ matrix.target }}/release/ram-service.exe" "dist/audiomatrix.exe"
+          Compress-Archive -Path "dist/audiomatrix.exe" -DestinationPath "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip"
+          $hash = (Get-FileHash "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip" | Out-File -Encoding ASCII "dist/audiomatrix-${{ needs.validate.outputs.version }}-${{ matrix.name }}.zip.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: audiomatrix-${{ matrix.name }}
+          path: dist/audiomatrix-*
+
+  # Create GitHub Release
+  release:
+    name: Create Release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+
+          # Create combined SHA256SUMS
+          cd release
+          cat ../artifacts/*/audiomatrix-*.sha256 > SHA256SUMS.txt
+          echo "Release files:"
+          ls -la
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get commits since last tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
+          else
+            CHANGES=$(git log --pretty=format:"- %s" HEAD~10..HEAD)
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AudioMatrix v${{ needs.validate.outputs.version }}
+          body: |
+            ## AudioMatrix v${{ needs.validate.outputs.version }}
+
+            ### Installation
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/zbynekdrlik/audiomatrix/main/scripts/install.ps1 | iex
+            ```
+
+            **Linux/macOS:**
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/zbynekdrlik/audiomatrix/main/scripts/install.sh | bash
+            ```
+
+            ### Changes
+            ${{ steps.changelog.outputs.changes }}
+
+            ### Checksums
+            See `SHA256SUMS.txt` for file verification.
+          files: |
+            release/*
+          draft: false
+          prerelease: false

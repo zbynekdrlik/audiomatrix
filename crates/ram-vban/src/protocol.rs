@@ -348,6 +348,7 @@ impl VbanHeader {
 }
 
 #[cfg(test)]
+#[allow(clippy::unreadable_literal)]
 mod tests {
     use super::*;
 
@@ -356,6 +357,115 @@ mod tests {
         let sr = VbanSampleRate::Hz48000;
         assert_eq!(sr.to_hz(), 48000);
         assert_eq!(VbanSampleRate::from_hz(48000).unwrap(), sr);
+    }
+
+    #[test]
+    fn sample_rate_all_values() {
+        let rates = [
+            (VbanSampleRate::Hz6000, 6000),
+            (VbanSampleRate::Hz12000, 12000),
+            (VbanSampleRate::Hz24000, 24000),
+            (VbanSampleRate::Hz48000, 48000),
+            (VbanSampleRate::Hz96000, 96000),
+            (VbanSampleRate::Hz192000, 192000),
+            (VbanSampleRate::Hz384000, 384000),
+            (VbanSampleRate::Hz8000, 8000),
+            (VbanSampleRate::Hz16000, 16000),
+            (VbanSampleRate::Hz32000, 32000),
+            (VbanSampleRate::Hz64000, 64000),
+            (VbanSampleRate::Hz128000, 128000),
+            (VbanSampleRate::Hz256000, 256000),
+            (VbanSampleRate::Hz512000, 512000),
+            (VbanSampleRate::Hz11025, 11025),
+            (VbanSampleRate::Hz22050, 22050),
+            (VbanSampleRate::Hz44100, 44100),
+            (VbanSampleRate::Hz88200, 88200),
+            (VbanSampleRate::Hz176400, 176400),
+            (VbanSampleRate::Hz352800, 352800),
+            (VbanSampleRate::Hz705600, 705600),
+        ];
+
+        for (sr, hz) in rates {
+            assert_eq!(sr.to_hz(), hz);
+            assert_eq!(VbanSampleRate::from_hz(hz).unwrap(), sr);
+        }
+    }
+
+    #[test]
+    fn sample_rate_invalid() {
+        assert!(VbanSampleRate::from_hz(12345).is_err());
+        assert!(VbanSampleRate::from_hz(0).is_err());
+    }
+
+    #[test]
+    fn sample_rate_try_from_u8() {
+        assert_eq!(
+            VbanSampleRate::try_from(3u8).unwrap(),
+            VbanSampleRate::Hz48000
+        );
+        assert_eq!(
+            VbanSampleRate::try_from(16u8).unwrap(),
+            VbanSampleRate::Hz44100
+        );
+        // Values > 20 should fail
+        assert!(VbanSampleRate::try_from(21u8).is_err());
+        assert!(VbanSampleRate::try_from(31u8).is_err());
+    }
+
+    #[test]
+    fn sub_protocol_try_from_u8() {
+        assert_eq!(
+            VbanSubProtocol::try_from(0x00u8).unwrap(),
+            VbanSubProtocol::Audio
+        );
+        assert_eq!(
+            VbanSubProtocol::try_from(0x20u8).unwrap(),
+            VbanSubProtocol::Serial
+        );
+        assert_eq!(
+            VbanSubProtocol::try_from(0x40u8).unwrap(),
+            VbanSubProtocol::Text
+        );
+        assert_eq!(
+            VbanSubProtocol::try_from(0x60u8).unwrap(),
+            VbanSubProtocol::Service
+        );
+        // Values in between should map to the masked value
+        assert_eq!(
+            VbanSubProtocol::try_from(0x03u8).unwrap(),
+            VbanSubProtocol::Audio
+        );
+        assert_eq!(
+            VbanSubProtocol::try_from(0x23u8).unwrap(),
+            VbanSubProtocol::Serial
+        );
+        // Invalid values
+        assert!(VbanSubProtocol::try_from(0x80u8).is_err());
+        assert!(VbanSubProtocol::try_from(0xA0u8).is_err());
+    }
+
+    #[test]
+    fn protocol_try_from_u8() {
+        assert_eq!(VbanProtocol::try_from(0u8).unwrap(), VbanProtocol::Pcm8);
+        assert_eq!(VbanProtocol::try_from(1u8).unwrap(), VbanProtocol::Pcm16);
+        assert_eq!(VbanProtocol::try_from(2u8).unwrap(), VbanProtocol::Pcm24);
+        assert_eq!(VbanProtocol::try_from(3u8).unwrap(), VbanProtocol::Pcm32);
+        assert_eq!(VbanProtocol::try_from(4u8).unwrap(), VbanProtocol::Float32);
+        assert_eq!(VbanProtocol::try_from(5u8).unwrap(), VbanProtocol::Float64);
+        assert_eq!(VbanProtocol::try_from(6u8).unwrap(), VbanProtocol::Pcm12);
+        assert_eq!(VbanProtocol::try_from(7u8).unwrap(), VbanProtocol::Pcm10);
+    }
+
+    #[test]
+    fn protocol_sample_size() {
+        assert_eq!(VbanProtocol::Pcm8.sample_size(), 1);
+        assert_eq!(VbanProtocol::Pcm16.sample_size(), 2);
+        assert_eq!(VbanProtocol::Pcm24.sample_size(), 3);
+        assert_eq!(VbanProtocol::Pcm32.sample_size(), 4);
+        assert_eq!(VbanProtocol::Float32.sample_size(), 4);
+        assert_eq!(VbanProtocol::Float64.sample_size(), 8);
+        assert_eq!(VbanProtocol::Pcm12.sample_size(), 2);
+        assert_eq!(VbanProtocol::Pcm10.sample_size(), 2);
     }
 
     #[test]
@@ -380,5 +490,125 @@ mod tests {
         assert_eq!(parsed.format, header.format);
         assert_eq!(parsed.stream_name, header.stream_name);
         assert_eq!(parsed.frame_counter, header.frame_counter);
+    }
+
+    #[test]
+    fn header_actual_values() {
+        let header = VbanHeader {
+            sub_protocol: VbanSubProtocol::Audio,
+            sample_rate: VbanSampleRate::Hz48000,
+            samples_per_frame: 255,
+            channels: 1,
+            format: VbanProtocol::Float32,
+            stream_name: "Test".into(),
+            frame_counter: 0,
+        };
+
+        // samples_per_frame + 1
+        assert_eq!(header.actual_samples(), 256);
+        // channels + 1
+        assert_eq!(header.actual_channels(), 2);
+    }
+
+    #[test]
+    fn header_parse_too_short() {
+        let short_data = [0u8; 10];
+        assert!(VbanHeader::parse(&short_data).is_err());
+    }
+
+    #[test]
+    fn header_parse_invalid_magic() {
+        let mut data = [0u8; HEADER_SIZE];
+        data[0..4].copy_from_slice(b"NOPE");
+        assert!(VbanHeader::parse(&data).is_err());
+    }
+
+    #[test]
+    fn header_long_stream_name() {
+        let header = VbanHeader {
+            sub_protocol: VbanSubProtocol::Audio,
+            sample_rate: VbanSampleRate::Hz48000,
+            samples_per_frame: 255,
+            channels: 1,
+            format: VbanProtocol::Float32,
+            stream_name: "ThisIsAVeryLongStreamName".into(),
+            frame_counter: 0,
+        };
+
+        let bytes = header.to_bytes();
+        let parsed = VbanHeader::parse(&bytes).unwrap();
+
+        // Should be truncated to 16 characters
+        assert_eq!(parsed.stream_name.len(), 16);
+        assert_eq!(parsed.stream_name, "ThisIsAVeryLongS");
+    }
+
+    #[test]
+    fn header_frame_counter_max() {
+        let header = VbanHeader {
+            sub_protocol: VbanSubProtocol::Audio,
+            sample_rate: VbanSampleRate::Hz48000,
+            samples_per_frame: 0,
+            channels: 0,
+            format: VbanProtocol::Float32,
+            stream_name: "Test".into(),
+            frame_counter: u32::MAX,
+        };
+
+        let bytes = header.to_bytes();
+        let parsed = VbanHeader::parse(&bytes).unwrap();
+        assert_eq!(parsed.frame_counter, u32::MAX);
+    }
+
+    #[test]
+    fn header_all_sub_protocols() {
+        for sp in [
+            VbanSubProtocol::Audio,
+            VbanSubProtocol::Serial,
+            VbanSubProtocol::Text,
+            VbanSubProtocol::Service,
+        ] {
+            let header = VbanHeader {
+                sub_protocol: sp,
+                sample_rate: VbanSampleRate::Hz48000,
+                samples_per_frame: 0,
+                channels: 0,
+                format: VbanProtocol::Float32,
+                stream_name: "Test".into(),
+                frame_counter: 0,
+            };
+
+            let bytes = header.to_bytes();
+            let parsed = VbanHeader::parse(&bytes).unwrap();
+            assert_eq!(parsed.sub_protocol, sp);
+        }
+    }
+
+    #[test]
+    fn header_all_formats() {
+        for fmt in [
+            VbanProtocol::Pcm8,
+            VbanProtocol::Pcm16,
+            VbanProtocol::Pcm24,
+            VbanProtocol::Pcm32,
+            VbanProtocol::Float32,
+            VbanProtocol::Float64,
+            VbanProtocol::Pcm12,
+            VbanProtocol::Pcm10,
+        ] {
+            let header = VbanHeader {
+                sub_protocol: VbanSubProtocol::Audio,
+                sample_rate: VbanSampleRate::Hz48000,
+                samples_per_frame: 0,
+                channels: 0,
+                format: fmt,
+                stream_name: "Test".into(),
+                frame_counter: 0,
+            };
+
+            let bytes = header.to_bytes();
+            let parsed = VbanHeader::parse(&bytes).unwrap();
+            assert_eq!(parsed.format, fmt);
+        }
     }
 }
