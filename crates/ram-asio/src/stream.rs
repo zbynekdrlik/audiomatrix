@@ -4,7 +4,9 @@
 
 #[cfg(all(target_os = "windows", feature = "asio"))]
 use crate::device::AsioDevice;
-use crate::error::{AsioError, AsioResult};
+#[cfg(not(all(target_os = "windows", feature = "asio")))]
+use crate::error::AsioError;
+use crate::error::AsioResult;
 
 #[cfg(all(target_os = "windows", feature = "asio"))]
 use cpal::traits::{DeviceTrait, StreamTrait};
