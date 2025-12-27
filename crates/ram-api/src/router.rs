@@ -17,19 +17,19 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/health", get(handlers::health))
         // Nodes
         .route("/nodes", get(handlers::list_nodes))
-        .route("/nodes/{id}", get(handlers::get_node))
+        .route("/nodes/:id", get(handlers::get_node))
         // Devices
-        .route("/nodes/{node_id}/devices", get(handlers::list_devices))
+        .route("/nodes/:node_id/devices", get(handlers::list_devices))
         .route(
-            "/nodes/{node_id}/devices/{device_id}",
+            "/nodes/:node_id/devices/:device_id",
             get(handlers::get_device),
         )
         // Routes
         .route("/routes", get(handlers::list_routes))
         .route("/routes", post(handlers::create_route))
-        .route("/routes/{id}", get(handlers::get_route))
-        .route("/routes/{id}", put(handlers::update_route))
-        .route("/routes/{id}", delete(handlers::delete_route))
+        .route("/routes/:id", get(handlers::get_route))
+        .route("/routes/:id", put(handlers::update_route))
+        .route("/routes/:id", delete(handlers::delete_route))
         // WebSocket
         .route("/ws", get(ws_handler))
         .with_state(state);
