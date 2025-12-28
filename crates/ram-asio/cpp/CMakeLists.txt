@@ -9,21 +9,10 @@ if(NOT WIN32)
     message(FATAL_ERROR "AudioMatrix Virtual ASIO driver is Windows-only")
 endif()
 
-# Find ASIO SDK
-set(ASIO_SDK_DIR "${CMAKE_SOURCE_DIR}/external/asio_sdk" CACHE PATH "Path to ASIO SDK")
-if(NOT EXISTS "${ASIO_SDK_DIR}/common/asio.h")
-    message(FATAL_ERROR "ASIO SDK not found at ${ASIO_SDK_DIR}. "
-            "Clone it with: git clone https://github.com/audiosdk/asio.git external/asio_sdk")
-endif()
+# Note: We define all ASIO types/structs in virtual_asio.h, so no SDK dependency.
+# This avoids compatibility issues with the SDK's ANSI-mode code.
 
-# ASIO SDK sources (required by ASIO specification)
-set(ASIO_SDK_SOURCES
-    ${ASIO_SDK_DIR}/common/asio.cpp
-    ${ASIO_SDK_DIR}/host/asiodrivers.cpp
-    ${ASIO_SDK_DIR}/host/pc/asiolist.cpp
-)
-
-# Driver sources
+# Driver sources only
 set(DRIVER_SOURCES
     virtual_asio.cpp
     shared_memory.cpp
@@ -34,16 +23,12 @@ set(DRIVER_SOURCES
 # Create shared library (DLL)
 add_library(AudioMatrixASIO SHARED
     ${DRIVER_SOURCES}
-    ${ASIO_SDK_SOURCES}
     AudioMatrixASIO.def
 )
 
 # Include directories
 target_include_directories(AudioMatrixASIO PRIVATE
     ${CMAKE_SOURCE_DIR}
-    ${ASIO_SDK_DIR}/common
-    ${ASIO_SDK_DIR}/host
-    ${ASIO_SDK_DIR}/host/pc
 )
 
 # Link libraries
@@ -56,13 +41,12 @@ target_link_libraries(AudioMatrixASIO PRIVATE
 )
 
 # Compiler flags
+# Note: Don't use WIN32_LEAN_AND_MEAN as it excludes COM definitions
+# Note: UNICODE/_UNICODE for our code only (registry.cpp uses wide APIs)
 target_compile_definitions(AudioMatrixASIO PRIVATE
     UNICODE
     _UNICODE
-    WIN32_LEAN_AND_MEAN
     NOMINMAX
-    # ASIO SDK uses 'interface' keyword (Microsoft extension)
-    "interface=struct"
 )
 
 if(MSVC)

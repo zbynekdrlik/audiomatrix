@@ -26,14 +26,61 @@ typedef long long ASIOTimeStamp;
 constexpr ASIOBool ASIOTrue = 1;
 constexpr ASIOBool ASIOFalse = 0;
 
-// Forward declare ASIO types
-struct ASIODriverInfo;
-struct ASIOClockSource;
-struct ASIOChannelInfo;
-struct ASIOBufferInfo;
-struct ASIOTime;
+// ASIO struct definitions (from ASIO specification)
+struct ASIODriverInfo {
+    long asioVersion;       // Currently 2
+    long driverVersion;     // Driver version
+    char name[32];          // Driver name
+    char errorMessage[124]; // Error message
+    void* sysRef;           // System reference (HWND on Windows)
+};
 
-// ASIOCallbacks - must be fully defined for member access
+struct ASIOClockSource {
+    long index;             // Clock source index
+    long associatedChannel; // Channel if sample rate derived from input
+    long associatedGroup;   // Group index
+    ASIOBool isCurrentSource;
+    char name[32];          // Clock source name
+};
+
+struct ASIOChannelInfo {
+    long channel;           // Channel index
+    ASIOBool isInput;       // True for input, false for output
+    ASIOBool isActive;      // True if channel is active
+    long channelGroup;      // Optional group index
+    long type;              // Sample type (ASIOSTxxxx)
+    char name[32];          // Channel name
+};
+
+struct ASIOBufferInfo {
+    ASIOBool isInput;       // True for input, false for output
+    long channelNum;        // Channel index
+    void* buffers[2];       // Double buffer pointers
+};
+
+struct ASIOTimeCode {
+    double speed;           // Speed relation (default = 1.0)
+    ASIOSamples timeCodeSamples;
+    unsigned long flags;    // Time code flags
+    char future[64];
+};
+
+struct AsioTimeInfo {
+    double speed;           // Speed relation
+    ASIOTimeStamp systemTime;
+    ASIOSamples samplePosition;
+    double sampleRate;
+    unsigned long flags;    // Time info flags
+    char reserved[12];
+};
+
+struct ASIOTime {
+    long reserved[4];
+    AsioTimeInfo timeInfo;
+    ASIOTimeCode timeCode;
+};
+
+// ASIOCallbacks - callback function pointers from host
 struct ASIOCallbacks {
     void (*bufferSwitch)(long doubleBufferIndex, ASIOBool directProcess);
     void (*sampleRateDidChange)(double sRate);

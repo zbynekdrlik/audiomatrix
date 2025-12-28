@@ -137,22 +137,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Clone ASIO SDK from GitHub (GPLv3 licensed)
-      - name: Clone ASIO SDK
-        run: |
-          git clone https://github.com/audiosdk/asio.git ${{ runner.temp }}/asio_sdk
-          Write-Host "ASIO SDK cloned to ${{ runner.temp }}/asio_sdk"
-
       # Setup MSVC
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
       # Configure and build with CMake
+      # Note: No SDK needed - we have all ASIO definitions in virtual_asio.h
       - name: Configure CMake
-        run: |
-          cmake -B build -S crates/ram-asio/cpp `
-            -DASIO_SDK_DIR="${{ runner.temp }}/asio_sdk" `
-            -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -S crates/ram-asio/cpp -DCMAKE_BUILD_TYPE=Release
 
       - name: Build Virtual ASIO driver
         run: cmake --build build --config Release
