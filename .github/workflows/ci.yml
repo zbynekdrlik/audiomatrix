@@ -130,6 +130,41 @@ jobs:
       - name: Run ASIO unit tests
         run: cargo test -p ram-asio --features asio
 
+  # Build Virtual ASIO C++ driver
+  build-virtual-asio:
+    name: Build Virtual ASIO Driver
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Clone ASIO SDK from GitHub (GPLv3 licensed)
+      - name: Clone ASIO SDK
+        run: |
+          git clone https://github.com/audiosdk/asio.git ${{ runner.temp }}/asio_sdk
+          Write-Host "ASIO SDK cloned to ${{ runner.temp }}/asio_sdk"
+
+      # Setup MSVC
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Configure and build with CMake
+      - name: Configure CMake
+        run: |
+          cmake -B build -S crates/ram-asio/cpp `
+            -DASIO_SDK_DIR="${{ runner.temp }}/asio_sdk" `
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Virtual ASIO driver
+        run: cmake --build build --config Release
+
+      # Upload driver artifact
+      - name: Upload Virtual ASIO driver
+        uses: actions/upload-artifact@v4
+        with:
+          name: audiomatrix-virtual-asio
+          path: build/Release/AudioMatrixASIO.dll
+          if-no-files-found: error
+
   # Coverage enforcement
   coverage:
     name: Code Coverage
