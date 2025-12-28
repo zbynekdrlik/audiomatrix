@@ -57,7 +57,9 @@ fn serve_file(path: &str) -> Option<Response<Body>> {
 /// Get cache control header based on file type.
 fn cache_control(path: &str) -> &'static str {
     // Hash-based filenames are immutable, cache forever
-    if path.contains("-") && (path.ends_with(".js") || path.ends_with(".wasm") || path.ends_with(".css")) {
+    if path.contains("-")
+        && (path.ends_with(".js") || path.ends_with(".wasm") || path.ends_with(".css"))
+    {
         "public, max-age=31536000, immutable"
     } else if path == "index.html" {
         // HTML should be revalidated

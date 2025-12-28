@@ -110,9 +110,8 @@ impl RouteManager {
         ));
         let routing_table = Arc::new(RoutingTable::new());
         let stream_registry = Arc::new(StreamRegistry::new());
-        let subscription_manager = Arc::new(SubscriptionManager::with_defaults(
-            config.node_name.clone(),
-        ));
+        let subscription_manager =
+            Arc::new(SubscriptionManager::with_defaults(config.node_name.clone()));
         let latency_calculator = LatencyCalculator::new(config.default_sample_rate);
 
         Self {
@@ -154,7 +153,11 @@ impl RouteManager {
             } else {
                 // Create destination if it doesn't exist
                 let parts: Vec<&str> = dest_id.split(':').collect();
-                let device_id = if parts.len() >= 2 { parts[1] } else { "unknown" };
+                let device_id = if parts.len() >= 2 {
+                    parts[1]
+                } else {
+                    "unknown"
+                };
                 let channel: usize = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
 
                 let mut dest = DestinationSnapshot::new(
@@ -199,7 +202,11 @@ impl RouteManager {
     }
 
     /// Sets the gain for a connection.
-    pub(crate) fn set_connection_gain_internal(&self, conn_id: &ConnectionId, gain: f32) -> Result<()> {
+    pub(crate) fn set_connection_gain_internal(
+        &self,
+        conn_id: &ConnectionId,
+        gain: f32,
+    ) -> Result<()> {
         let buffer_idx = self
             .connection_buffers
             .read()
@@ -221,7 +228,11 @@ impl RouteManager {
     }
 
     /// Sets the mute state for a connection.
-    pub(crate) fn set_connection_muted_internal(&self, conn_id: &ConnectionId, muted: bool) -> Result<()> {
+    pub(crate) fn set_connection_muted_internal(
+        &self,
+        conn_id: &ConnectionId,
+        muted: bool,
+    ) -> Result<()> {
         let buffer_idx = self
             .connection_buffers
             .read()
@@ -252,7 +263,8 @@ impl RouteManager {
         // Check if this is a cross-node route
         let local = &self.config.node_name;
         let source_is_local = conn_id.source_node == "LOCAL" || conn_id.source_node == *local;
-        let dest_is_local = conn_id.destination_node == "LOCAL" || conn_id.destination_node == *local;
+        let dest_is_local =
+            conn_id.destination_node == "LOCAL" || conn_id.destination_node == *local;
         let is_cross_node = !source_is_local || !dest_is_local;
 
         if is_cross_node {
@@ -269,7 +281,8 @@ impl RouteManager {
             )
         } else {
             // Local route
-            self.latency_calculator.local_latency(input_buffer, ring_buffer, output_buffer)
+            self.latency_calculator
+                .local_latency(input_buffer, ring_buffer, output_buffer)
         }
     }
 }
@@ -302,23 +315,25 @@ impl RouteController for RouteManager {
     }
 
     fn set_route_gain(&self, conn_id: &ConnectionId, gain: f32) -> RouteResult<()> {
-        self.set_connection_gain_internal(conn_id, gain).map_err(|e| {
-            if e.to_string().contains("not found") {
-                RouteError::NotFound(conn_id.to_string())
-            } else {
-                RouteError::Internal(e.to_string())
-            }
-        })
+        self.set_connection_gain_internal(conn_id, gain)
+            .map_err(|e| {
+                if e.to_string().contains("not found") {
+                    RouteError::NotFound(conn_id.to_string())
+                } else {
+                    RouteError::Internal(e.to_string())
+                }
+            })
     }
 
     fn set_route_muted(&self, conn_id: &ConnectionId, muted: bool) -> RouteResult<()> {
-        self.set_connection_muted_internal(conn_id, muted).map_err(|e| {
-            if e.to_string().contains("not found") {
-                RouteError::NotFound(conn_id.to_string())
-            } else {
-                RouteError::Internal(e.to_string())
-            }
-        })
+        self.set_connection_muted_internal(conn_id, muted)
+            .map_err(|e| {
+                if e.to_string().contains("not found") {
+                    RouteError::NotFound(conn_id.to_string())
+                } else {
+                    RouteError::Internal(e.to_string())
+                }
+            })
     }
 
     fn has_route(&self, conn_id: &ConnectionId) -> bool {
@@ -360,10 +375,7 @@ mod tests {
         let config = RouteManagerConfig::default();
         let manager = RouteManager::new(config);
 
-        let conn_id = ConnectionId::new(
-            "LOCAL", "input-device", 1,
-            "LOCAL", "output-device", 1,
-        );
+        let conn_id = ConnectionId::new("LOCAL", "input-device", 1, "LOCAL", "output-device", 1);
 
         // Add route
         let buffer_idx = manager.add_route_internal(conn_id.clone());
@@ -384,10 +396,7 @@ mod tests {
         let config = RouteManagerConfig::default();
         let manager = RouteManager::new(config);
 
-        let conn_id = ConnectionId::new(
-            "LOCAL", "in", 1,
-            "LOCAL", "out", 1,
-        );
+        let conn_id = ConnectionId::new("LOCAL", "in", 1, "LOCAL", "out", 1);
 
         // Test RouteController trait methods
         assert!(manager.add_route(conn_id.clone()).is_ok());
@@ -403,10 +412,7 @@ mod tests {
         let config = RouteManagerConfig::default();
         let manager = RouteManager::new(config);
 
-        let conn_id = ConnectionId::new(
-            "LOCAL", "in", 1,
-            "LOCAL", "out", 1,
-        );
+        let conn_id = ConnectionId::new("LOCAL", "in", 1, "LOCAL", "out", 1);
 
         let report = manager.calculate_latency(&conn_id);
         assert!(report.is_local());
@@ -419,10 +425,7 @@ mod tests {
         let config = RouteManagerConfig::default();
         let manager = RouteManager::new(config);
 
-        let conn_id = ConnectionId::new(
-            "remote-node", "in", 1,
-            "LOCAL", "out", 1,
-        );
+        let conn_id = ConnectionId::new("remote-node", "in", 1, "LOCAL", "out", 1);
 
         let report = manager.calculate_latency(&conn_id);
         assert!(!report.is_local());

@@ -126,7 +126,8 @@ impl ChannelMeter {
         // Accumulate RMS
         let current_sum = self.rms_sum.get();
         self.rms_sum.set(current_sum + sum_squared);
-        self.sample_count.fetch_add(samples.len() as u64, Ordering::Relaxed);
+        self.sample_count
+            .fetch_add(samples.len() as u64, Ordering::Relaxed);
     }
 
     /// Returns current meter levels.
@@ -247,7 +248,9 @@ impl MeterBank {
 
             let current_sum = meter.rms_sum.get();
             meter.rms_sum.set(current_sum + sum_squared);
-            meter.sample_count.fetch_add(samples_per_channel as u64, Ordering::Relaxed);
+            meter
+                .sample_count
+                .fetch_add(samples_per_channel as u64, Ordering::Relaxed);
         }
     }
 

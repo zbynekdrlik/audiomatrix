@@ -249,12 +249,16 @@ pub struct StreamCountResponse {
 /// # Errors
 ///
 /// Returns an error if subscription listing fails.
-pub async fn list_subscriptions(State(state): State<AppState>) -> Result<Json<Vec<SubscriptionInfo>>> {
+pub async fn list_subscriptions(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<SubscriptionInfo>>> {
     Ok(Json(state.all_subscriptions()))
 }
 
 /// Get subscription statistics.
-pub async fn get_subscription_stats(State(state): State<AppState>) -> Json<SubscriptionStatsResponse> {
+pub async fn get_subscription_stats(
+    State(state): State<AppState>,
+) -> Json<SubscriptionStatsResponse> {
     Json(state.subscription_stats())
 }
 

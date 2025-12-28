@@ -33,26 +33,26 @@ pub mod stream_registry;
 pub mod subscription;
 pub mod subscription_manager;
 
+pub use active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig, StreamState};
 pub use atomic::AtomicF32;
 pub use connection::{ConnectionId, ConnectionManager, ConnectionState, SourceConnection};
 pub use destination::{DestinationChannel, HeadroomMode};
 pub use device::{DeviceDirection, DeviceEvent, DeviceInfo, DeviceManager, DeviceState};
 pub use engine::{AudioEngine, EngineConfig};
+pub use latency::{CallbackTimer, LatencyCalculator, LatencyReport, TimingStats};
+pub use metering::{ChannelMeter, MeterBank, MeterLevels};
 pub use persistence::{ConfigStore, PersistedConfig, PersistedRoute};
 pub use resampler::{Resampler, ResamplerQuality};
-pub use active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig, StreamState};
 pub use ring_buffer_pool::RingBufferPool;
+pub use route_controller::{RouteController, RouteError, RouteResult};
 pub use routing_snapshot::{DestinationSnapshot, RoutingSnapshot, SourceSlot};
 pub use routing_table::RoutingTable;
 pub use stream_registry::StreamRegistry;
 pub use subscription::{
-    Subscription, SubscriptionConfig, SubscriptionId, SubscriptionMessage, SubscriptionState,
-    SubscribeRequest, SubscribeAck, SubscribeResult, UnsubscribeRequest, UnsubscribeAck,
+    SubscribeAck, SubscribeRequest, SubscribeResult, Subscription, SubscriptionConfig,
+    SubscriptionId, SubscriptionMessage, SubscriptionState, UnsubscribeAck, UnsubscribeRequest,
 };
 pub use subscription_manager::{SubscriptionManager, SubscriptionStats};
-pub use latency::{CallbackTimer, LatencyCalculator, LatencyReport, TimingStats};
-pub use metering::{ChannelMeter, MeterBank, MeterLevels};
-pub use route_controller::{RouteController, RouteError, RouteResult};
 
 pub use error::{Error, Result};
 

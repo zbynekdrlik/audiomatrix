@@ -338,7 +338,10 @@ impl AudioMatrixService {
 
         let input_count = self.audio_processor.active_input_stream_count();
         let output_count = self.audio_processor.active_output_stream_count();
-        info!("Audio streams active: {} input, {} output", input_count, output_count);
+        info!(
+            "Audio streams active: {} input, {} output",
+            input_count, output_count
+        );
     }
 
     /// Runs the service until shutdown.

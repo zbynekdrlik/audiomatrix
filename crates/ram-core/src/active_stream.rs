@@ -409,13 +409,8 @@ mod tests {
             "device",
         ));
 
-        let stream = ActiveInputStream::new(
-            "stream",
-            "device",
-            StreamConfig::default(),
-            vec![],
-            context,
-        );
+        let stream =
+            ActiveInputStream::new("stream", "device", StreamConfig::default(), vec![], context);
 
         assert!(!stream.is_running());
         stream.set_running(true);
@@ -454,20 +449,10 @@ mod tests {
     fn active_output_stream_running_state() {
         let pool = Arc::new(RingBufferPool::new(8, 256));
         let routing = Arc::new(RoutingTable::new());
-        let context = Arc::new(OutputCallbackContext::new(
-            routing,
-            pool,
-            vec![],
-            "device",
-        ));
+        let context = Arc::new(OutputCallbackContext::new(routing, pool, vec![], "device"));
 
-        let stream = ActiveOutputStream::new(
-            "stream",
-            "device",
-            StreamConfig::default(),
-            vec![],
-            context,
-        );
+        let stream =
+            ActiveOutputStream::new("stream", "device", StreamConfig::default(), vec![], context);
 
         assert!(!stream.is_running());
         stream.set_running(true);

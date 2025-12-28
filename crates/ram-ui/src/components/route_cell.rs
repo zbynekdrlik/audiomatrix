@@ -72,7 +72,9 @@ pub fn RouteCell(
                 wasm_bindgen_futures::spawn_local(async move {
                     if let Err(e) = api::delete_route(&route_id).await {
                         log::error!("Failed to delete route: {}", e);
-                        app_state.error.set(Some(format!("Failed to delete route: {}", e)));
+                        app_state
+                            .error
+                            .set(Some(format!("Failed to delete route: {}", e)));
                     } else {
                         app_state.remove_route(&route_id);
                     }
@@ -93,11 +95,13 @@ pub fn RouteCell(
                     match api::create_route(&route).await {
                         Ok(_) => {
                             app_state.upsert_route(route);
-                        }
+                        },
                         Err(e) => {
                             log::error!("Failed to create route: {}", e);
-                            app_state.error.set(Some(format!("Failed to create route: {}", e)));
-                        }
+                            app_state
+                                .error
+                                .set(Some(format!("Failed to create route: {}", e)));
+                        },
                     }
                 });
             }

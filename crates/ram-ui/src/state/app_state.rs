@@ -167,7 +167,13 @@ impl AppState {
 
     /// Checks if a route exists between source and destination channels.
     #[must_use]
-    pub fn has_route(&self, source_device: &str, source_ch: u16, dest_device: &str, dest_ch: u16) -> bool {
+    pub fn has_route(
+        &self,
+        source_device: &str,
+        source_ch: u16,
+        dest_device: &str,
+        dest_ch: u16,
+    ) -> bool {
         self.routes.get().iter().any(|r| {
             r.source_device == source_device
                 && r.source_channel == source_ch

@@ -14,8 +14,8 @@ use parking_lot::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::subscription::{
-    Subscription, SubscriptionConfig, SubscriptionId, SubscriptionState,
-    SubscribeRequest, SubscribeAck, SubscribeResult,
+    SubscribeAck, SubscribeRequest, SubscribeResult, Subscription, SubscriptionConfig,
+    SubscriptionId, SubscriptionState,
 };
 
 /// Manages subscriptions for a node.
@@ -356,10 +356,19 @@ impl SubscriptionManager {
 
         SubscriptionStats {
             outgoing_total: outgoing.len(),
-            outgoing_active: outgoing.values().filter(|s| s.state == SubscriptionState::Active).count(),
-            outgoing_pending: outgoing.values().filter(|s| s.state == SubscriptionState::Pending).count(),
+            outgoing_active: outgoing
+                .values()
+                .filter(|s| s.state == SubscriptionState::Active)
+                .count(),
+            outgoing_pending: outgoing
+                .values()
+                .filter(|s| s.state == SubscriptionState::Pending)
+                .count(),
             incoming_total: incoming.len(),
-            incoming_active: incoming.values().filter(|s| s.state == SubscriptionState::Active).count(),
+            incoming_active: incoming
+                .values()
+                .filter(|s| s.state == SubscriptionState::Active)
+                .count(),
         }
     }
 }

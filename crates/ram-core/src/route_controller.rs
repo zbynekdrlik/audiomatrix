@@ -96,7 +96,9 @@ mod tests {
             Self {
                 node: "test-node".to_string(),
                 registry: Arc::new(StreamRegistry::new()),
-                subscriptions: Arc::new(SubscriptionManager::with_defaults("test-node".to_string())),
+                subscriptions: Arc::new(SubscriptionManager::with_defaults(
+                    "test-node".to_string(),
+                )),
             }
         }
     }

@@ -326,11 +326,7 @@ mod tests {
 
     #[test]
     fn destination_add_remove_sources() {
-        let mut dest = DestinationSnapshot::new(
-            "test:1".to_string(),
-            "test".to_string(),
-            0,
-        );
+        let mut dest = DestinationSnapshot::new("test:1".to_string(), "test".to_string(), 0);
 
         assert_eq!(dest.active_count, 0);
 
@@ -353,11 +349,7 @@ mod tests {
 
     #[test]
     fn destination_max_sources() {
-        let mut dest = DestinationSnapshot::new(
-            "test:1".to_string(),
-            "test".to_string(),
-            0,
-        );
+        let mut dest = DestinationSnapshot::new("test:1".to_string(), "test".to_string(), 0);
 
         for i in 0..MAX_SOURCES_PER_DEST {
             assert!(dest.add_source(i), "Failed to add source {i}");
@@ -371,28 +363,17 @@ mod tests {
     fn routing_snapshot_upsert() {
         let mut snapshot = RoutingSnapshot::new();
 
-        let dest1 = DestinationSnapshot::new(
-            "dest:1".to_string(),
-            "device".to_string(),
-            0,
-        );
+        let dest1 = DestinationSnapshot::new("dest:1".to_string(), "device".to_string(), 0);
         snapshot.upsert_destination(dest1);
         assert_eq!(snapshot.destinations.len(), 1);
 
-        let dest2 = DestinationSnapshot::new(
-            "dest:2".to_string(),
-            "device".to_string(),
-            1,
-        );
+        let dest2 = DestinationSnapshot::new("dest:2".to_string(), "device".to_string(), 1);
         snapshot.upsert_destination(dest2);
         assert_eq!(snapshot.destinations.len(), 2);
 
         // Update existing
-        let mut dest1_updated = DestinationSnapshot::new(
-            "dest:1".to_string(),
-            "device".to_string(),
-            0,
-        );
+        let mut dest1_updated =
+            DestinationSnapshot::new("dest:1".to_string(), "device".to_string(), 0);
         dest1_updated.add_source(42);
         snapshot.upsert_destination(dest1_updated);
         assert_eq!(snapshot.destinations.len(), 2);

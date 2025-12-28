@@ -279,7 +279,7 @@ mod tests {
                 assert_eq!(req.request_id, 1);
                 assert_eq!(req.stream_name, "mic-1");
                 assert_eq!(req.source_channels, vec![1, 2]);
-            }
+            },
             _ => panic!("Wrong message type"),
         }
     }
@@ -303,7 +303,7 @@ mod tests {
             SubscriptionMessage::SubscribeAck(a) => {
                 assert_eq!(a.subscription_id, 42);
                 assert!(a.result.is_success());
-            }
+            },
             _ => panic!("Wrong message type"),
         }
     }

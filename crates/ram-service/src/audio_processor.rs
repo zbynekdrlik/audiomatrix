@@ -203,13 +203,17 @@ impl AudioProcessor {
     pub fn is_cross_node(&self, conn_id: &ConnectionId) -> bool {
         let local = &self.route_manager.config.node_name;
         let source_is_local = conn_id.source_node == "LOCAL" || conn_id.source_node == *local;
-        let dest_is_local = conn_id.destination_node == "LOCAL" || conn_id.destination_node == *local;
+        let dest_is_local =
+            conn_id.destination_node == "LOCAL" || conn_id.destination_node == *local;
         !source_is_local || !dest_is_local
     }
 
     /// Calculates expected latency for a route.
     #[must_use]
-    pub fn calculate_route_latency(&self, conn_id: &ConnectionId) -> ram_core::latency::LatencyReport {
+    pub fn calculate_route_latency(
+        &self,
+        conn_id: &ConnectionId,
+    ) -> ram_core::latency::LatencyReport {
         self.route_manager.calculate_route_latency_internal(conn_id)
     }
 
@@ -221,13 +225,15 @@ impl AudioProcessor {
 
     /// Starts the audio processor.
     pub fn start(&self) {
-        self.running.store(true, std::sync::atomic::Ordering::Release);
+        self.running
+            .store(true, std::sync::atomic::Ordering::Release);
         info!("AudioProcessor started");
     }
 
     /// Stops the audio processor and all streams.
     pub fn stop(&self) {
-        self.running.store(false, std::sync::atomic::Ordering::Release);
+        self.running
+            .store(false, std::sync::atomic::Ordering::Release);
 
         // Stop all cpal streams
         {
@@ -250,7 +256,9 @@ impl AudioProcessor {
         self.route_manager.buffer_pool.free_all();
 
         // Clear routing
-        self.route_manager.routing_table.update(RoutingSnapshot::new());
+        self.route_manager
+            .routing_table
+            .update(RoutingSnapshot::new());
 
         info!("AudioProcessor stopped");
     }
@@ -273,12 +281,14 @@ impl AudioProcessor {
 
     /// Sets the gain for a connection.
     pub fn set_connection_gain(&self, conn_id: &ConnectionId, gain: f32) -> Result<()> {
-        self.route_manager.set_connection_gain_internal(conn_id, gain)
+        self.route_manager
+            .set_connection_gain_internal(conn_id, gain)
     }
 
     /// Sets the mute state for a connection.
     pub fn set_connection_muted(&self, conn_id: &ConnectionId, muted: bool) -> Result<()> {
-        self.route_manager.set_connection_muted_internal(conn_id, muted)
+        self.route_manager
+            .set_connection_muted_internal(conn_id, muted)
     }
 
     /// Gets statistics about the audio processor.
@@ -293,7 +303,12 @@ impl AudioProcessor {
             active_output_streams: self.stream_registry().output_count(),
             allocated_buffers: self.route_manager.buffer_pool.allocated_count(),
             free_buffers: self.route_manager.buffer_pool.free_count(),
-            active_connections: self.route_manager.connection_buffers.read().connections.len(),
+            active_connections: self
+                .route_manager
+                .connection_buffers
+                .read()
+                .connections
+                .len(),
             routing_generation: self.route_manager.routing_table.generation(),
             total_input_callbacks: input_stats.total_callbacks,
             total_output_callbacks: output_stats.total_callbacks,
@@ -324,7 +339,7 @@ impl AudioProcessor {
                     return Err(anyhow!(
                         "Failed to allocate buffer for channel {ch} on device {device_id}: pool exhausted"
                     ));
-                }
+                },
             }
         }
 
@@ -406,7 +421,9 @@ impl AudioProcessor {
     /// Starts an input stream for the specified device.
     pub fn start_input_stream(&self, device_id: &str) -> Result<()> {
         if self.input_streams.read().contains_key(device_id) {
-            return Err(anyhow!("Input stream already exists for device: {device_id}"));
+            return Err(anyhow!(
+                "Input stream already exists for device: {device_id}"
+            ));
         }
 
         let (device, config) = Self::find_cpal_device(device_id, DeviceDirection::Input)?;
@@ -421,7 +438,9 @@ impl AudioProcessor {
         );
 
         let stream = Self::build_input_stream(&device, &config, context)?;
-        stream.play().map_err(|e| anyhow!("Failed to start input stream: {e}"))?;
+        stream
+            .play()
+            .map_err(|e| anyhow!("Failed to start input stream: {e}"))?;
 
         self.input_streams.write().insert(
             device_id.to_string(),
@@ -440,7 +459,9 @@ impl AudioProcessor {
     /// Starts an output stream for the specified device.
     pub fn start_output_stream(&self, device_id: &str) -> Result<()> {
         if self.output_streams.read().contains_key(device_id) {
-            return Err(anyhow!("Output stream already exists for device: {device_id}"));
+            return Err(anyhow!(
+                "Output stream already exists for device: {device_id}"
+            ));
         }
 
         let (device, config) = Self::find_cpal_device(device_id, DeviceDirection::Output)?;
@@ -455,7 +476,9 @@ impl AudioProcessor {
         );
 
         let stream = Self::build_output_stream(&device, &config, context)?;
-        stream.play().map_err(|e| anyhow!("Failed to start output stream: {e}"))?;
+        stream
+            .play()
+            .map_err(|e| anyhow!("Failed to start output stream: {e}"))?;
 
         self.output_streams.write().insert(
             device_id.to_string(),
@@ -530,18 +553,16 @@ impl AudioProcessor {
             .map_err(|e| anyhow!("Failed to get host {host_name}: {e}"))?;
 
         let device = match direction {
-            DeviceDirection::Input => {
-                host.input_devices()
-                    .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
-                    .find(|d| d.name().ok().as_deref() == Some(device_name))
-                    .ok_or_else(|| anyhow!("Input device not found: {device_name}"))?
-            }
-            DeviceDirection::Output => {
-                host.output_devices()
-                    .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
-                    .find(|d| d.name().ok().as_deref() == Some(device_name))
-                    .ok_or_else(|| anyhow!("Output device not found: {device_name}"))?
-            }
+            DeviceDirection::Input => host
+                .input_devices()
+                .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
+                .find(|d| d.name().ok().as_deref() == Some(device_name))
+                .ok_or_else(|| anyhow!("Input device not found: {device_name}"))?,
+            DeviceDirection::Output => host
+                .output_devices()
+                .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
+                .find(|d| d.name().ok().as_deref() == Some(device_name))
+                .ok_or_else(|| anyhow!("Output device not found: {device_name}"))?,
         };
 
         let config = match direction {

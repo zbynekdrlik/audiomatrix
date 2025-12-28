@@ -37,30 +37,33 @@ pub fn App() -> impl IntoView {
                     match api::get_devices(&node_id).await {
                         Ok(devices) => {
                             state.devices.set(devices);
-                        }
+                        },
                         Err(e) => {
                             log::error!("Failed to fetch devices: {}", e);
-                            state.error.set(Some(format!("Failed to load devices: {}", e)));
-                        }
+                            state
+                                .error
+                                .set(Some(format!("Failed to load devices: {}", e)));
+                        },
                     }
                 }
                 state.connected.set(true);
-            }
+            },
             Err(e) => {
                 log::error!("Failed to fetch nodes: {}", e);
                 state.error.set(Some(format!("Failed to connect: {}", e)));
-            }
+            },
         }
 
         // Fetch routes
         match api::get_routes().await {
             Ok(routes) => {
-                let routes_with_id: Vec<RouteWithId> = routes.into_iter().map(RouteWithId::from).collect();
+                let routes_with_id: Vec<RouteWithId> =
+                    routes.into_iter().map(RouteWithId::from).collect();
                 state.routes.set(routes_with_id);
-            }
+            },
             Err(e) => {
                 log::error!("Failed to fetch routes: {}", e);
-            }
+            },
         }
 
         state.loading.set(false);

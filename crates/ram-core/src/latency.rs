@@ -61,7 +61,12 @@ impl LatencyCalculator {
     /// - Ring buffer (worst case: full buffer)
     /// - Output device buffer
     #[must_use]
-    pub fn local_latency(&self, input_buffer: u32, ring_buffer: u32, output_buffer: u32) -> LatencyReport {
+    pub fn local_latency(
+        &self,
+        input_buffer: u32,
+        ring_buffer: u32,
+        output_buffer: u32,
+    ) -> LatencyReport {
         let input_ms = self.buffer_latency_ms(input_buffer);
         let ring_ms = self.buffer_latency_ms(ring_buffer);
         let output_ms = self.buffer_latency_ms(output_buffer);
@@ -218,12 +223,9 @@ impl CallbackTimer {
         let now_ns = Self::now_ns();
 
         // Set first callback time if not set
-        self.first_callback_ns.compare_exchange(
-            0,
-            now_ns,
-            Ordering::SeqCst,
-            Ordering::Relaxed,
-        ).ok();
+        self.first_callback_ns
+            .compare_exchange(0, now_ns, Ordering::SeqCst, Ordering::Relaxed)
+            .ok();
 
         // Calculate interval from last callback
         let last = self.last_callback_ns.swap(now_ns, Ordering::SeqCst);
@@ -237,12 +239,16 @@ impl CallbackTimer {
                 if interval >= current_min {
                     break;
                 }
-                if self.min_interval_ns.compare_exchange_weak(
-                    current_min,
-                    interval,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                ).is_ok() {
+                if self
+                    .min_interval_ns
+                    .compare_exchange_weak(
+                        current_min,
+                        interval,
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    )
+                    .is_ok()
+                {
                     break;
                 }
             }
@@ -253,12 +259,16 @@ impl CallbackTimer {
                 if interval <= current_max {
                     break;
                 }
-                if self.max_interval_ns.compare_exchange_weak(
-                    current_max,
-                    interval,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                ).is_ok() {
+                if self
+                    .max_interval_ns
+                    .compare_exchange_weak(
+                        current_max,
+                        interval,
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    )
+                    .is_ok()
+                {
                     break;
                 }
             }
@@ -291,7 +301,11 @@ impl CallbackTimer {
             callback_count: count,
             expected_interval_us: (self.expected_interval_ns / 1000) as u32,
             avg_interval_us: (avg_ns / 1000) as u32,
-            min_interval_us: if min_ns < u64::MAX { (min_ns / 1000) as u32 } else { 0 },
+            min_interval_us: if min_ns < u64::MAX {
+                (min_ns / 1000) as u32
+            } else {
+                0
+            },
             max_interval_us: (max_ns / 1000) as u32,
             jitter_us: (jitter_ns / 1000) as u32,
         }

@@ -253,12 +253,7 @@ mod tests {
     fn create_test_output_stream(device_id: &str) -> Arc<ActiveOutputStream> {
         let pool = Arc::new(RingBufferPool::new(8, 256));
         let routing = Arc::new(RoutingTable::new());
-        let context = Arc::new(OutputCallbackContext::new(
-            routing,
-            pool,
-            vec![],
-            device_id,
-        ));
+        let context = Arc::new(OutputCallbackContext::new(routing, pool, vec![], device_id));
         Arc::new(ActiveOutputStream::new(
             format!("output-{device_id}"),
             device_id,

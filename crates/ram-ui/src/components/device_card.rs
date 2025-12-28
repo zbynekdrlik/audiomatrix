@@ -38,7 +38,11 @@ pub fn DeviceCard(
         })
     };
 
-    let device_type_class = if is_input { "device-input" } else { "device-output" };
+    let device_type_class = if is_input {
+        "device-input"
+    } else {
+        "device-output"
+    };
 
     view! {
         <div class=format!("device-card {}", device_type_class)>

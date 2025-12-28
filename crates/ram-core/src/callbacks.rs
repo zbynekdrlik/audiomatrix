@@ -329,14 +329,13 @@ pub fn create_output_callback(
                 );
 
                 // Apply headroom mode
-                apply_headroom(
-                    dest,
-                    &mut mix_buffer[..samples_to_process],
-                );
+                apply_headroom(dest, &mut mix_buffer[..samples_to_process]);
             }
 
             // Update meter for this channel (after mixing, before final output)
-            context.meters.update_channel(ch_out, &mix_buffer[..samples_to_process]);
+            context
+                .meters
+                .update_channel(ch_out, &mix_buffer[..samples_to_process]);
 
             // Interleave this channel into output
             for (i, &sample) in mix_buffer.iter().take(samples_to_process).enumerate() {
@@ -391,14 +390,14 @@ fn apply_headroom(dest: &DestinationSnapshot, samples: &mut [Sample]) {
     match mode {
         HeadroomMode::Clip => {
             apply_clip(samples);
-        }
+        },
         HeadroomMode::AutoGain => {
             apply_auto_gain(samples);
-        }
+        },
         HeadroomMode::Limiter => {
             // Simple soft-knee limiter
             apply_soft_limiter(samples);
-        }
+        },
         HeadroomMode::Manual => {
             // Apply fixed attenuation
             let gain = db_to_linear(manual_headroom_db);
@@ -406,7 +405,7 @@ fn apply_headroom(dest: &DestinationSnapshot, samples: &mut [Sample]) {
                 *sample *= gain;
             }
             apply_clip(samples);
-        }
+        },
     }
 }
 
@@ -479,12 +478,7 @@ mod tests {
     fn output_context_creation() {
         let pool = Arc::new(RingBufferPool::new(16, 256));
         let routing = Arc::new(RoutingTable::new());
-        let context = OutputCallbackContext::new(
-            routing,
-            pool,
-            vec![0, 1],
-            "test-device",
-        );
+        let context = OutputCallbackContext::new(routing, pool, vec![0, 1], "test-device");
 
         assert_eq!(context.device_id(), "test-device");
         assert_eq!(context.dest_indices(), &[0, 1]);
@@ -612,11 +606,7 @@ mod tests {
         source_buffer.write(&source_samples);
 
         // Create a routing snapshot with one destination and one source
-        let mut dest = DestinationSnapshot::new(
-            "dest:0".to_string(),
-            "device".to_string(),
-            0,
-        );
+        let mut dest = DestinationSnapshot::new("dest:0".to_string(), "device".to_string(), 0);
         dest.add_source(source_idx);
 
         let mut snapshot = RoutingSnapshot::new();
@@ -651,11 +641,7 @@ mod tests {
         source_buffer.write(&[1.0f32; 4]);
 
         // Create routing with gain = 0.5
-        let mut dest = DestinationSnapshot::new(
-            "dest:0".to_string(),
-            "device".to_string(),
-            0,
-        );
+        let mut dest = DestinationSnapshot::new("dest:0".to_string(), "device".to_string(), 0);
         dest.add_source(source_idx);
         // Set gain to 0.5
         if let Some(slot) = dest.find_source(source_idx) {
@@ -694,11 +680,7 @@ mod tests {
         source_buffer.write(&[1.0f32; 4]);
 
         // Create routing with muted source
-        let mut dest = DestinationSnapshot::new(
-            "dest:0".to_string(),
-            "device".to_string(),
-            0,
-        );
+        let mut dest = DestinationSnapshot::new("dest:0".to_string(), "device".to_string(), 0);
         dest.add_source(source_idx);
         if let Some(slot) = dest.find_source(source_idx) {
             slot.muted.store(true, Ordering::Relaxed);

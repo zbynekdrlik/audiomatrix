@@ -220,9 +220,7 @@ impl RingBufferPool {
     #[must_use]
     pub fn allocated_indices(&self) -> Vec<usize> {
         let free = self.free_indices.lock();
-        (0..self.pool_size)
-            .filter(|i| !free.contains(i))
-            .collect()
+        (0..self.pool_size).filter(|i| !free.contains(i)).collect()
     }
 
     /// Frees all allocated buffers.

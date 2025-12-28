@@ -229,12 +229,18 @@ impl AppState {
 
             // Check if route already exists in controller
             if !controller.has_route(&conn_id) {
-                controller.add_route(conn_id.clone()).map_err(|e| e.to_string())?;
+                controller
+                    .add_route(conn_id.clone())
+                    .map_err(|e| e.to_string())?;
             }
 
             // Apply gain and mute settings
-            controller.set_route_gain(&conn_id, route.volume).map_err(|e| e.to_string())?;
-            controller.set_route_muted(&conn_id, route.muted).map_err(|e| e.to_string())?;
+            controller
+                .set_route_gain(&conn_id, route.volume)
+                .map_err(|e| e.to_string())?;
+            controller
+                .set_route_muted(&conn_id, route.muted)
+                .map_err(|e| e.to_string())?;
         }
 
         // Store in local state
@@ -275,7 +281,9 @@ impl AppState {
     /// Returns an error if the route doesn't exist or the controller rejects the update.
     pub fn set_route_volume(&self, id: &str, volume: f32) -> Result<(), String> {
         let mut routes = self.inner.routes.write();
-        let route = routes.get_mut(id).ok_or_else(|| format!("Route not found: {id}"))?;
+        let route = routes
+            .get_mut(id)
+            .ok_or_else(|| format!("Route not found: {id}"))?;
 
         // Update in audio processor if available
         if let Some(controller) = &self.inner.route_controller {
@@ -287,7 +295,9 @@ impl AppState {
                 &route.destination_device,
                 route.destination_channel,
             );
-            controller.set_route_gain(&conn_id, volume).map_err(|e| e.to_string())?;
+            controller
+                .set_route_gain(&conn_id, volume)
+                .map_err(|e| e.to_string())?;
         }
 
         route.volume = volume;
@@ -301,7 +311,9 @@ impl AppState {
     /// Returns an error if the route doesn't exist or the controller rejects the update.
     pub fn set_route_muted(&self, id: &str, muted: bool) -> Result<(), String> {
         let mut routes = self.inner.routes.write();
-        let route = routes.get_mut(id).ok_or_else(|| format!("Route not found: {id}"))?;
+        let route = routes
+            .get_mut(id)
+            .ok_or_else(|| format!("Route not found: {id}"))?;
 
         // Update in audio processor if available
         if let Some(controller) = &self.inner.route_controller {
@@ -313,7 +325,9 @@ impl AppState {
                 &route.destination_device,
                 route.destination_channel,
             );
-            controller.set_route_muted(&conn_id, muted).map_err(|e| e.to_string())?;
+            controller
+                .set_route_muted(&conn_id, muted)
+                .map_err(|e| e.to_string())?;
         }
 
         route.muted = muted;
@@ -382,7 +396,7 @@ impl AppState {
             Some(controller) => {
                 let registry = controller.stream_registry();
                 (registry.input_count(), registry.output_count())
-            }
+            },
             None => (0, 0),
         }
     }
@@ -459,7 +473,7 @@ impl AppState {
                     incoming_total: stats.incoming_total,
                     incoming_active: stats.incoming_active,
                 }
-            }
+            },
             None => SubscriptionStatsResponse {
                 outgoing_total: 0,
                 outgoing_active: 0,
