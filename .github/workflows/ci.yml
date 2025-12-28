@@ -172,6 +172,7 @@ jobs:
             build/Release/asio_test.exe
             build/Release/asio_com_test.exe
             build/Release/asio_cocreate_test.exe
+            build/Release/asio_vtable_test.exe
           if-no-files-found: error
 
   # Coverage enforcement

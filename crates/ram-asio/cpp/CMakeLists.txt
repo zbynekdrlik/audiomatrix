@@ -176,6 +176,37 @@ add_test(NAME asio_com_loading_test
 # add_test(NAME asio_cocreate_test COMMAND asio_cocreate_test)
 
 # =============================================================================
+# Vtable Validation Test
+# =============================================================================
+add_executable(asio_vtable_test
+    asio_vtable_test.cpp
+)
+
+target_link_libraries(asio_vtable_test PRIVATE
+    ole32
+    uuid
+)
+
+target_compile_definitions(asio_vtable_test PRIVATE
+    UNICODE
+    _UNICODE
+    NOMINMAX
+)
+
+if(MSVC)
+    target_compile_options(asio_vtable_test PRIVATE
+        /W4
+        /WX
+        /MP
+    )
+endif()
+
+# Vtable test validates the driver's vtable layout
+add_test(NAME asio_vtable_test
+    COMMAND asio_vtable_test "$<TARGET_FILE:AudioMatrixASIO>"
+)
+
+# =============================================================================
 # Install targets
 # =============================================================================
 install(TARGETS AudioMatrixASIO
