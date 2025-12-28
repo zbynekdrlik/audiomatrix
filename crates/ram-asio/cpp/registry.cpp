@@ -144,7 +144,7 @@ STDAPI DllUnregisterServer() {
 /**
  * COM DLL entry point for class factory.
  */
-HRESULT DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
+STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
     if (!ppv) {
         return E_POINTER;
     }
@@ -169,7 +169,7 @@ HRESULT DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
 /**
  * Check if DLL can be unloaded.
  */
-HRESULT DllCanUnloadNow() {
+STDAPI DllCanUnloadNow() {
     // Could check reference count here
     return S_FALSE; // Don't unload while running
 }
