@@ -1018,31 +1018,61 @@ The file `TARGETS.md` (gitignored, local only) contains target machines for test
 - SSH/remote access credentials (user/password)
 - Current deployment status
 
-**Usage:**
-1. Read `TARGETS.md` to identify available test machines
-2. Use credentials from the file for SSH access
-3. Choose appropriate target based on OS requirements:
-   - **Windows targets**: For ASIO testing, Dante device testing
-   - **Linux targets**: For general testing, development
+### CRITICAL: Build via GitHub Actions, NOT on Target Machines
 
-**Key Targets:**
-- `iem` (10.77.9.231) - Windows, production IEM PC with Dante - **DO NOT install software, test binaries only**
-- `develbox` (10.77.9.21) - Linux development machine
-- Other Windows machines available for testing
+**ALL building MUST happen via GitHub Actions CI/CD:**
+- Windows binaries: Built by `windows-latest` runner in GitHub Actions
+- C++ components (Virtual ASIO driver): Built by GitHub Actions with MSVC
+- NEVER attempt to install compilers, build tools, or SDKs on target machines
+- NEVER run `cargo build` on target machines
+- Target machines are for TESTING PRE-BUILT BINARIES ONLY
 
-**SSH Access:**
+### IEM PC - PRODUCTION MACHINE (STRICT RULES)
+
+The `iem` PC (10.77.9.231) is a **PRODUCTION** machine running live audio infrastructure.
+
+**ABSOLUTELY FORBIDDEN on IEM PC:**
+- Installing ANY software (compilers, tools, dependencies)
+- Running build commands (cargo, cmake, msbuild, etc.)
+- Modifying system configuration
+- Installing services or drivers
+- Any action that could disrupt production audio
+
+**ONLY ALLOWED on IEM PC:**
+- Download and run pre-built binaries from GitHub releases/artifacts
+- Test audio device enumeration (passive read-only operations)
+- Verify ASIO device detection
+- Run tests that don't modify system state
+
+### Testing Workflow
+
+1. **Build**: Push code to GitHub → CI builds binaries
+2. **Download**: Fetch built artifacts from GitHub Actions or releases
+3. **Deploy**: Copy binary to target machine via SSH/SCP
+4. **Test**: Run binary on target, verify functionality
+5. **Cleanup**: Remove test binaries after testing
+
+**Example - Correct Testing Flow:**
 ```bash
-# Example: Connect to Windows target
-ssh user@hostname  # Use credentials from TARGETS.md
+# On LOCAL machine: Download CI artifact
+gh run download <run-id> -n audiomatrix-windows
 
-# Example: Copy binary for testing
-scp ./target/release/audiomatrix.exe user@hostname:C:/path/
+# Copy to target for testing
+scp audiomatrix.exe user@10.77.9.231:C:/temp/
+
+# SSH and run test
+ssh user@10.77.9.231 "C:/temp/audiomatrix.exe --list-devices"
 ```
+
+### Other Targets
+
+- `develbox` (10.77.9.21) - Linux development machine (more flexibility)
+- Other Windows machines in TARGETS.md - testing allowed, no production traffic
 
 **Important:**
 - TARGETS.md is gitignored - never commit credentials
 - Always verify target availability before testing
-- Production machines (like `iem`) - only run binaries, no installations
+- When in doubt, use GitHub Actions for building
 
 ---
 
