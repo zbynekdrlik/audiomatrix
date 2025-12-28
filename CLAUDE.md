@@ -1026,6 +1026,20 @@ cargo bench -- --sample-size 100
 
 **ALWAYS test across all 3 machines to verify both local and network features:**
 
+### SSH Key Setup (REQUIRED)
+
+**Before testing, set up SSH keys to avoid repeated password prompts.** Credentials are in `TARGETS.md`. Run once:
+
+```bash
+# For Windows targets (use sshpass initially, then copy key)
+ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
+
+# If ssh-copy-id doesn't work on Windows, use PowerShell:
+# Get-Content ~/.ssh/id_rsa.pub | ssh user@hostname "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+**CRITICAL:** Always use SSH keys for target machine access. Do NOT rely on sshpass with passwords in commands as this causes repeated failures and wastes time.
+
 | Machine | Hostname | OS | Role | Restrictions |
 |---------|----------|----|----- |--------------|
 | **stagebox1** | stagebox1.lan | Windows | **PRIMARY Windows testing** | **NONE** - full testing allowed |
