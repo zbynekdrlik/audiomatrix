@@ -11,11 +11,83 @@
 #include <objbase.h>
 #include <olectl.h>  // For SELFREG_E_CLASS
 #include <string>
+#include <atomic>
+#include <new>  // For std::nothrow
 
 namespace {
 
 const wchar_t DRIVER_NAME[] = L"AudioMatrix Virtual";
 const wchar_t DRIVER_DESCRIPTION[] = L"AudioMatrix Virtual ASIO Driver";
+
+/**
+ * Class Factory for AudioMatrix ASIO driver.
+ *
+ * This is required for hosts that use CoCreateInstance() to load the driver.
+ * When CoCreateInstance is called, COM:
+ * 1. Calls DllGetClassObject with IID_IClassFactory
+ * 2. Calls CreateInstance on the factory to get the driver
+ */
+class AudioMatrixClassFactory : public IClassFactory {
+public:
+    // IUnknown
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        *ppv = nullptr;
+
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IClassFactory)) {
+            *ppv = static_cast<IClassFactory*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() override {
+        return ++m_refCount;
+    }
+
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG count = --m_refCount;
+        if (count == 0) {
+            delete this;
+        }
+        return count;
+    }
+
+    // IClassFactory
+    STDMETHODIMP CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        *ppv = nullptr;
+
+        // We don't support aggregation
+        if (pUnkOuter != nullptr) {
+            return CLASS_E_NOAGGREGATION;
+        }
+
+        // Create the ASIO driver
+        IASIO* driver = audiomatrix::CreateAudioMatrixDriver();
+        if (!driver) {
+            return E_OUTOFMEMORY;
+        }
+
+        // Query for the requested interface
+        HRESULT hr = driver->QueryInterface(riid, ppv);
+        driver->Release();  // Release our reference, caller now owns it
+        return hr;
+    }
+
+    STDMETHODIMP LockServer(BOOL fLock) override {
+        if (fLock) {
+            ++audiomatrix::g_serverLockCount;
+        } else {
+            --audiomatrix::g_serverLockCount;
+        }
+        return S_OK;
+    }
+
+private:
+    std::atomic<ULONG> m_refCount{1};
+};
 
 // Get the path to this DLL
 std::wstring getModulePath() {
@@ -139,8 +211,9 @@ STDAPI DllUnregisterServer() {
 /**
  * COM DLL entry point for class factory.
  *
- * ASIO is unusual in that it treats the CLSID as an IID and expects
- * the driver instance directly, not a class factory.
+ * Handles two loading paths:
+ * 1. ASIO hosts call with riid=CLSID or IID_IUnknown → return driver directly
+ * 2. CoCreateInstance calls with riid=IID_IClassFactory → return class factory
  */
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
     if (!ppv) {
@@ -154,11 +227,20 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
         return CLASS_E_CLASSNOTAVAILABLE;
     }
 
-    // ASIO hosts use DllGetClassObject directly (not CoCreateInstance).
-    // They request either IID_IUnknown or use the CLSID as the IID.
-    // We return the driver instance directly (ASIO doesn't use COM class factories).
-    // NOTE: Do NOT handle IID_IClassFactory - that would crash because callers
-    // would try to call IClassFactory::CreateInstance() which doesn't exist.
+    // Path 1: Standard COM loading via CoCreateInstance
+    // COM requests IID_IClassFactory, then calls CreateInstance on it
+    if (IsEqualIID(riid, IID_IClassFactory)) {
+        AudioMatrixClassFactory* factory = new (std::nothrow) AudioMatrixClassFactory();
+        if (!factory) {
+            return E_OUTOFMEMORY;
+        }
+        *ppv = static_cast<IClassFactory*>(factory);
+        return S_OK;
+    }
+
+    // Path 2: Direct ASIO host loading (legacy)
+    // ASIO hosts often request IID_IUnknown or use the CLSID as the IID
+    // and expect the driver instance directly, not a factory
     if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, CLSID_AudioMatrixASIO)) {
         IASIO* driver = audiomatrix::CreateAudioMatrixDriver();
         if (driver) {
