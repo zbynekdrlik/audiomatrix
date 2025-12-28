@@ -16,18 +16,30 @@
 #include <vector>
 #include <thread>
 
-// Forward declare ASIO types (from ASIO SDK)
-struct ASIODriverInfo;
-struct ASIOClockSource;
-struct ASIOChannelInfo;
-struct ASIOBufferInfo;
-struct ASIOCallbacks;
-struct ASIOTime;
-
+// ASIO types (from ASIO SDK specification)
 typedef long ASIOError;
 typedef long ASIOBool;
 typedef long long ASIOSamples;
 typedef long long ASIOTimeStamp;
+
+// ASIO boolean values
+constexpr ASIOBool ASIOTrue = 1;
+constexpr ASIOBool ASIOFalse = 0;
+
+// Forward declare ASIO types
+struct ASIODriverInfo;
+struct ASIOClockSource;
+struct ASIOChannelInfo;
+struct ASIOBufferInfo;
+struct ASIOTime;
+
+// ASIOCallbacks - must be fully defined for member access
+struct ASIOCallbacks {
+    void (*bufferSwitch)(long doubleBufferIndex, ASIOBool directProcess);
+    void (*sampleRateDidChange)(double sRate);
+    long (*asioMessage)(long selector, long value, void* message, double* opt);
+    ASIOTime* (*bufferSwitchTimeInfo)(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess);
+};
 
 // ASIO error codes
 constexpr ASIOError ASE_OK = 0;
