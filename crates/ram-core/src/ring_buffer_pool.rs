@@ -12,6 +12,9 @@
 //!   the audio thread to safely reference buffers without synchronization.
 //! - **Control thread allocation**: Only the control thread allocates/frees buffers,
 //!   using a simple free list protected by a mutex.
+//! - **Deferred freeing**: Buffers are not freed immediately - they're queued and
+//!   only actually freed after a grace period (2 routing generations) to ensure
+//!   audio callbacks have refreshed their cached routing snapshots.
 //!
 //! # Example
 //!
@@ -29,13 +32,16 @@
 //! let samples = [0.5f32; 64];
 //! buffer.write(&samples);
 //!
-//! // Control thread: free the buffer
-//! pool.free(index);
+//! // Control thread: defer free with current generation
+//! pool.defer_free(index, 1);
+//!
+//! // Later, process pending frees when generation advances
+//! pool.process_pending_frees(3); // Frees buffers from gen <= 1
 //! ```
 
 use crate::buffer::RingBuffer;
 use parking_lot::Mutex;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 /// Default number of buffers in the pool.
 /// Supports up to 256 concurrent connections.
@@ -45,10 +51,22 @@ pub const DEFAULT_POOL_SIZE: usize = 256;
 /// 2048 samples at 48kHz = ~42ms of audio per channel.
 pub const DEFAULT_BUFFER_CAPACITY: usize = 2048;
 
+/// Number of routing generations to wait before actually freeing a buffer.
+/// This grace period ensures all audio callbacks have refreshed their snapshots.
+const DEFER_FREE_GENERATIONS: u64 = 2;
+
 /// A pre-allocated pool of ring buffers for audio routing.
 ///
 /// Buffers are accessed by index for lock-free audio thread access.
 /// Allocation and deallocation happen on the control thread only.
+///
+/// # Deferred Freeing
+///
+/// To prevent race conditions with audio callbacks holding cached routing
+/// snapshots, buffers are not freed immediately. Instead, they're queued
+/// and only actually freed after a grace period of 2 routing generations.
+/// This ensures all callbacks have refreshed their snapshots before the
+/// buffer is made available for reallocation.
 #[derive(Debug)]
 pub struct RingBufferPool {
     /// Pre-allocated ring buffers.
@@ -58,6 +76,11 @@ pub struct RingBufferPool {
     /// Set of free buffer indices.
     /// Only accessed from the control thread (protected by mutex).
     free_indices: Mutex<HashSet<usize>>,
+
+    /// Queue of buffers pending deferred free.
+    /// Each entry is (buffer_index, freed_at_generation).
+    /// Buffers are freed when current_generation > freed_at_generation + DEFER_FREE_GENERATIONS.
+    pending_frees: Mutex<VecDeque<(usize, u64)>>,
 
     /// Number of buffers in the pool.
     pool_size: usize,
@@ -90,6 +113,7 @@ impl RingBufferPool {
         Self {
             buffers,
             free_indices: Mutex::new(free_indices),
+            pending_frees: Mutex::new(VecDeque::new()),
             pool_size,
             buffer_capacity,
         }
@@ -151,9 +175,11 @@ impl RingBufferPool {
         }
     }
 
-    /// Frees a buffer back to the pool.
+    /// Frees a buffer back to the pool immediately.
     ///
-    /// This should only be called from the control thread.
+    /// **WARNING**: This bypasses deferred freeing and should only be used
+    /// during shutdown or when you're certain no audio callbacks are running.
+    /// For normal route removal, use `defer_free()` instead.
     ///
     /// # Arguments
     ///
@@ -178,6 +204,83 @@ impl RingBufferPool {
         self.buffers[index].clear();
         free.insert(index);
         true
+    }
+
+    /// Queues a buffer for deferred freeing.
+    ///
+    /// This is the safe way to free buffers during normal operation. The buffer
+    /// is not immediately freed - it's queued and will only be freed after
+    /// `DEFER_FREE_GENERATIONS` routing generations have passed. This ensures
+    /// that all audio callbacks have had time to refresh their cached routing
+    /// snapshots and no longer reference this buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the buffer to free
+    /// * `current_generation` - The current routing table generation
+    ///
+    /// # Returns
+    ///
+    /// `true` if the buffer was queued for deferred freeing, `false` if the
+    /// index was invalid.
+    pub fn defer_free(&self, index: usize, current_generation: u64) -> bool {
+        if index >= self.pool_size {
+            return false;
+        }
+
+        // Check if already free or pending
+        {
+            let free = self.free_indices.lock();
+            if free.contains(&index) {
+                return false; // Already free
+            }
+        }
+
+        // Add to pending queue
+        let mut pending = self.pending_frees.lock();
+        pending.push_back((index, current_generation));
+        true
+    }
+
+    /// Processes pending buffer frees, actually freeing buffers that have
+    /// passed the grace period.
+    ///
+    /// This should be called periodically from the control thread (e.g., at
+    /// the start of each route add/remove operation).
+    ///
+    /// # Arguments
+    ///
+    /// * `current_generation` - The current routing table generation
+    ///
+    /// # Returns
+    ///
+    /// The number of buffers that were actually freed.
+    pub fn process_pending_frees(&self, current_generation: u64) -> usize {
+        let mut pending = self.pending_frees.lock();
+        let mut freed_count = 0;
+
+        // Process from the front of the queue (oldest entries first)
+        while let Some(&(index, freed_at_gen)) = pending.front() {
+            // Check if enough generations have passed
+            if current_generation > freed_at_gen + DEFER_FREE_GENERATIONS {
+                pending.pop_front();
+                // Actually free the buffer now
+                self.buffers[index].clear();
+                self.free_indices.lock().insert(index);
+                freed_count += 1;
+            } else {
+                // Pending entries are in order, so if this one isn't ready, none after it are
+                break;
+            }
+        }
+
+        freed_count
+    }
+
+    /// Returns the number of buffers pending deferred free.
+    #[must_use]
+    pub fn pending_free_count(&self) -> usize {
+        self.pending_frees.lock().len()
     }
 
     /// Gets a reference to a buffer by index.
@@ -223,10 +326,15 @@ impl RingBufferPool {
         (0..self.pool_size).filter(|i| !free.contains(i)).collect()
     }
 
-    /// Frees all allocated buffers.
+    /// Frees all allocated buffers immediately.
     ///
-    /// This should only be called during shutdown or reset.
+    /// This should only be called during shutdown or reset when no audio
+    /// callbacks are running. It also clears any pending deferred frees.
     pub fn free_all(&self) {
+        // Clear pending frees
+        self.pending_frees.lock().clear();
+
+        // Free all buffers
         let mut free = self.free_indices.lock();
         for i in 0..self.pool_size {
             self.buffers[i].clear();
@@ -484,5 +592,110 @@ mod tests {
     #[should_panic(expected = "pool_size must be greater than 0")]
     fn zero_pool_size_panics() {
         RingBufferPool::new(0, 256);
+    }
+
+    #[test]
+    fn defer_free_queues_buffer() {
+        let pool = RingBufferPool::new(4, 256);
+
+        let index = pool.allocate().unwrap();
+        assert!(pool.is_allocated(index));
+        assert_eq!(pool.pending_free_count(), 0);
+
+        // Defer free at generation 1
+        assert!(pool.defer_free(index, 1));
+        // Buffer is still allocated (not in free list yet)
+        assert!(pool.is_allocated(index));
+        // But it's pending
+        assert_eq!(pool.pending_free_count(), 1);
+    }
+
+    #[test]
+    fn process_pending_frees_respects_grace_period() {
+        let pool = RingBufferPool::new(4, 256);
+
+        let index = pool.allocate().unwrap();
+        pool.defer_free(index, 1); // Freed at generation 1
+
+        // At generation 2 (grace period = 2, need > 1+2 = 3 to free)
+        assert_eq!(pool.process_pending_frees(2), 0);
+        assert!(pool.is_allocated(index));
+
+        // At generation 3 (still not > 3)
+        assert_eq!(pool.process_pending_frees(3), 0);
+        assert!(pool.is_allocated(index));
+
+        // At generation 4 (now > 3, should free)
+        assert_eq!(pool.process_pending_frees(4), 1);
+        assert!(!pool.is_allocated(index));
+    }
+
+    #[test]
+    fn process_pending_frees_multiple_buffers() {
+        let pool = RingBufferPool::new(8, 256);
+
+        // Allocate and defer free multiple buffers at different generations
+        let idx1 = pool.allocate().unwrap();
+        let idx2 = pool.allocate().unwrap();
+        let idx3 = pool.allocate().unwrap();
+
+        pool.defer_free(idx1, 1);
+        pool.defer_free(idx2, 2);
+        pool.defer_free(idx3, 5);
+
+        assert_eq!(pool.pending_free_count(), 3);
+
+        // At generation 4: idx1 should be freed (4 > 1+2)
+        assert_eq!(pool.process_pending_frees(4), 1);
+        assert!(!pool.is_allocated(idx1));
+        assert!(pool.is_allocated(idx2)); // 4 not > 2+2=4
+        assert!(pool.is_allocated(idx3)); // 4 not > 5+2=7
+
+        // At generation 5: idx2 should be freed (5 > 2+2=4)
+        assert_eq!(pool.process_pending_frees(5), 1);
+        assert!(!pool.is_allocated(idx2));
+        assert!(pool.is_allocated(idx3)); // 5 not > 5+2=7
+
+        // At generation 8: idx3 should be freed (8 > 5+2=7)
+        assert_eq!(pool.process_pending_frees(8), 1);
+        assert!(!pool.is_allocated(idx3));
+
+        assert_eq!(pool.pending_free_count(), 0);
+    }
+
+    #[test]
+    fn defer_free_invalid_index_returns_false() {
+        let pool = RingBufferPool::new(4, 256);
+        assert!(!pool.defer_free(999, 1));
+    }
+
+    #[test]
+    fn defer_free_already_free_returns_false() {
+        let pool = RingBufferPool::new(4, 256);
+
+        let index = pool.allocate().unwrap();
+        pool.free(index); // Immediately free
+
+        // Trying to defer free an already-freed buffer should fail
+        assert!(!pool.defer_free(index, 1));
+    }
+
+    #[test]
+    fn free_all_clears_pending() {
+        let pool = RingBufferPool::new(4, 256);
+
+        let idx1 = pool.allocate().unwrap();
+        let idx2 = pool.allocate().unwrap();
+
+        pool.defer_free(idx1, 1);
+        pool.defer_free(idx2, 1);
+
+        assert_eq!(pool.pending_free_count(), 2);
+        assert_eq!(pool.free_count(), 2); // Only 2 free
+
+        pool.free_all();
+
+        assert_eq!(pool.pending_free_count(), 0);
+        assert_eq!(pool.free_count(), 4); // All 4 free
     }
 }

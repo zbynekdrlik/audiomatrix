@@ -128,6 +128,14 @@ impl RouteManager {
 
     /// Adds a route to the routing matrix.
     pub(crate) fn add_route_internal(&self, conn_id: ConnectionId) -> Result<usize> {
+        // First, process any pending buffer frees from previous removals.
+        // This ensures buffers are available for reuse.
+        let current_gen = self.routing_table.generation();
+        let freed = self.buffer_pool.process_pending_frees(current_gen);
+        if freed > 0 {
+            debug!("Processed {freed} pending buffer frees");
+        }
+
         // Check if connection already exists
         if self.connection_buffers.read().contains(&conn_id) {
             return Err(anyhow!("Connection already exists: {conn_id}"));
@@ -176,15 +184,26 @@ impl RouteManager {
     }
 
     /// Removes a route from the routing matrix.
+    ///
+    /// The buffer is not freed immediately - it's queued for deferred freeing
+    /// to prevent race conditions with audio callbacks that may still hold
+    /// cached routing snapshots referencing the buffer.
     pub(crate) fn remove_route_internal(&self, conn_id: &ConnectionId) -> Result<()> {
-        // Get and remove the buffer index
+        // First, process any pending buffer frees from previous removals
+        let current_gen = self.routing_table.generation();
+        let freed = self.buffer_pool.process_pending_frees(current_gen);
+        if freed > 0 {
+            debug!("Processed {freed} pending buffer frees");
+        }
+
+        // Get and remove the buffer index from the connection map
         let buffer_idx = self
             .connection_buffers
             .write()
             .remove(conn_id)
             .ok_or_else(|| anyhow!("Connection not found: {conn_id}"))?;
 
-        // Update the routing table
+        // Update the routing table (this increments the generation)
         let dest_id = conn_id.destination_id();
         self.routing_table.update_with(|current| {
             let mut new = current.clone();
@@ -194,10 +213,17 @@ impl RouteManager {
             new
         });
 
-        // Free the buffer
-        self.buffer_pool.free(buffer_idx);
+        // Queue buffer for deferred freeing instead of immediate free.
+        // The buffer will be actually freed after DEFER_FREE_GENERATIONS
+        // routing updates, ensuring all audio callbacks have refreshed
+        // their cached snapshots.
+        let new_gen = self.routing_table.generation();
+        self.buffer_pool.defer_free(buffer_idx, new_gen);
 
-        info!("Removed route {conn_id}, freed buffer index {buffer_idx}");
+        info!(
+            "Removed route {conn_id}, buffer index {buffer_idx} queued for deferred free (gen {})",
+            new_gen
+        );
         Ok(())
     }
 
@@ -377,6 +403,8 @@ mod tests {
 
         let conn_id = ConnectionId::new("LOCAL", "input-device", 1, "LOCAL", "output-device", 1);
 
+        let initial_free_count = manager.buffer_pool.free_count();
+
         // Add route
         let buffer_idx = manager.add_route_internal(conn_id.clone());
         assert!(buffer_idx.is_ok());
@@ -384,11 +412,34 @@ mod tests {
         let idx = buffer_idx.unwrap();
         assert!(manager.buffer_pool.is_allocated(idx));
         assert!(manager.connection_buffers.read().contains(&conn_id));
+        assert_eq!(manager.buffer_pool.free_count(), initial_free_count - 1);
 
-        // Remove route
+        // Remove route - buffer is now pending deferred free, not immediately freed
         let result = manager.remove_route_internal(&conn_id);
         assert!(result.is_ok());
+        // Buffer is still marked as allocated (pending deferred free)
+        assert!(manager.buffer_pool.is_allocated(idx));
+        assert_eq!(manager.buffer_pool.pending_free_count(), 1);
+        // Free count hasn't increased yet because buffer is pending
+        assert_eq!(manager.buffer_pool.free_count(), initial_free_count - 1);
+
+        // After enough generations pass, the buffer will be freed.
+        // We need to call process_pending_frees with a high enough generation.
+        // The buffer was deferred at generation 2 (after one add + one remove).
+        // We need generation > 2 + 2 = 4 to actually free it.
+        // Manually bump the generation by calling update_with multiple times.
+        for _ in 0..3 {
+            manager.routing_table.update_with(|current| current.clone());
+        }
+        // Now process pending frees with current generation (should be 5)
+        let current_gen = manager.routing_table.generation();
+        assert!(current_gen >= 5, "Generation should be >= 5, got {}", current_gen);
+        manager.buffer_pool.process_pending_frees(current_gen);
+
+        // Buffer should now be freed
         assert!(!manager.buffer_pool.is_allocated(idx));
+        assert_eq!(manager.buffer_pool.pending_free_count(), 0);
+        assert_eq!(manager.buffer_pool.free_count(), initial_free_count);
     }
 
     #[test]

@@ -24,7 +24,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.2
+> **Current Version:** 0.1.0-dev.4
 > **Last Updated:** 2025-12-28
 
 | Component | Status | Crate | Notes |
@@ -161,12 +161,16 @@ Priority order for remaining work:
 
 ## Known Bugs (2025-12-28 Testing)
 
-- **Route Deletion Crash (Windows/ASIO)**: Service crashes when deleting routes that use ASIO devices.
-  Works correctly on Linux/ALSA. Likely race condition between API thread freeing buffers and ASIO callback.
 - **mDNS Cross-Node Discovery**: Nodes don't discover each other. mDNS multicast (UDP 5353) may be
   blocked by Windows Firewall. Service announcer now works correctly but browser doesn't receive events.
 
 ## Recently Completed
+
+- **Route Deletion Race Condition Fix** (2025-12-28): Fixed crash when deleting routes on Windows/ASIO
+  - Implemented deferred buffer freeing in `RingBufferPool` with 2-generation grace period
+  - Buffers are queued for deferred free and only actually freed after audio callbacks refresh their snapshots
+  - `defer_free()` and `process_pending_frees()` methods added to `RingBufferPool`
+  - Prevents race between API thread freeing buffers and ASIO callback reading them
 
 - **mDNS Hostname Fix** (2025-12-28): Fixed hostname suffix for mDNS registration
   - Hostnames now end with `.local.` as required by mDNS spec

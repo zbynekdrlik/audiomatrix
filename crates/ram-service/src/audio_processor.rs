@@ -687,16 +687,33 @@ mod tests {
         let processor = AudioProcessor::with_defaults();
         let conn_id = ConnectionId::new("LOCAL", "input-device", 1, "LOCAL", "output-device", 1);
 
+        let initial_free_count = processor.buffer_pool().free_count();
+
         let buffer_idx = processor.add_route(conn_id.clone());
         assert!(buffer_idx.is_ok());
 
         let idx = buffer_idx.unwrap();
         assert!(processor.buffer_pool().is_allocated(idx));
         assert!(processor.get_connection_buffer(&conn_id).is_some());
+        assert_eq!(processor.buffer_pool().free_count(), initial_free_count - 1);
 
+        // Remove route - buffer is pending deferred free, not immediately freed
         let result = processor.remove_route(&conn_id);
         assert!(result.is_ok());
+        // Buffer is still marked as allocated (pending deferred free)
+        assert!(processor.buffer_pool().is_allocated(idx));
+        assert_eq!(processor.buffer_pool().pending_free_count(), 1);
+
+        // Bump generation and process pending frees to actually free the buffer
+        for _ in 0..3 {
+            processor.routing_table().update_with(|current| current.clone());
+        }
+        let current_gen = processor.routing_table().generation();
+        processor.buffer_pool().process_pending_frees(current_gen);
+
+        // Now the buffer should be freed
         assert!(!processor.buffer_pool().is_allocated(idx));
+        assert_eq!(processor.buffer_pool().free_count(), initial_free_count);
     }
 
     #[test]
