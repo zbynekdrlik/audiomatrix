@@ -1009,6 +1009,43 @@ cargo bench -- --sample-size 100
 
 ---
 
+## Target Machines for Testing
+
+### TARGETS.md Management
+
+The file `TARGETS.md` (gitignored, local only) contains target machines for testing:
+- Hostname, IP address, OS type
+- SSH/remote access credentials (user/password)
+- Current deployment status
+
+**Usage:**
+1. Read `TARGETS.md` to identify available test machines
+2. Use credentials from the file for SSH access
+3. Choose appropriate target based on OS requirements:
+   - **Windows targets**: For ASIO testing, Dante device testing
+   - **Linux targets**: For general testing, development
+
+**Key Targets:**
+- `iem` (10.77.9.231) - Windows, production IEM PC with Dante - **DO NOT install software, test binaries only**
+- `develbox` (10.77.9.21) - Linux development machine
+- Other Windows machines available for testing
+
+**SSH Access:**
+```bash
+# Example: Connect to Windows target
+ssh user@hostname  # Use credentials from TARGETS.md
+
+# Example: Copy binary for testing
+scp ./target/release/audiomatrix.exe user@hostname:C:/path/
+```
+
+**Important:**
+- TARGETS.md is gitignored - never commit credentials
+- Always verify target availability before testing
+- Production machines (like `iem`) - only run binaries, no installations
+
+---
+
 ## Contact & Resources
 
 - **Architecture**: `ARCHITECTURE.md`
