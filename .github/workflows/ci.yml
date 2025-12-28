@@ -12,6 +12,31 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # Build WASM UI first (needed for ram-api compilation)
+  build-ui:
+    name: Build WASM UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install trunk
+        run: cargo install trunk
+
+      - name: Build WASM UI
+        working-directory: crates/ram-ui
+        run: trunk build --release
+
+      - name: Upload UI dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+          retention-days: 1
+
   # Version format validation - enforce dev/release versioning
   version-check:
     name: Version Check
@@ -56,9 +81,17 @@ jobs:
   # Clippy lints with pedantic mode
   clippy:
     name: Clippy Lints
+    needs: build-ui
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -71,6 +104,7 @@ jobs:
   # Tests on all platforms
   test:
     name: Test (${{ matrix.os }})
+    needs: build-ui
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +112,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA dev (Linux)
@@ -178,9 +219,17 @@ jobs:
   # Coverage enforcement
   coverage:
     name: Code Coverage
+    needs: build-ui
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
@@ -261,9 +310,17 @@ jobs:
   # Documentation build check
   docs:
     name: Documentation
+    needs: build-ui
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install ALSA dev
@@ -292,13 +349,14 @@ jobs:
   # All checks must pass
   ci-complete:
     name: CI Complete
-    needs: [version-check, fmt, clippy, test, coverage, audit, docs, file-size]
+    needs: [build-ui, version-check, fmt, clippy, test, coverage, audit, docs, file-size]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check all jobs
         run: |
-          if [ "${{ needs.version-check.result }}" != "success" ] || \
+          if [ "${{ needs.build-ui.result }}" != "success" ] || \
+             [ "${{ needs.version-check.result }}" != "success" ] || \
              [ "${{ needs.fmt.result }}" != "success" ] || \
              [ "${{ needs.clippy.result }}" != "success" ] || \
              [ "${{ needs.test.result }}" != "success" ] || \
