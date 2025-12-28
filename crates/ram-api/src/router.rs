@@ -30,6 +30,13 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/routes/:id", get(handlers::get_route))
         .route("/routes/:id", put(handlers::update_route))
         .route("/routes/:id", delete(handlers::delete_route))
+        .route("/routes/:id/latency", get(handlers::get_route_latency))
+        // Streams
+        .route("/streams", get(handlers::list_streams))
+        .route("/streams/count", get(handlers::get_stream_count))
+        // Subscriptions
+        .route("/subscriptions", get(handlers::list_subscriptions))
+        .route("/subscriptions/stats", get(handlers::get_subscription_stats))
         // WebSocket
         .route("/ws", get(ws_handler))
         .with_state(state);

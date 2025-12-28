@@ -31,20 +31,23 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 |-----------|--------|-------|-------|
 | **ASIO Device Support** | Complete | ram-asio | Enumeration, device access via cpal |
 | **Virtual ASIO (Rust)** | Complete | ram-asio | Shared memory IPC |
-| **Virtual ASIO (C++)** | Partial | ram-asio/cpp | Skeleton created, CI build pending |
+| **Virtual ASIO (C++)** | Complete | ram-asio/cpp | COM/ASIO driver with IClassFactory, E2E tests |
 | **Device Enumeration** | Complete | ram-core | All platforms (ASIO, WASAPI, ALSA) |
-| **Audio Routing Matrix** | Complete | ram-core | Routes, connections, engine |
-| **Per-connection Controls** | Complete | ram-core | Lock-free gain/mute/enabled |
+| **Audio Routing Matrix** | Complete | ram-core | RCU-based lock-free routing table |
+| **Per-connection Controls** | Complete | ram-core | Lock-free gain/mute via AtomicF32/AtomicBool |
+| **Ring Buffer Pool** | Complete | ram-core | Pre-allocated SPSC buffers (256 x 2048) |
+| **Lock-Free Callbacks** | Complete | ram-core | Input/output callbacks, zero allocations |
 | **Resampling** | Complete | ram-core | Rubato integration |
 | **VBAN Protocol** | Complete | ram-vban | Full encode/decode |
 | **VBAN Streaming** | Complete | ram-vban | Sender, receiver, jitter buffer |
 | **mDNS Discovery** | Complete | ram-discovery | Announce and browse |
-| **REST API** | Partial | ram-api | Basic endpoints |
-| **WebSocket Events** | Partial | ram-api | Event types defined |
-| **Configuration** | Complete | ram-core | TOML persistence |
-| **Audio Processing Loop** | Not Started | - | Infrastructure ready |
-| **Subscription Protocol** | Not Started | - | Messages not implemented |
-| **Latency Measurement** | Not Started | - | No infrastructure |
+| **REST API** | Complete | ram-api | Route CRUD wired to AudioProcessor via RouteController trait |
+| **WebSocket Events** | Partial | ram-api | Event types defined, metering broadcast TODO |
+| **Configuration** | Complete | ram-core | JSON persistence |
+| **Audio Processing Loop** | Complete | ram-service | cpal streams, auto-start default devices |
+| **Subscription Protocol** | Complete | ram-core | Subscribe/unsubscribe messages, manager |
+| **Latency Measurement** | Complete | ram-core | Calculator, callback timer, jitter tracking |
+| **Metering** | Complete | ram-core | Lock-free level meters, peak/RMS, per-channel |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 
@@ -78,14 +81,35 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 ```
 audiomatrix/
 ├── crates/
-│   ├── ram-core/        # Audio engine, routing, devices
-│   ├── ram-asio/        # ASIO support (Windows)
-│   ├── ram-vban/        # VBAN protocol
-│   ├── ram-discovery/   # mDNS service
-│   ├── ram-api/         # REST/WebSocket API
-│   └── ram-service/     # Main service binary
+│   ├── ram-core/           # Audio engine, routing, devices
+│   │   ├── buffer.rs           # SPSC ring buffer
+│   │   ├── ring_buffer_pool.rs # Pre-allocated buffer pool
+│   │   ├── routing_table.rs    # RCU routing table
+│   │   ├── routing_snapshot.rs # Immutable routing snapshots
+│   │   ├── callbacks.rs        # Lock-free audio callbacks (with metering)
+│   │   ├── metering.rs         # Lock-free level meters (peak/RMS)
+│   │   ├── active_stream.rs    # Stream types and stats
+│   │   ├── stream_registry.rs  # Stream lifecycle management
+│   │   ├── connection.rs       # Connection state machine
+│   │   ├── device.rs           # Device enumeration
+│   │   ├── resampler.rs        # Sample rate conversion
+│   │   ├── subscription.rs     # Subscription protocol messages
+│   │   ├── subscription_manager.rs # Subscription lifecycle
+│   │   └── latency.rs          # Latency measurement
+│   ├── ram-asio/           # ASIO support (Windows)
+│   │   └── cpp/                # C++ COM driver
+│   ├── ram-vban/           # VBAN protocol
+│   │   ├── protocol.rs         # Packet format
+│   │   ├── jitter.rs           # Jitter buffer
+│   │   ├── sender.rs           # UDP sender
+│   │   └── receiver.rs         # UDP receiver
+│   ├── ram-discovery/      # mDNS service
+│   ├── ram-api/            # REST/WebSocket API
+│   └── ram-service/        # Main service binary
+│       ├── service.rs          # Service lifecycle
+│       └── audio_processor.rs  # Audio coordinator
 └── docs/
-    └── architecture/    # Detailed architecture docs
+    └── architecture/       # Detailed architecture docs
 ```
 
 ## Platform Support
@@ -108,8 +132,58 @@ audiomatrix/
 
 Priority order for remaining work:
 
-1. **Audio Processing Loop**: Wire ring buffers to ASIO callbacks
-2. **Virtual ASIO C++ Build**: Complete CI integration
-3. **Subscription Protocol**: Implement SUBSCRIBE/UNSUBSCRIBE messages
-4. **Auto Stream Creation**: Create VBAN streams on cross-node routes
-5. **Metering**: Real-time level monitoring
+1. **API ↔ AudioProcessor Wiring** (CRITICAL): Connect REST API route operations to live RoutingTable
+   - Route CRUD must apply to AudioProcessor, not just AppState
+   - Streams endpoint must read from StreamRegistry
+   - Subscriptions endpoint must query SubscriptionManager
+2. **Metering WebSocket Broadcast**: Push real-time levels to web clients
+3. **Web UI**: React-based routing matrix interface
+4. **VBAN Auto-Creation**: Automatically create VBAN streams for cross-node routes
+
+## Known Technical Debt
+
+- `audio_processor.rs` at 1160 lines (exceeds 1000 line limit, needs splitting)
+- `allow(dead_code)` marker indicates some AudioProcessor methods not yet called
+- 3 TODOs in `ram-api/state.rs` for missing wiring
+- 2 TODOs in `ram-api/websocket.rs` for metering events
+
+## Recently Completed
+
+- **Metering Infrastructure** (2025-12-28): Lock-free level measurement
+  - `ChannelMeter` for atomic peak/RMS tracking (`metering.rs`)
+  - `MeterBank` for multi-channel metering
+  - Integrated into input/output callbacks
+  - Linear and dB level conversion
+
+- **REST API Completion** (2025-12-28): Full endpoint coverage
+  - `/api/v1/streams` - List active audio streams
+  - `/api/v1/streams/count` - Get stream counts
+  - `/api/v1/subscriptions` - List cross-node subscriptions
+  - `/api/v1/subscriptions/stats` - Subscription statistics
+  - `/api/v1/routes/:id/latency` - Latency breakdown per route
+
+- **Cross-Node Route Support** (2025-12-28): AudioProcessor integration
+  - SubscriptionManager wired into AudioProcessor
+  - `is_cross_node()` detection for routes
+  - `calculate_route_latency()` with network/local distinction
+  - Node name configuration
+
+- **Subscription Protocol** (2025-12-28): Cross-node routing infrastructure
+  - Subscribe/unsubscribe message types (`subscription.rs`)
+  - SubscriptionManager for tracking active subscriptions (`subscription_manager.rs`)
+  - Heartbeat and timeout handling
+  - Device validation callbacks
+
+- **Latency Measurement** (2025-12-28): Comprehensive latency tracking
+  - LatencyCalculator for buffer-based latency estimation (`latency.rs`)
+  - CallbackTimer for lock-free jitter measurement
+  - LatencyReport for breakdown analysis (input, ring, network, output)
+  - TimingStats for callback interval analysis
+
+- **Audio Processing Loop** (2025-12-28): Full lock-free audio path implemented
+  - RCU-based routing table (`routing_table.rs`, `routing_snapshot.rs`)
+  - Pre-allocated ring buffer pool (`ring_buffer_pool.rs`)
+  - Lock-free input/output callbacks (`callbacks.rs`)
+  - Stream registry and lifecycle (`stream_registry.rs`, `active_stream.rs`)
+  - AudioProcessor coordinator (`audio_processor.rs`)
+  - Auto-start of default input/output devices on service startup

@@ -3,7 +3,10 @@
 use axum::extract::{Path, State};
 use axum::Json;
 
-use crate::models::{DeviceInfo, HealthResponse, NodeInfo, RouteDefinition};
+use crate::models::{
+    DeviceInfo, HealthResponse, LatencyInfo, NodeInfo, RouteDefinition, StreamInfo,
+    SubscriptionInfo, SubscriptionStatsResponse,
+};
 use crate::state::AppState;
 use crate::websocket::{RouteUpdate, WsEvent};
 use crate::Result;
@@ -123,7 +126,9 @@ pub async fn create_route(
     State(state): State<AppState>,
     Json(route): Json<RouteDefinition>,
 ) -> Result<Json<RouteCreatedResponse>> {
-    let id = state.upsert_route(route);
+    let id = state
+        .upsert_route(route)
+        .map_err(|e| crate::Error::BadRequest(e))?;
 
     // Broadcast route change event
     state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
@@ -150,7 +155,9 @@ pub async fn update_route(
     }
 
     // Update route (may generate new ID if endpoints changed)
-    let new_id = state.upsert_route(route.clone());
+    let new_id = state
+        .upsert_route(route.clone())
+        .map_err(|e| crate::Error::BadRequest(e))?;
 
     // If ID changed, remove old route
     if new_id != id {
@@ -175,9 +182,13 @@ pub async fn delete_route(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<RouteDeletedResponse>> {
-    state
+    let removed = state
         .remove_route(&id)
-        .ok_or_else(|| crate::Error::NotFound(format!("route: {id}")))?;
+        .map_err(|e| crate::Error::Internal(e))?;
+
+    if removed.is_none() {
+        return Err(crate::Error::NotFound(format!("route: {id}")));
+    }
 
     // Broadcast route change event
     state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
@@ -200,6 +211,68 @@ pub struct RouteCreatedResponse {
 pub struct RouteDeletedResponse {
     /// Deleted route ID.
     pub id: String,
+}
+
+// --- Stream Handlers ---
+
+/// List all active streams.
+///
+/// # Errors
+///
+/// Returns an error if stream listing fails.
+pub async fn list_streams(State(state): State<AppState>) -> Result<Json<Vec<StreamInfo>>> {
+    Ok(Json(state.all_streams()))
+}
+
+/// Get stream count.
+pub async fn get_stream_count(State(state): State<AppState>) -> Json<StreamCountResponse> {
+    let (input, output) = state.stream_counts();
+    Json(StreamCountResponse {
+        input_streams: input,
+        output_streams: output,
+    })
+}
+
+/// Response for stream count.
+#[derive(Debug, serde::Serialize)]
+pub struct StreamCountResponse {
+    /// Number of active input streams.
+    pub input_streams: usize,
+    /// Number of active output streams.
+    pub output_streams: usize,
+}
+
+// --- Subscription Handlers ---
+
+/// List all subscriptions.
+///
+/// # Errors
+///
+/// Returns an error if subscription listing fails.
+pub async fn list_subscriptions(State(state): State<AppState>) -> Result<Json<Vec<SubscriptionInfo>>> {
+    Ok(Json(state.all_subscriptions()))
+}
+
+/// Get subscription statistics.
+pub async fn get_subscription_stats(State(state): State<AppState>) -> Json<SubscriptionStatsResponse> {
+    Json(state.subscription_stats())
+}
+
+// --- Latency Handlers ---
+
+/// Get latency information for a route.
+///
+/// # Errors
+///
+/// Returns an error if the route is not found.
+pub async fn get_route_latency(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<LatencyInfo>> {
+    state
+        .get_route_latency(&id)
+        .map(Json)
+        .ok_or_else(|| crate::Error::NotFound(format!("route: {id}")))
 }
 
 #[cfg(test)]

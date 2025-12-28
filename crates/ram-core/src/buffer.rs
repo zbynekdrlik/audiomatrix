@@ -128,6 +128,16 @@ impl RingBuffer {
 unsafe impl Send for RingBuffer {}
 unsafe impl Sync for RingBuffer {}
 
+impl std::fmt::Debug for RingBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RingBuffer")
+            .field("capacity", &self.capacity)
+            .field("available", &self.available())
+            .field("free", &self.free())
+            .finish()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::cast_precision_loss)]
 mod tests {

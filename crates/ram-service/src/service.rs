@@ -16,6 +16,7 @@ use ram_api::{router::create_router_with_state, AppState};
 use ram_core::device::DeviceManager;
 use ram_discovery::{DiscoveryEvent, ServiceAnnouncer, ServiceBrowser};
 
+use crate::audio_processor::AudioProcessor;
 use crate::config::ServiceConfig;
 
 /// Service shutdown signal.
@@ -73,6 +74,8 @@ pub struct AudioMatrixService {
     app_state: AppState,
     /// Device manager.
     device_manager: Arc<DeviceManager>,
+    /// Audio processor for real-time audio routing.
+    audio_processor: Arc<AudioProcessor>,
     /// Service announcer for mDNS.
     announcer: Option<ServiceAnnouncer>,
     /// Service browser for discovery.
@@ -93,13 +96,25 @@ impl AudioMatrixService {
     /// Creates a new service with the given configuration.
     #[must_use]
     pub fn new(config: ServiceConfig) -> Self {
-        let app_state = AppState::new(&config.node_name, config.api.port, config.vban.port);
         let device_manager = Arc::new(DeviceManager::with_defaults());
+        let audio_processor = Arc::new(AudioProcessor::with_defaults());
+
+        // Get the route controller from AudioProcessor for API integration
+        let route_controller = audio_processor.route_controller();
+
+        // Create AppState with the route controller wired in
+        let app_state = AppState::with_route_controller(
+            &config.node_name,
+            config.api.port,
+            config.vban.port,
+            Some(route_controller),
+        );
 
         Self {
             config,
             app_state,
             device_manager,
+            audio_processor,
             announcer: None,
             browser: None,
             shutdown: ShutdownSignal::new(),
@@ -177,6 +192,13 @@ impl AudioMatrixService {
 
         // Start API server
         self.start_api_server().await?;
+
+        // Start audio processor
+        self.audio_processor.start();
+        info!("Audio processor started");
+
+        // Start default audio streams
+        self.start_default_streams();
 
         *self.state.write() = ServiceState::Running;
         info!("AudioMatrix service is running");
@@ -283,6 +305,42 @@ impl AudioMatrixService {
         Ok(())
     }
 
+    /// Starts audio streams for default devices.
+    ///
+    /// This is called during service startup to automatically begin audio
+    /// routing with the system's default input and output devices.
+    fn start_default_streams(&self) {
+        // Get default devices
+        let default_input = self.device_manager.default_input();
+        let default_output = self.device_manager.default_output();
+
+        // Start default input stream
+        if let Some(device) = default_input {
+            info!("Starting default input stream: {}", device.name);
+            match self.audio_processor.start_input_stream(&device.id) {
+                Ok(()) => info!("Default input stream started: {}", device.id),
+                Err(e) => warn!("Failed to start default input stream: {e}"),
+            }
+        } else {
+            info!("No default input device available");
+        }
+
+        // Start default output stream
+        if let Some(device) = default_output {
+            info!("Starting default output stream: {}", device.name);
+            match self.audio_processor.start_output_stream(&device.id) {
+                Ok(()) => info!("Default output stream started: {}", device.id),
+                Err(e) => warn!("Failed to start default output stream: {e}"),
+            }
+        } else {
+            info!("No default output device available");
+        }
+
+        let input_count = self.audio_processor.active_input_stream_count();
+        let output_count = self.audio_processor.active_output_stream_count();
+        info!("Audio streams active: {} input, {} output", input_count, output_count);
+    }
+
     /// Runs the service until shutdown.
     ///
     /// # Errors
@@ -312,6 +370,10 @@ impl AudioMatrixService {
         // Signal shutdown
         self.running.store(false, Ordering::SeqCst);
         self.shutdown.shutdown();
+
+        // Stop audio processor first to ensure clean audio shutdown
+        self.audio_processor.stop();
+        info!("Audio processor stopped");
 
         // Stop announcer
         if let Some(announcer) = self.announcer.take() {

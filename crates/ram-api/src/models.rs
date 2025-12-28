@@ -103,6 +103,104 @@ pub struct MeteringData {
     pub peaks: Vec<f32>,
 }
 
+/// Active stream information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamInfo {
+    /// Device identifier.
+    pub device_id: String,
+    /// Device name.
+    pub device_name: String,
+    /// Stream direction.
+    pub direction: StreamDirection,
+    /// Number of channels.
+    pub channels: u16,
+    /// Sample rate.
+    pub sample_rate: u32,
+    /// Whether the stream is running.
+    pub running: bool,
+}
+
+/// Stream direction.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamDirection {
+    /// Input stream (capture).
+    Input,
+    /// Output stream (playback).
+    Output,
+}
+
+/// Subscription information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionInfo {
+    /// Subscription ID.
+    pub id: u64,
+    /// Source node.
+    pub source_node: String,
+    /// Source device.
+    pub source_device: String,
+    /// Source channels.
+    pub source_channels: Vec<u16>,
+    /// Destination device.
+    pub dest_device: String,
+    /// Destination channels.
+    pub dest_channels: Vec<u16>,
+    /// VBAN stream name.
+    pub vban_stream_name: String,
+    /// Subscription state.
+    pub state: SubscriptionState,
+    /// Sample rate.
+    pub sample_rate: u32,
+}
+
+/// Subscription state.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SubscriptionState {
+    /// Subscription pending.
+    Pending,
+    /// Subscription active.
+    Active,
+    /// Subscription failed.
+    Failed,
+}
+
+/// Subscription statistics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionStatsResponse {
+    /// Total outgoing subscriptions.
+    pub outgoing_total: usize,
+    /// Active outgoing subscriptions.
+    pub outgoing_active: usize,
+    /// Pending outgoing subscriptions.
+    pub outgoing_pending: usize,
+    /// Total incoming subscriptions.
+    pub incoming_total: usize,
+    /// Active incoming subscriptions.
+    pub incoming_active: usize,
+}
+
+/// Latency report.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyInfo {
+    /// Route identifier.
+    pub route_id: String,
+    /// Input buffer latency (ms).
+    pub input_buffer_ms: f32,
+    /// Ring buffer latency (ms).
+    pub ring_buffer_ms: f32,
+    /// Output buffer latency (ms).
+    pub output_buffer_ms: f32,
+    /// Network latency (ms).
+    pub network_ms: f32,
+    /// Processing overhead (ms).
+    pub processing_ms: f32,
+    /// Total latency (ms).
+    pub total_ms: f32,
+    /// Whether this is a local route.
+    pub is_local: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

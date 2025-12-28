@@ -14,6 +14,7 @@ use anyhow::Result;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
+mod audio_processor;
 mod config;
 mod service;
 
