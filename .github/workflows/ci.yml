@@ -163,12 +163,14 @@ jobs:
           path: build/Release/AudioMatrixASIO.dll
           if-no-files-found: error
 
-      # Upload test binary
-      - name: Upload ASIO test tool
+      # Upload test binaries
+      - name: Upload ASIO test tools
         uses: actions/upload-artifact@v4
         with:
           name: audiomatrix-asio-test
-          path: build/Release/asio_test.exe
+          path: |
+            build/Release/asio_test.exe
+            build/Release/asio_com_test.exe
           if-no-files-found: error
 
   # Coverage enforcement
