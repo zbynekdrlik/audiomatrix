@@ -1117,31 +1117,86 @@ The `iem` PC (10.77.9.231) is a **PRODUCTION** machine running live audio infras
 - Verify ASIO device detection
 - Run tests that don't modify system state
 
-### Testing Workflow
+### Testing Workflow - STRICT SELF-TESTING RULE
 
-1. **Build**: Push code to GitHub → CI builds binaries
-2. **Download**: Fetch built artifacts from GitHub Actions or releases
-3. **Deploy to stagebox1 FIRST**: Test Windows binary thoroughly
-4. **Deploy to develbox**: Test Linux binary
-5. **Network test**: Verify cross-machine routing works
-6. **IEM (optional)**: Only for final production verification
+**CRITICAL: Claude MUST perform all testing autonomously.**
 
-**Example - Correct Testing Flow:**
+You have SSH access to all test machines with credentials in TARGETS.md. You are REQUIRED to:
+- Deploy binaries yourself via SSH/SCP
+- Run tests yourself on all target machines
+- Verify functionality yourself before reporting completion
+- NEVER ask the user to test - that is YOUR job
+
+**Testing is NOT complete until YOU have verified it works on stagebox1.lan.**
+
+### Automated Testing Steps - ALL 3 MACHINES
+
+**Deploy to ALL test machines after every CI build:**
+
+1. **Wait for CI**: Monitor until dev release is available
+2. **Deploy to stagebox1.lan** (Windows - PRIMARY):
+   ```bash
+   ssh newlevel@stagebox1.lan "powershell -Command \"irm https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/install-dev.ps1 | iex\""
+   ```
+3. **Deploy to develbox** (Linux):
+   ```bash
+   curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-linux-x64
+   chmod +x audiomatrix-dev-linux-x64
+   # Restart service with new binary
+   ```
+4. **Deploy to iem** (Windows - PRODUCTION, read-only testing):
+   ```bash
+   # Only download, do NOT install as service
+   ssh iem@iem "powershell -Command \"Invoke-WebRequest -Uri 'https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe' -OutFile 'C:/temp/audiomatrix-test.exe'\""
+   ```
+
+### Deep Configuration Tests (Automated)
+
+Run these tests via SSH after deployment:
+
+**1. Health Check (all machines):**
 ```bash
-# 1. Download Windows binary from dev release
-curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe
-
-# 2. Test on stagebox1.lan FIRST (primary Windows test machine)
-scp audiomatrix-dev-windows-x64.exe user@stagebox1.lan:C:/temp/
-ssh user@stagebox1.lan "C:/temp/audiomatrix-dev-windows-x64.exe --help"
-
-# 3. Test on develbox (Linux)
-# Service already running at develbox:8080
-
-# 4. Verify network connectivity between machines
 curl http://stagebox1.lan:8080/api/v1/health
-curl http://develbox:8080/api/v1/health
+curl http://10.77.9.21:8080/api/v1/health
+curl http://10.77.9.231:8080/api/v1/health  # if iem running
 ```
+
+**2. Device Enumeration (verify ASIO on Windows):**
+```bash
+curl http://stagebox1.lan:8080/api/v1/nodes/local/devices | jq '.[] | .name'
+```
+
+**3. Route CRUD Test:**
+```bash
+# Create route
+curl -X POST http://stagebox1.lan:8080/api/v1/routes -H "Content-Type: application/json" -d '{"source_node":"LOCAL","source_device":"device1","source_channel":1,"destination_node":"LOCAL","destination_device":"device2","destination_channel":1,"volume":1.0,"muted":false}'
+# List routes
+curl http://stagebox1.lan:8080/api/v1/routes
+# Delete route
+curl -X DELETE "http://stagebox1.lan:8080/api/v1/routes/ROUTE_ID"
+```
+
+**4. Cross-Node Discovery:**
+```bash
+curl http://stagebox1.lan:8080/api/v1/nodes | jq '.[] | .name'
+# Should show both stagebox1 and develbox
+```
+
+**5. Network Route Test (stagebox1 ↔ develbox):**
+```bash
+# Create cross-node route
+curl -X POST http://stagebox1.lan:8080/api/v1/routes -H "Content-Type: application/json" -d '{"source_node":"develbox","source_device":"device1","source_channel":1,"destination_node":"LOCAL","destination_device":"device2","destination_channel":1,"volume":1.0,"muted":false}'
+```
+
+### E2E Test Implementation Requirements
+
+Before asking user to test anything, implement and run E2E tests that cover:
+- UI loads with real devices displayed
+- Route creation via API works
+- Route deletion via API works
+- WebSocket metering (when implemented)
+- Cross-node discovery
+- Audio routing between devices (verified with test tones when possible)
 
 ### TARGETS.md Management
 
