@@ -4,6 +4,9 @@
  * Handles COM registration and ASIO driver registry entries.
  */
 
+// INITGUID must be defined before including any headers that use DEFINE_GUID
+// This causes DEFINE_GUID to actually define the GUID rather than just declare it
+#include <initguid.h>
 #include "virtual_asio.h"
 #include <objbase.h>
 #include <olectl.h>  // For SELFREG_E_CLASS
