@@ -39,11 +39,13 @@ pub mod device;
 pub mod error;
 pub mod host;
 pub mod stream;
+pub mod virtual_device;
 
 pub use device::{AsioDevice, AsioDeviceInfo};
 pub use error::{AsioError, AsioResult};
 pub use host::AsioHost;
 pub use stream::AsioStream;
+pub use virtual_device::{VirtualDevice, VirtualDeviceConfig};
 
 /// Check if ASIO support is available at runtime.
 ///
