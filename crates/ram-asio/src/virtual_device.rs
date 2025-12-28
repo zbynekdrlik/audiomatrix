@@ -42,19 +42,20 @@ pub struct SharedMemoryHeader {
 impl std::fmt::Debug for SharedMemoryHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Safe to read packed fields by copying
+        // Using finish_non_exhaustive() since some fields (positions, flags) are omitted
         f.debug_struct("SharedMemoryHeader")
             .field("magic", &{ self.magic })
             .field("version", &{ self.version })
             .field("channels", &{ self.channels })
             .field("sample_rate", &{ self.sample_rate })
             .field("buffer_size", &{ self.buffer_size })
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
 /// Flags for shared memory status
 pub mod flags {
-    /// AudioMatrix service is connected
+    /// `AudioMatrix` service is connected
     pub const SERVICE_CONNECTED: u64 = 1 << 0;
     /// ASIO driver is running
     pub const DRIVER_RUNNING: u64 = 1 << 1;
