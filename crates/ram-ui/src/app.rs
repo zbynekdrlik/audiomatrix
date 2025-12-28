@@ -6,9 +6,11 @@ use leptos_router::{
     components::{Route, Router, Routes},
     path,
 };
+use wasm_bindgen_futures::spawn_local;
 
+use crate::api;
 use crate::components::{DeviceList, Header, NodeSelector, RoutingMatrix};
-use crate::state::AppState;
+use crate::state::{AppState, RouteWithId};
 
 /// Root application component.
 #[component]
@@ -18,7 +20,51 @@ pub fn App() -> impl IntoView {
 
     // Create and provide global app state
     let app_state = AppState::new();
-    provide_context(app_state);
+    provide_context(app_state.clone());
+
+    // Fetch initial data on mount
+    let state = app_state.clone();
+    spawn_local(async move {
+        // Fetch nodes
+        match api::get_nodes().await {
+            Ok(nodes) => {
+                if let Some(first_node) = nodes.first().cloned() {
+                    state.current_node.set(Some(first_node.clone()));
+                    state.nodes.set(nodes);
+
+                    // Fetch devices for current node
+                    let node_id = urlencoding::encode(&first_node.id).to_string();
+                    match api::get_devices(&node_id).await {
+                        Ok(devices) => {
+                            state.devices.set(devices);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to fetch devices: {}", e);
+                            state.error.set(Some(format!("Failed to load devices: {}", e)));
+                        }
+                    }
+                }
+                state.connected.set(true);
+            }
+            Err(e) => {
+                log::error!("Failed to fetch nodes: {}", e);
+                state.error.set(Some(format!("Failed to connect: {}", e)));
+            }
+        }
+
+        // Fetch routes
+        match api::get_routes().await {
+            Ok(routes) => {
+                let routes_with_id: Vec<RouteWithId> = routes.into_iter().map(RouteWithId::from).collect();
+                state.routes.set(routes_with_id);
+            }
+            Err(e) => {
+                log::error!("Failed to fetch routes: {}", e);
+            }
+        }
+
+        state.loading.set(false);
+    });
 
     view! {
         <Title text="AudioMatrix"/>
