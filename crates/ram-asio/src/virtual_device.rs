@@ -207,20 +207,22 @@ impl SharedMemoryRegion {
         }
     }
 
-    fn header(&self) -> &SharedMemoryHeader {
-        unsafe { &*(self.ptr as *const SharedMemoryHeader) }
+    fn read_flags(&self) -> u64 {
+        // Use addr_of! to get raw pointer without creating a reference (avoids UB with packed struct)
+        // Then read_unaligned handles potentially unaligned access safely
+        unsafe {
+            let header_ptr = self.ptr.cast::<SharedMemoryHeader>();
+            let flags_ptr = std::ptr::addr_of!((*header_ptr).flags);
+            std::ptr::read_unaligned(flags_ptr)
+        }
     }
 
     fn is_driver_connected(&self) -> bool {
-        // Use volatile read for packed struct field
-        let f = unsafe { std::ptr::read_volatile(&self.header().flags) };
-        f & flags::DRIVER_RUNNING != 0
+        self.read_flags() & flags::DRIVER_RUNNING != 0
     }
 
     fn is_driver_running(&self) -> bool {
-        // Use volatile read for packed struct field
-        let f = unsafe { std::ptr::read_volatile(&self.header().flags) };
-        f & flags::DRIVER_RUNNING != 0
+        self.read_flags() & flags::DRIVER_RUNNING != 0
     }
 }
 

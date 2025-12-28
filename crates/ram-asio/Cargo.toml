@@ -38,8 +38,12 @@ parking_lot = { workspace = true }
 crossbeam-channel = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-# Windows-specific dependencies for ASIO
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Com"] }
+# Windows-specific dependencies for ASIO and virtual device shared memory
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Memory",
+] }
 
 [dev-dependencies]
 proptest = { workspace = true }
