@@ -28,6 +28,17 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## Development Philosophy
 
+### Development Phase Flexibility
+
+**We are in active development phase.** You are free to:
+- Redesign components and APIs
+- Change architecture patterns
+- Fully rework code sections
+- Refactor for better patterns
+- Update ARCHITECTURE.md to reflect changes
+
+This flexibility allows rapid iteration toward the best solution.
+
 ### Core Principles
 
 1. **Architecture-First**: `ARCHITECTURE.md` is the single source of truth. Code follows architecture, never the reverse.
@@ -1051,6 +1062,7 @@ cargo bench -- --sample-size 100
 └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
+**Basic Connectivity:**
 - [ ] Local audio routing on stagebox1 (Windows)
 - [ ] Local audio routing on develbox (Linux)
 - [ ] Network routing: stagebox1 → develbox
@@ -1058,6 +1070,26 @@ cargo bench -- --sample-size 100
 - [ ] Web UI accessible from all machines
 - [ ] API health check from all machines
 - [ ] Cross-platform device discovery
+
+**Deep Feature Testing (per ARCHITECTURE.md):**
+- [ ] Generate sine waves to virtual ASIO devices
+- [ ] Add multiple virtual ASIO devices
+- [ ] Connect to physical ASIO devices
+- [ ] Route audio between virtual ↔ physical devices
+- [ ] Cross-node network routing with audio verification
+- [ ] WebSocket metering updates
+- [ ] Route creation/deletion via API
+- [ ] Route persistence across restarts
+
+### Self-Hosted GitHub Actions Runner (Future)
+
+**stagebox1.lan can be configured as a self-hosted runner** for automated testing:
+- Runs Windows-specific tests (ASIO, Virtual ASIO driver)
+- Executes full E2E tests with real audio hardware
+- Verifies network routing to develbox
+- Automates the 3-point network test as part of CI/CD
+
+This enables fully automated testing of ALL features before merge.
 
 ### CRITICAL: Build via GitHub Actions, NOT on Target Machines
 
