@@ -37,6 +37,7 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/streams/count", get(handlers::get_stream_count))
         // Subscriptions
         .route("/subscriptions", get(handlers::list_subscriptions))
+        .route("/subscriptions", post(handlers::create_subscription))
         .route("/subscriptions/stats", get(handlers::get_subscription_stats))
         // WebSocket
         .route("/ws", get(ws_handler))

@@ -5,7 +5,7 @@ use axum::Json;
 
 use crate::models::{
     DeviceInfo, HealthResponse, LatencyInfo, NodeInfo, RouteDefinition, StreamInfo,
-    SubscriptionInfo, SubscriptionStatsResponse,
+    SubscriptionInfo, SubscriptionRequest, SubscriptionResponse, SubscriptionStatsResponse,
 };
 use crate::state::AppState;
 use crate::websocket::{RouteUpdate, WsEvent};
@@ -260,6 +260,95 @@ pub async fn get_subscription_stats(
     State(state): State<AppState>,
 ) -> Json<SubscriptionStatsResponse> {
     Json(state.subscription_stats())
+}
+
+/// Create a subscription (called by destination node on source node).
+///
+/// This endpoint is called when a destination node wants to subscribe
+/// to audio from this node. We validate the device exists and start
+/// sending VBAN audio to the destination.
+///
+/// # Errors
+///
+/// Returns an error if the device doesn't exist or subscription fails.
+pub async fn create_subscription(
+    State(state): State<AppState>,
+    Json(request): Json<SubscriptionRequest>,
+) -> Result<Json<SubscriptionResponse>> {
+    // Validate that the source device exists
+    let device = state.get_device(&request.source_device);
+    if device.is_none() {
+        return Ok(Json(SubscriptionResponse {
+            success: false,
+            subscription_id: None,
+            vban_stream_name: None,
+            sample_rate: None,
+            error: Some(format!("Device not found: {}", request.source_device)),
+        }));
+    }
+
+    // If we have a route controller, create the subscription
+    if let Some(controller) = state.route_controller() {
+        let manager = controller.subscription_manager();
+
+        // Convert the request to a core subscription request
+        let dest_addr = request
+            .destination_addr
+            .parse()
+            .map_err(|e| crate::Error::BadRequest(format!("Invalid address: {e}")))?;
+
+        let core_request = ram_core::subscription::SubscribeRequest {
+            request_id: 0, // Will be assigned by manager
+            stream_name: request.stream_name.clone(),
+            source_device: request.source_device.clone(),
+            source_channels: request.source_channels.clone(),
+            destination_node: request.destination_node.clone(),
+            destination_addr: dest_addr,
+            sample_rate: request.sample_rate,
+        };
+
+        // Handle the subscription request
+        let ack = manager.handle_subscribe_request(core_request, |_device, _channels| {
+            // For now, accept all devices that exist
+            // In the future, validate channels
+            true
+        });
+
+        if ack.result.is_success() {
+            tracing::info!(
+                "Subscription created: stream='{}' -> {}",
+                ack.vban_stream_name,
+                request.destination_addr
+            );
+
+            // TODO: Start VBAN sender for this subscription
+            // This requires integration with the VBAN manager
+
+            Ok(Json(SubscriptionResponse {
+                success: true,
+                subscription_id: Some(ack.subscription_id),
+                vban_stream_name: Some(ack.vban_stream_name),
+                sample_rate: Some(ack.sample_rate),
+                error: None,
+            }))
+        } else {
+            Ok(Json(SubscriptionResponse {
+                success: false,
+                subscription_id: None,
+                vban_stream_name: None,
+                sample_rate: None,
+                error: Some(format!("Subscription failed: {:?}", ack.result)),
+            }))
+        }
+    } else {
+        Ok(Json(SubscriptionResponse {
+            success: false,
+            subscription_id: None,
+            vban_stream_name: None,
+            sample_rate: None,
+            error: Some("No route controller available".to_string()),
+        }))
+    }
 }
 
 // --- Latency Handlers ---

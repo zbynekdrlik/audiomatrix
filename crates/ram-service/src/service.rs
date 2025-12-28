@@ -25,6 +25,7 @@ use ram_discovery::{
 
 use crate::audio_processor::AudioProcessor;
 use crate::config::ServiceConfig;
+use crate::vban_manager::{VbanManager, VbanManagerConfig};
 
 /// Service shutdown signal.
 #[derive(Debug, Clone)]
@@ -83,6 +84,8 @@ pub struct AudioMatrixService {
     device_manager: Arc<DeviceManager>,
     /// Audio processor for real-time audio routing.
     audio_processor: Arc<AudioProcessor>,
+    /// VBAN manager for cross-node audio.
+    vban_manager: Arc<VbanManager>,
     /// Service announcer for mDNS.
     announcer: Option<ServiceAnnouncer>,
     /// Service browser for discovery.
@@ -123,11 +126,24 @@ impl AudioMatrixService {
             Some(route_controller),
         );
 
+        // Create VBAN manager for cross-node audio
+        let vban_config = VbanManagerConfig {
+            local_port: config.vban.port,
+            sample_rate: 48000,
+        };
+        let vban_manager = Arc::new(VbanManager::new(
+            vban_config,
+            Arc::clone(audio_processor.buffer_pool()),
+            Arc::clone(audio_processor.routing_table()),
+            Arc::clone(audio_processor.subscription_manager()),
+        ));
+
         Self {
             config,
             app_state,
             device_manager,
             audio_processor,
+            vban_manager,
             announcer: None,
             browser: None,
             broadcast_discovery: None,
@@ -218,6 +234,13 @@ impl AudioMatrixService {
 
         // Start metering broadcast
         self.start_metering_broadcast();
+
+        // Start VBAN receiver for cross-node audio
+        if let Err(e) = self.vban_manager.start_receiver().await {
+            warn!("Failed to start VBAN receiver: {e}");
+        } else {
+            info!("VBAN receiver started on port {}", self.config.vban.port);
+        }
 
         *self.state.write() = ServiceState::Running;
         info!("AudioMatrix service is running");
@@ -518,6 +541,10 @@ impl AudioMatrixService {
         // Signal shutdown
         self.running.store(false, Ordering::SeqCst);
         self.shutdown.shutdown();
+
+        // Stop VBAN manager
+        self.vban_manager.stop_all().await;
+        info!("VBAN manager stopped");
 
         // Stop audio processor first to ensure clean audio shutdown
         self.audio_processor.stop();

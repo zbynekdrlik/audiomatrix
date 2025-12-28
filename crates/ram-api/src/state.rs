@@ -15,7 +15,7 @@ use crate::models::{
     DeviceInfo, DeviceType, LatencyInfo, NodeInfo, RouteDefinition, StreamDirection, StreamInfo,
     SubscriptionInfo, SubscriptionState as ApiSubscriptionState, SubscriptionStatsResponse,
 };
-use crate::websocket::WsEvent;
+use crate::websocket::{SubscriptionNeededEvent, WsEvent};
 
 /// Shared application state.
 #[derive(Clone)]
@@ -209,11 +209,17 @@ impl AppState {
     /// If a route controller is available, the route will also be applied
     /// to the live audio processor.
     ///
+    /// For cross-node routes (source on different node), this also triggers
+    /// VBAN subscription setup.
+    ///
     /// # Errors
     ///
     /// Returns an error if the route controller rejects the route.
     pub fn upsert_route(&self, route: RouteDefinition) -> Result<String, String> {
         let id = Self::route_id(&route);
+
+        // Check if this is a cross-node route
+        let is_cross_node = self.is_cross_node_route(&route);
 
         // If we have a route controller, apply the route to the audio processor
         if let Some(controller) = &self.inner.route_controller {
@@ -227,25 +233,69 @@ impl AppState {
                 route.destination_channel,
             );
 
-            // Check if route already exists in controller
-            if !controller.has_route(&conn_id) {
-                controller
-                    .add_route(conn_id.clone())
-                    .map_err(|e| e.to_string())?;
-            }
+            // For local routes, add to audio processor directly
+            // For cross-node routes, we need subscription handshake first
+            if !is_cross_node {
+                // Check if route already exists in controller
+                if !controller.has_route(&conn_id) {
+                    controller
+                        .add_route(conn_id.clone())
+                        .map_err(|e| e.to_string())?;
+                }
 
-            // Apply gain and mute settings
-            controller
-                .set_route_gain(&conn_id, route.volume)
-                .map_err(|e| e.to_string())?;
-            controller
-                .set_route_muted(&conn_id, route.muted)
-                .map_err(|e| e.to_string())?;
+                // Apply gain and mute settings
+                controller
+                    .set_route_gain(&conn_id, route.volume)
+                    .map_err(|e| e.to_string())?;
+                controller
+                    .set_route_muted(&conn_id, route.muted)
+                    .map_err(|e| e.to_string())?;
+            } else {
+                // Cross-node route: Log for now, subscription handler will set up VBAN
+                tracing::info!(
+                    "Cross-node route created: {} -> {} (requires VBAN subscription)",
+                    route.source_node,
+                    route.destination_node
+                );
+            }
         }
 
         // Store in local state
-        self.inner.routes.write().insert(id.clone(), route);
+        self.inner.routes.write().insert(id.clone(), route.clone());
+
+        // For cross-node routes, broadcast subscription needed event
+        if is_cross_node {
+            self.broadcast_event(WsEvent::SubscriptionNeeded(SubscriptionNeededEvent {
+                route_id: id.clone(),
+                source_node: route.source_node.clone(),
+                source_device: route.source_device.clone(),
+                source_channel: route.source_channel,
+                destination_node: route.destination_node.clone(),
+                destination_device: route.destination_device.clone(),
+                destination_channel: route.destination_channel,
+            }));
+        }
+
         Ok(id)
+    }
+
+    /// Checks if a route crosses node boundaries.
+    fn is_cross_node_route(&self, route: &RouteDefinition) -> bool {
+        let local_id = self.local_node().id;
+        let local_name = self.local_node().name;
+
+        // Check if source is local
+        let source_is_local = route.source_node == "LOCAL"
+            || route.source_node == local_id
+            || route.source_node == local_name;
+
+        // Check if destination is local
+        let dest_is_local = route.destination_node == "LOCAL"
+            || route.destination_node == local_id
+            || route.destination_node == local_name;
+
+        // It's cross-node if either endpoint is remote
+        !source_is_local || !dest_is_local
     }
 
     /// Removes a route.

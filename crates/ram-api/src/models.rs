@@ -78,16 +78,37 @@ pub struct RouteDefinition {
     pub muted: bool,
 }
 
-/// Subscription request.
-#[derive(Debug, Serialize, Deserialize)]
+/// Subscription request (sent from destination node to source node).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::struct_field_names)]
 pub struct SubscriptionRequest {
-    /// Source node.
-    pub source_node: String,
-    /// Source device.
+    /// Stream name for VBAN.
+    pub stream_name: String,
+    /// Source device on this node.
     pub source_device: String,
-    /// Source channel (1-based).
-    pub source_channel: u16,
+    /// Source channels (1-based).
+    pub source_channels: Vec<u16>,
+    /// Destination node name.
+    pub destination_node: String,
+    /// Destination address (IP:port for VBAN).
+    pub destination_addr: String,
+    /// Requested sample rate.
+    pub sample_rate: u32,
+}
+
+/// Subscription response (sent from source node to destination node).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionResponse {
+    /// Whether the subscription was accepted.
+    pub success: bool,
+    /// Subscription ID on source node.
+    pub subscription_id: Option<u64>,
+    /// VBAN stream name (may differ from requested).
+    pub vban_stream_name: Option<String>,
+    /// Actual sample rate.
+    pub sample_rate: Option<u32>,
+    /// Error message if failed.
+    pub error: Option<String>,
 }
 
 /// Metering data.

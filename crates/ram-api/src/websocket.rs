@@ -26,6 +26,9 @@ pub enum WsEvent {
     /// Device state changed.
     #[serde(rename = "device_status")]
     DeviceStatus(DeviceStatusUpdate),
+    /// Subscription needed for cross-node route.
+    #[serde(rename = "subscription_needed")]
+    SubscriptionNeeded(SubscriptionNeededEvent),
     /// Error occurred.
     #[serde(rename = "error")]
     Error(ErrorUpdate),
@@ -76,6 +79,25 @@ pub struct ErrorUpdate {
     pub code: String,
     /// Error message.
     pub message: String,
+}
+
+/// Subscription needed event for cross-node routing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionNeededEvent {
+    /// Route identifier.
+    pub route_id: String,
+    /// Source node identifier.
+    pub source_node: String,
+    /// Source device identifier.
+    pub source_device: String,
+    /// Source channel (1-based).
+    pub source_channel: u16,
+    /// Destination node identifier.
+    pub destination_node: String,
+    /// Destination device identifier.
+    pub destination_device: String,
+    /// Destination channel (1-based).
+    pub destination_channel: u16,
 }
 
 /// WebSocket command from client.

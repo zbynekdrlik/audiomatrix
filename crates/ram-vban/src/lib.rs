@@ -31,7 +31,7 @@ pub use jitter::{JitterBuffer, JitterBufferConfig, JitterBufferState, JitterStat
 pub use pool::{PacketBuffer, PacketPool, PooledPacket};
 pub use protocol::{VbanHeader, VbanProtocol, VbanSampleRate, VbanSubProtocol};
 pub use receiver::VbanReceiver;
-pub use sender::VbanSender;
+pub use sender::{VbanSender, VbanSenderConfig};
 pub use stream::{ManagedReceiveStream, StreamEvent, StreamManager, StreamState};
 
 /// Default VBAN port.

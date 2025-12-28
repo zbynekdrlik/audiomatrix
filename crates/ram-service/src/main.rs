@@ -18,6 +18,7 @@ mod audio_processor;
 mod config;
 mod route_manager;
 mod service;
+mod vban_manager;
 
 use config::ServiceConfig;
 use service::AudioMatrixService;
