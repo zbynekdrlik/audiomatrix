@@ -108,11 +108,42 @@ if(MSVC)
     )
 endif()
 
+# =============================================================================
+# COM Loading Test (tests actual ASIO host loading path)
+# =============================================================================
+add_executable(asio_com_test
+    asio_com_test.cpp
+)
+
+target_link_libraries(asio_com_test PRIVATE
+    ole32
+    uuid
+)
+
+target_compile_definitions(asio_com_test PRIVATE
+    UNICODE
+    _UNICODE
+    NOMINMAX
+)
+
+if(MSVC)
+    target_compile_options(asio_com_test PRIVATE
+        /W4
+        /WX
+        /MP
+    )
+endif()
+
 # Enable CTest
 enable_testing()
 
-# Add test that runs asio_test
+# In-process test (direct factory call)
 add_test(NAME asio_driver_test COMMAND asio_test)
+
+# COM loading test (mimics how Ableton loads the driver)
+add_test(NAME asio_com_loading_test
+    COMMAND asio_com_test "$<TARGET_FILE:AudioMatrixASIO>"
+)
 
 # =============================================================================
 # Install targets
