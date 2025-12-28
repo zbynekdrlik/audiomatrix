@@ -14,7 +14,10 @@ use tracing::{error, info, warn};
 
 use ram_api::{router::create_router_with_state, AppState};
 use ram_core::device::DeviceManager;
-use ram_discovery::{DiscoveryEvent, ServiceAnnouncer, ServiceBrowser};
+use ram_discovery::{
+    BroadcastAnnouncement, BroadcastDiscovery, BroadcastEvent, DiscoveryEvent, ServiceAnnouncer,
+    ServiceBrowser,
+};
 
 use crate::audio_processor::AudioProcessor;
 use crate::config::ServiceConfig;
@@ -80,6 +83,8 @@ pub struct AudioMatrixService {
     announcer: Option<ServiceAnnouncer>,
     /// Service browser for discovery.
     browser: Option<ServiceBrowser>,
+    /// Broadcast discovery (UDP fallback).
+    broadcast_discovery: Option<Arc<BroadcastDiscovery>>,
     /// Shutdown signal.
     shutdown: ShutdownSignal,
     /// Current service state.
@@ -90,6 +95,8 @@ pub struct AudioMatrixService {
     api_task: Option<JoinHandle<()>>,
     /// Discovery event task.
     discovery_task: Option<JoinHandle<()>>,
+    /// Broadcast discovery event task.
+    broadcast_task: Option<JoinHandle<()>>,
 }
 
 impl AudioMatrixService {
@@ -117,11 +124,13 @@ impl AudioMatrixService {
             audio_processor,
             announcer: None,
             browser: None,
+            broadcast_discovery: None,
             shutdown: ShutdownSignal::new(),
             state: Arc::new(RwLock::new(ServiceState::Initializing)),
             running: Arc::new(AtomicBool::new(false)),
             api_task: None,
             discovery_task: None,
+            broadcast_task: None,
         }
     }
 
@@ -210,7 +219,7 @@ impl AudioMatrixService {
     fn start_discovery(&mut self) {
         info!("Starting service discovery...");
 
-        // Start announcer
+        // Start mDNS announcer (may not work reliably on all platforms)
         match ServiceAnnouncer::new(&self.config.node_name, self.config.api.port) {
             Ok(announcer) => {
                 self.announcer = Some(announcer);
@@ -221,7 +230,7 @@ impl AudioMatrixService {
             },
         }
 
-        // Start browser
+        // Start mDNS browser
         match ServiceBrowser::new() {
             Ok(browser) => {
                 // Subscribe to discovery events
@@ -236,7 +245,7 @@ impl AudioMatrixService {
                             Ok(event) => match event {
                                 DiscoveryEvent::NodeDiscovered(node)
                                 | DiscoveryEvent::NodeUpdated(node) => {
-                                    info!("Discovered node: {} at {:?}", node.name, node.addresses);
+                                    info!("Discovered node via mDNS: {} at {:?}", node.name, node.addresses);
                                     // Use node name as ID since discovery doesn't provide ID
                                     let id = format!("{}@{}", node.name, node.hostname);
                                     app_state.upsert_remote_node(ram_api::models::NodeInfo {
@@ -272,6 +281,79 @@ impl AudioMatrixService {
             },
             Err(e) => {
                 warn!("Failed to start service browser: {e}");
+            },
+        }
+
+        // Start UDP broadcast discovery (reliable fallback)
+        self.start_broadcast_discovery();
+    }
+
+    /// Starts the UDP broadcast discovery fallback.
+    fn start_broadcast_discovery(&mut self) {
+        let announcement = BroadcastAnnouncement {
+            name: self.config.node_name.clone(),
+            api_port: self.config.api.port,
+            vban_port: self.config.vban.port,
+            input_channels: 0,  // Will be updated when streams start
+            output_channels: 0,
+            sample_rate: 48000,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        };
+
+        match BroadcastDiscovery::with_defaults(announcement) {
+            Ok(discovery) => {
+                let discovery = Arc::new(discovery);
+
+                // Subscribe to broadcast events
+                let rx = discovery.subscribe();
+                let app_state = self.app_state.clone();
+                let running = self.running.clone();
+
+                // Spawn task to handle broadcast discovery events
+                let task = tokio::task::spawn_blocking(move || {
+                    while running.load(Ordering::SeqCst) {
+                        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                            Ok(event) => match event {
+                                BroadcastEvent::NodeDiscovered(node) => {
+                                    info!(
+                                        "Discovered node via broadcast: {} at {}:{}",
+                                        node.name, node.address, node.api_port
+                                    );
+                                    let id = format!("{}@{}", node.name, node.address);
+                                    app_state.upsert_remote_node(ram_api::models::NodeInfo {
+                                        id,
+                                        name: node.name.clone(),
+                                        addresses: vec![node.address.to_string()],
+                                        api_port: node.api_port,
+                                        vban_port: node.vban_port,
+                                        online: true,
+                                    });
+                                },
+                                BroadcastEvent::NodeTimeout(name) => {
+                                    info!("Node timed out: {name}");
+                                    // Don't remove immediately - mDNS might still have it
+                                },
+                            },
+                            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                                // Continue polling
+                            },
+                            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                                break;
+                            },
+                        }
+                    }
+                });
+
+                if let Err(e) = discovery.start() {
+                    warn!("Failed to start broadcast discovery: {e}");
+                } else {
+                    self.broadcast_task = Some(task);
+                    self.broadcast_discovery = Some(discovery);
+                    info!("Broadcast discovery started");
+                }
+            },
+            Err(e) => {
+                warn!("Failed to create broadcast discovery: {e}");
             },
         }
     }
@@ -394,10 +476,22 @@ impl AudioMatrixService {
             info!("Service browser stopped");
         }
 
+        // Stop broadcast discovery
+        if let Some(broadcast) = self.broadcast_discovery.take() {
+            broadcast.stop();
+            info!("Broadcast discovery stopped");
+        }
+
         // Wait for discovery task
         if let Some(task) = self.discovery_task.take() {
             let _ = task.await;
             info!("Discovery task stopped");
+        }
+
+        // Wait for broadcast task
+        if let Some(task) = self.broadcast_task.take() {
+            let _ = task.await;
+            info!("Broadcast task stopped");
         }
 
         // Wait for API task

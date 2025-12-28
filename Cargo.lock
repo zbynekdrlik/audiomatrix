@@ -2045,7 +2045,7 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
 name = "ram-api"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "axum",
  "base64",
@@ -2069,7 +2069,7 @@ dependencies = [
 
 [[package]]
 name = "ram-asio"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "cpal",
@@ -2085,7 +2085,7 @@ dependencies = [
 
 [[package]]
 name = "ram-core"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -2102,7 +2102,7 @@ dependencies = [
 
 [[package]]
 name = "ram-discovery"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "crossbeam-channel",
  "flume",
@@ -2110,6 +2110,7 @@ dependencies = [
  "mdns-sd",
  "parking_lot",
  "serde",
+ "serde_json",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -2117,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "ram-service"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "axum",
@@ -2139,7 +2140,7 @@ dependencies = [
 
 [[package]]
 name = "ram-ui"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "chrono",
  "console_error_panic_hook",
@@ -2163,7 +2164,7 @@ dependencies = [
 
 [[package]]
 name = "ram-vban"
-version = "0.1.0-dev.3"
+version = "0.1.0-dev.5"
 dependencies = [
  "crossbeam-channel",
  "parking_lot",
