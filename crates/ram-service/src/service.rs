@@ -12,7 +12,11 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
-use ram_api::{router::create_router_with_state, AppState};
+use ram_api::{
+    router::create_router_with_state,
+    websocket::{MeteringUpdate, WsEvent},
+    AppState,
+};
 use ram_core::device::DeviceManager;
 use ram_discovery::{
     BroadcastAnnouncement, BroadcastDiscovery, BroadcastEvent, DiscoveryEvent, ServiceAnnouncer,
@@ -97,6 +101,8 @@ pub struct AudioMatrixService {
     discovery_task: Option<JoinHandle<()>>,
     /// Broadcast discovery event task.
     broadcast_task: Option<JoinHandle<()>>,
+    /// Metering broadcast task.
+    metering_task: Option<JoinHandle<()>>,
 }
 
 impl AudioMatrixService {
@@ -131,6 +137,7 @@ impl AudioMatrixService {
             api_task: None,
             discovery_task: None,
             broadcast_task: None,
+            metering_task: None,
         }
     }
 
@@ -208,6 +215,9 @@ impl AudioMatrixService {
 
         // Start default audio streams
         self.start_default_streams();
+
+        // Start metering broadcast
+        self.start_metering_broadcast();
 
         *self.state.write() = ServiceState::Running;
         info!("AudioMatrix service is running");
@@ -426,6 +436,59 @@ impl AudioMatrixService {
         );
     }
 
+    /// Starts the metering broadcast task.
+    ///
+    /// This task periodically reads meter levels from all active streams
+    /// and broadcasts them via WebSocket to connected clients.
+    fn start_metering_broadcast(&mut self) {
+        // Get the thread-safe metering contexts (can be shared across threads)
+        let metering_contexts = Arc::clone(self.audio_processor.metering_contexts());
+        let app_state = self.app_state.clone();
+        let running = self.running.clone();
+        let node_name = self.config.node_name.clone();
+
+        // Use spawn_blocking for the metering loop
+        let task = tokio::task::spawn_blocking(move || {
+            // Broadcast metering at 30 Hz (every ~33ms)
+            let interval = std::time::Duration::from_millis(33);
+
+            while running.load(Ordering::SeqCst) {
+                std::thread::sleep(interval);
+
+                // Collect input meters
+                for (device_id, levels) in metering_contexts.all_input_meters() {
+                    let db_levels: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
+
+                    // Only broadcast if there are non-silent levels
+                    if db_levels.iter().any(|&l| l > -120.0) {
+                        app_state.broadcast_event(WsEvent::Metering(MeteringUpdate {
+                            node: node_name.clone(),
+                            device: device_id,
+                            levels: db_levels,
+                        }));
+                    }
+                }
+
+                // Collect output meters
+                for (device_id, levels) in metering_contexts.all_output_meters() {
+                    let db_levels: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
+
+                    // Only broadcast if there are non-silent levels
+                    if db_levels.iter().any(|&l| l > -120.0) {
+                        app_state.broadcast_event(WsEvent::Metering(MeteringUpdate {
+                            node: node_name.clone(),
+                            device: device_id,
+                            levels: db_levels,
+                        }));
+                    }
+                }
+            }
+        });
+
+        self.metering_task = Some(task);
+        info!("Metering broadcast started (30 Hz)");
+    }
+
     /// Runs the service until shutdown.
     ///
     /// # Errors
@@ -492,6 +555,12 @@ impl AudioMatrixService {
         if let Some(task) = self.broadcast_task.take() {
             let _ = task.await;
             info!("Broadcast task stopped");
+        }
+
+        // Wait for metering task
+        if let Some(task) = self.metering_task.take() {
+            let _ = task.await;
+            info!("Metering task stopped");
         }
 
         // Wait for API task

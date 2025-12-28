@@ -20,6 +20,7 @@ use tracing::{debug, error, info};
 use ram_core::callbacks::{
     create_input_callback, create_output_callback, InputCallbackContext, OutputCallbackContext,
 };
+use ram_core::metering::MeterLevels;
 use ram_core::device::DeviceDirection;
 use ram_core::latency::LatencyCalculator;
 use ram_core::ring_buffer_pool::RingBufferPool;
@@ -32,9 +33,10 @@ use ram_core::ConnectionId;
 
 use crate::route_manager::{RouteManager, RouteManagerConfig};
 
-/// Wrapper for a cpal Stream with its associated metadata.
+/// Wrapper for a cpal stream with its associated metadata.
 struct CpalStreamHandle {
     /// The cpal stream (must be kept alive for audio to flow).
+    #[allow(dead_code)]
     stream: Stream,
     /// Device ID this stream belongs to.
     device_id: String,
@@ -51,6 +53,78 @@ impl std::fmt::Debug for CpalStreamHandle {
             .field("channels", &self.channels)
             .field("sample_rate", &self.sample_rate)
             .finish()
+    }
+}
+
+/// Thread-safe container for metering contexts.
+/// Separated from cpal streams to allow cross-thread access.
+#[derive(Debug, Default)]
+pub struct MeteringContexts {
+    /// Input device contexts (device_id -> context).
+    input: RwLock<HashMap<String, Arc<InputCallbackContext>>>,
+    /// Output device contexts (device_id -> context).
+    output: RwLock<HashMap<String, Arc<OutputCallbackContext>>>,
+}
+
+impl MeteringContexts {
+    /// Creates a new empty metering contexts container.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Registers an input context.
+    pub fn register_input(&self, device_id: &str, context: Arc<InputCallbackContext>) {
+        self.input.write().insert(device_id.to_string(), context);
+    }
+
+    /// Registers an output context.
+    pub fn register_output(&self, device_id: &str, context: Arc<OutputCallbackContext>) {
+        self.output.write().insert(device_id.to_string(), context);
+    }
+
+    /// Unregisters an input context.
+    pub fn unregister_input(&self, device_id: &str) {
+        self.input.write().remove(device_id);
+    }
+
+    /// Unregisters an output context.
+    pub fn unregister_output(&self, device_id: &str) {
+        self.output.write().remove(device_id);
+    }
+
+    /// Returns all input meter data as (device_id, levels) pairs.
+    #[must_use]
+    pub fn all_input_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
+        let contexts = self.input.read();
+        contexts
+            .iter()
+            .map(|(device_id, ctx)| {
+                let levels = ctx.meters().all_levels();
+                ctx.meters().reset();
+                (device_id.clone(), levels)
+            })
+            .collect()
+    }
+
+    /// Returns all output meter data as (device_id, levels) pairs.
+    #[must_use]
+    pub fn all_output_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
+        let contexts = self.output.read();
+        contexts
+            .iter()
+            .map(|(device_id, ctx)| {
+                let levels = ctx.meters().all_levels();
+                ctx.meters().reset();
+                (device_id.clone(), levels)
+            })
+            .collect()
+    }
+
+    /// Clears all contexts.
+    pub fn clear(&self) {
+        self.input.write().clear();
+        self.output.write().clear();
     }
 }
 
@@ -117,6 +191,8 @@ pub struct AudioProcessor {
     input_streams: RwLock<HashMap<String, CpalStreamHandle>>,
     /// Active cpal output streams (device_id -> handle).
     output_streams: RwLock<HashMap<String, CpalStreamHandle>>,
+    /// Thread-safe metering contexts (separated for cross-thread access).
+    metering_contexts: Arc<MeteringContexts>,
 }
 
 impl std::fmt::Debug for AudioProcessor {
@@ -147,6 +223,7 @@ impl AudioProcessor {
             running: std::sync::atomic::AtomicBool::new(false),
             input_streams: RwLock::new(HashMap::new()),
             output_streams: RwLock::new(HashMap::new()),
+            metering_contexts: Arc::new(MeteringContexts::new()),
         }
     }
 
@@ -248,6 +325,9 @@ impl AudioProcessor {
             output_streams.clear();
             info!("Stopped {} output streams", output_count);
         }
+
+        // Clear metering contexts
+        self.metering_contexts.clear();
 
         // Stop all streams in registry
         self.stream_registry().clear();
@@ -437,10 +517,13 @@ impl AudioProcessor {
             device_id, channels, sample_rate, buffer_indices
         );
 
-        let stream = Self::build_input_stream(&device, &config, context)?;
+        let stream = Self::build_input_stream(&device, &config, Arc::clone(&context))?;
         stream
             .play()
             .map_err(|e| anyhow!("Failed to start input stream: {e}"))?;
+
+        // Register context for metering access (thread-safe)
+        self.metering_contexts.register_input(device_id, context);
 
         self.input_streams.write().insert(
             device_id.to_string(),
@@ -475,10 +558,13 @@ impl AudioProcessor {
             device_id, channels, sample_rate, dest_indices
         );
 
-        let stream = Self::build_output_stream(&device, &config, context)?;
+        let stream = Self::build_output_stream(&device, &config, Arc::clone(&context))?;
         stream
             .play()
             .map_err(|e| anyhow!("Failed to start output stream: {e}"))?;
+
+        // Register context for metering access (thread-safe)
+        self.metering_contexts.register_output(device_id, context);
 
         self.output_streams.write().insert(
             device_id.to_string(),
@@ -498,6 +584,7 @@ impl AudioProcessor {
     pub fn stop_input_stream(&self, device_id: &str) -> Result<()> {
         let removed = self.input_streams.write().remove(device_id);
         if removed.is_some() {
+            self.metering_contexts.unregister_input(device_id);
             info!("Input stream stopped on {device_id}");
             Ok(())
         } else {
@@ -507,6 +594,7 @@ impl AudioProcessor {
 
     /// Stops an output stream for the specified device.
     pub fn stop_output_stream(&self, device_id: &str) -> Result<()> {
+        self.metering_contexts.unregister_output(device_id);
         let removed = self.output_streams.write().remove(device_id);
         if removed.is_some() {
             info!("Output stream stopped on {device_id}");
@@ -526,6 +614,27 @@ impl AudioProcessor {
     #[must_use]
     pub fn active_output_stream_count(&self) -> usize {
         self.output_streams.read().len()
+    }
+
+    /// Returns the metering contexts for thread-safe metering access.
+    ///
+    /// This returns an Arc that can be cloned and shared across threads
+    /// for periodic metering broadcasts.
+    #[must_use]
+    pub fn metering_contexts(&self) -> &Arc<MeteringContexts> {
+        &self.metering_contexts
+    }
+
+    /// Returns a list of all active input device IDs.
+    #[must_use]
+    pub fn active_input_devices(&self) -> Vec<String> {
+        self.input_streams.read().keys().cloned().collect()
+    }
+
+    /// Returns a list of all active output device IDs.
+    #[must_use]
+    pub fn active_output_devices(&self) -> Vec<String> {
+        self.output_streams.read().keys().cloned().collect()
     }
 
     // ========================================================================
