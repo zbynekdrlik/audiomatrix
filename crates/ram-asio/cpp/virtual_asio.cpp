@@ -16,7 +16,7 @@ static FILE* g_debugLog = nullptr;
 
 static void DebugLog(const char* fmt, ...) {
     if (!g_debugLog) {
-        g_debugLog = fopen("C:\\AudioMatrix_debug.log", "a");
+        fopen_s(&g_debugLog, "C:\\AudioMatrix_debug.log", "a");
     }
     if (g_debugLog) {
         va_list args;
