@@ -159,7 +159,18 @@ Priority order for remaining work:
 - 2 TODOs in `ram-api/websocket.rs` for metering subscription/unsubscription
 - Windows system tray integration not yet implemented
 
+## Known Bugs (2025-12-28 Testing)
+
+- **Route Deletion Crash (Windows/ASIO)**: Service crashes when deleting routes that use ASIO devices.
+  Works correctly on Linux/ALSA. Likely race condition between API thread freeing buffers and ASIO callback.
+- **mDNS Cross-Node Discovery**: Nodes don't discover each other. mDNS multicast (UDP 5353) may be
+  blocked by Windows Firewall. Service announcer now works correctly but browser doesn't receive events.
+
 ## Recently Completed
+
+- **mDNS Hostname Fix** (2025-12-28): Fixed hostname suffix for mDNS registration
+  - Hostnames now end with `.local.` as required by mDNS spec
+  - Service announcer successfully registers on both Windows and Linux
 
 - **API ↔ AudioProcessor Wiring** (2025-12-28): COMPLETE
   - RouteController trait implemented by AudioProcessor
