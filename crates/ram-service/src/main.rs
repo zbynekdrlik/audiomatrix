@@ -16,6 +16,7 @@ use tracing_subscriber::FmtSubscriber;
 
 mod audio_processor;
 mod config;
+mod route_manager;
 mod service;
 
 use config::ServiceConfig;

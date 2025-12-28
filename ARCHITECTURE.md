@@ -120,6 +120,22 @@ audiomatrix/
 | **Linux** | ALSA | Fully supported |
 | **macOS** | CoreAudio | Basic support |
 
+## Windows System Tray Integration
+
+The Windows service includes a system tray icon for easy access:
+
+| Feature | Description |
+|---------|-------------|
+| **Version Display** | Show current version (vX.Y.Z) in tooltip and menu |
+| **Self-Upgrade** | Check for updates and auto-upgrade to latest release |
+| **Stats Display** | Show active streams, routes, buffer usage, latency |
+| **Open Web UI** | Menu item to open web interface in default browser |
+| **View Logs** | Open log file or monitoring console |
+| **Start/Stop** | Control service state from tray menu |
+| **Exit** | Graceful shutdown with confirmation |
+
+Implementation: Use `tray-icon` crate with `muda` for menus.
+
 ## Key Design Decisions
 
 1. **ASIO-First on Windows**: Professional audio production requires ASIO latency
@@ -132,22 +148,26 @@ audiomatrix/
 
 Priority order for remaining work:
 
-1. **API ↔ AudioProcessor Wiring** (CRITICAL): Connect REST API route operations to live RoutingTable
-   - Route CRUD must apply to AudioProcessor, not just AppState
-   - Streams endpoint must read from StreamRegistry
-   - Subscriptions endpoint must query SubscriptionManager
-2. **Metering WebSocket Broadcast**: Push real-time levels to web clients
-3. **Web UI**: React-based routing matrix interface
-4. **VBAN Auto-Creation**: Automatically create VBAN streams for cross-node routes
+1. **Metering WebSocket Broadcast**: Push real-time levels to web clients (2 TODOs in websocket.rs)
+2. **Web UI Polish**: Fix remaining UI functionality (device registration with API)
+3. **VBAN Auto-Creation**: Automatically create VBAN streams for cross-node routes
+4. **E2E Testing**: Full 3-point network testing per CLAUDE.md requirements
 
 ## Known Technical Debt
 
-- `audio_processor.rs` at 1160 lines (exceeds 1000 line limit, needs splitting)
-- `allow(dead_code)` marker indicates some AudioProcessor methods not yet called
-- 3 TODOs in `ram-api/state.rs` for missing wiring
-- 2 TODOs in `ram-api/websocket.rs` for metering events
+- Some `AudioProcessor` methods not yet called from handlers (dead code warnings)
+- 2 TODOs in `ram-api/websocket.rs` for metering subscription/unsubscription
+- Windows system tray integration not yet implemented
 
 ## Recently Completed
+
+- **API ↔ AudioProcessor Wiring** (2025-12-28): COMPLETE
+  - RouteController trait implemented by AudioProcessor
+  - AppState.upsert_route() calls controller.add_route()
+  - AppState.remove_route() calls controller.remove_route()
+  - AppState.all_streams() queries controller.stream_registry()
+  - AppState.all_subscriptions() queries controller.subscription_manager()
+  - Volume/mute changes applied to live audio paths
 
 - **Metering Infrastructure** (2025-12-28): Lock-free level measurement
   - `ChannelMeter` for atomic peak/RMS tracking (`metering.rs`)
