@@ -24,7 +24,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.4
+> **Current Version:** 0.1.0-dev.5
 > **Last Updated:** 2025-12-28
 
 | Component | Status | Crate | Notes |
@@ -159,12 +159,19 @@ Priority order for remaining work:
 - 2 TODOs in `ram-api/websocket.rs` for metering subscription/unsubscription
 - Windows system tray integration not yet implemented
 
-## Known Bugs (2025-12-28 Testing)
+## Known Bugs
 
-- **mDNS Cross-Node Discovery**: Nodes don't discover each other. mDNS multicast (UDP 5353) may be
-  blocked by Windows Firewall. Service announcer now works correctly but browser doesn't receive events.
+*No known bugs at this time.*
 
 ## Recently Completed
+
+- **UDP Broadcast Discovery** (2025-12-28): Reliable cross-node discovery
+  - Added `BroadcastDiscovery` as fallback when mDNS doesn't work reliably
+  - Nodes broadcast announcements every 5 seconds on UDP port 6981
+  - 15-second timeout for stale node detection
+  - Works alongside mDNS - first to discover wins
+  - Tested: stagebox1 (Windows) ↔ develbox (Linux) now discover each other
+
 
 - **Route Deletion Race Condition Fix** (2025-12-28): Fixed crash when deleting routes on Windows/ASIO
   - Implemented deferred buffer freeing in `RingBufferPool` with 2-generation grace period
