@@ -1,0 +1,52 @@
+[package]
+name = "ram-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "AudioMatrix Web UI - Leptos-based routing matrix interface"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Leptos framework
+leptos = { version = "0.7" }
+leptos_router = { version = "0.7" }
+leptos_meta = { version = "0.7" }
+
+# Shared types from ram-api
+ram-api = { path = "../ram-api", default-features = false, features = ["client"] }
+
+# Async runtime for WASM
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["HtmlSelectElement", "Event", "EventTarget"] }
+
+# HTTP client for API calls
+gloo-net = "0.6"
+gloo-timers = "0.3"
+
+# WebSocket for metering
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# URL encoding
+urlencoding = "2.1"
+
+# Logging
+log = "0.4"
+console_log = "1.0"
+console_error_panic_hook = "0.1"
+
+# Time handling
+chrono = { version = "0.4", features = ["wasmbind"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[features]
+default = []
+hydrate = ["leptos/hydrate"]

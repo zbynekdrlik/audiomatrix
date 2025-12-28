@@ -7,7 +7,11 @@ members = [
     "crates/ram-api",
     "crates/ram-asio",
     "crates/ram-service",
+    "crates/ram-ui",
 ]
+
+# ram-ui is built separately with Trunk for WASM target
+exclude = []
 
 [workspace.package]
 version = "0.1.0-dev.2"
@@ -53,7 +57,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 parking_lot = "0.12"
 crossbeam-channel = "0.5"
 crossbeam-utils = "0.8"
-uuid = { version = "1.11", features = ["v4", "serde"] }
+uuid = { version = "1.11", features = ["v4", "serde", "js"] }
 hostname = "0.4"
 flume = "0.11"
 futures-util = "0.3"

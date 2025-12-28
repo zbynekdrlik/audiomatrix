@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AudioMatrix - Professional Audio Routing System">
+    <title>AudioMatrix</title>
+    <link data-trunk rel="css" href="style.css">
+</head>
+<body>
+    <noscript>
+        <div style="padding: 2rem; text-align: center;">
+            <h1>AudioMatrix</h1>
+            <p>JavaScript is required to run this application.</p>
+        </div>
+    </noscript>
+    <div id="loading" style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: system-ui;">
+        <div style="text-align: center;">
+            <h1 style="margin-bottom: 1rem;">AudioMatrix</h1>
+            <p>Loading...</p>
+        </div>
+    </div>
+    <link data-trunk rel="rust" data-wasm-opt="z"/>
+    <script>
+        // Hide loading screen when WASM is ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loading = document.getElementById('loading');
+                if (loading) loading.style.display = 'none';
+            }, 100);
+        });
+    </script>
+</body>
+</html>
