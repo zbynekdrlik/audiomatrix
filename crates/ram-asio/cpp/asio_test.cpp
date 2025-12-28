@@ -16,6 +16,9 @@
  *   4 = Audio callback test failed
  */
 
+// INITGUID must be defined before including virtual_asio.h
+// This causes DEFINE_GUID to actually allocate storage for the GUID
+#include <initguid.h>
 #include "virtual_asio.h"
 #include <cstdio>
 #include <atomic>
