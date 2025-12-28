@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Leptos framework
-leptos = { version = "0.7" }
+leptos = { version = "0.7", features = ["csr"] }
 leptos_router = { version = "0.7" }
 leptos_meta = { version = "0.7" }
 
