@@ -140,6 +140,7 @@ impl VirtualDevice {
 struct SharedMemoryRegion {
     handle: windows::Win32::Foundation::HANDLE,
     ptr: *mut std::ffi::c_void,
+    #[allow(dead_code)] // Stored for potential debugging/diagnostics
     size: usize,
 }
 

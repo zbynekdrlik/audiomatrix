@@ -6,6 +6,7 @@
 
 #include "virtual_asio.h"
 #include <objbase.h>
+#include <olectl.h>  // For SELFREG_E_CLASS
 #include <string>
 #include <sstream>
 

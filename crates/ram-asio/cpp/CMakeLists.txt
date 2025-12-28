@@ -61,6 +61,8 @@ target_compile_definitions(AudioMatrixASIO PRIVATE
     _UNICODE
     WIN32_LEAN_AND_MEAN
     NOMINMAX
+    # ASIO SDK uses 'interface' keyword (Microsoft extension)
+    "interface=struct"
 )
 
 if(MSVC)
