@@ -83,7 +83,7 @@ extern "C" {
  * - HKLM\SOFTWARE\ASIO\AudioMatrix Virtual
  * - HKLM\SOFTWARE\Classes\CLSID\{...}
  */
-HRESULT DllRegisterServer() {
+STDAPI DllRegisterServer() {
     std::wstring clsidStr = guidToString(CLSID_AudioMatrixASIO);
     std::wstring modulePath = getModulePath();
 
@@ -125,7 +125,7 @@ HRESULT DllRegisterServer() {
 /**
  * Unregister the ASIO driver from the Windows registry.
  */
-HRESULT DllUnregisterServer() {
+STDAPI DllUnregisterServer() {
     std::wstring clsidStr = guidToString(CLSID_AudioMatrixASIO);
 
     // Remove ASIO driver entry

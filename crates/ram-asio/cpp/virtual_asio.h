@@ -261,10 +261,6 @@ private:
 
 } // namespace audiomatrix
 
-// COM DLL exports
-extern "C" {
-    __declspec(dllexport) HRESULT DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv);
-    __declspec(dllexport) HRESULT DllCanUnloadNow();
-    __declspec(dllexport) HRESULT DllRegisterServer();
-    __declspec(dllexport) HRESULT DllUnregisterServer();
-}
+// COM DLL exports - use STDAPI to match Windows SDK declarations
+// These functions are declared in combaseapi.h with WINOLEAPI linkage
+// We only need to provide implementations in dllmain.cpp
