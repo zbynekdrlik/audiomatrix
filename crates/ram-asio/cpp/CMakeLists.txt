@@ -134,6 +134,32 @@ if(MSVC)
     )
 endif()
 
+# =============================================================================
+# CoCreateInstance Test (tests official COM API path)
+# =============================================================================
+add_executable(asio_cocreate_test
+    asio_cocreate_test.cpp
+)
+
+target_link_libraries(asio_cocreate_test PRIVATE
+    ole32
+    uuid
+)
+
+target_compile_definitions(asio_cocreate_test PRIVATE
+    UNICODE
+    _UNICODE
+    NOMINMAX
+)
+
+if(MSVC)
+    target_compile_options(asio_cocreate_test PRIVATE
+        /W4
+        /WX
+        /MP
+    )
+endif()
+
 # Enable CTest
 enable_testing()
 
@@ -144,6 +170,10 @@ add_test(NAME asio_driver_test COMMAND asio_test)
 add_test(NAME asio_com_loading_test
     COMMAND asio_com_test "$<TARGET_FILE:AudioMatrixASIO>"
 )
+
+# NOTE: CoCreateInstance test requires the driver to be registered on the system
+# It's not run in CI but can be run manually after installation
+# add_test(NAME asio_cocreate_test COMMAND asio_cocreate_test)
 
 # =============================================================================
 # Install targets
