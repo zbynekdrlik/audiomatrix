@@ -9,6 +9,24 @@
 #include <cstring>
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
+
+// Debug logging - writes to a file so we can see what's happening
+static FILE* g_debugLog = nullptr;
+
+static void DebugLog(const char* fmt, ...) {
+    if (!g_debugLog) {
+        g_debugLog = fopen("C:\\AudioMatrix_debug.log", "a");
+    }
+    if (g_debugLog) {
+        va_list args;
+        va_start(args, fmt);
+        vfprintf(g_debugLog, fmt, args);
+        fprintf(g_debugLog, "\n");
+        fflush(g_debugLog);
+        va_end(args);
+    }
+}
 
 namespace audiomatrix {
 
@@ -17,10 +35,13 @@ VirtualAsioDriver* g_driverInstance = nullptr;
 std::atomic<long> g_serverLockCount{0};
 
 IASIO* CreateAudioMatrixDriver() {
+    DebugLog("CreateAudioMatrixDriver called");
     if (!g_driverInstance) {
+        DebugLog("Creating new VirtualAsioDriver");
         g_driverInstance = new VirtualAsioDriver();
     }
     g_driverInstance->AddRef();
+    DebugLog("Returning IASIO* at %p", static_cast<IASIO*>(g_driverInstance));
     return static_cast<IASIO*>(g_driverInstance);
 }
 
@@ -41,7 +62,9 @@ VirtualAsioDriver::~VirtualAsioDriver() {
 
 // IUnknown implementation
 STDMETHODIMP VirtualAsioDriver::QueryInterface(REFIID riid, void** ppv) {
+    DebugLog("QueryInterface called");
     if (!ppv) {
+        DebugLog("QueryInterface: ppv is null");
         return E_POINTER;
     }
 
@@ -50,9 +73,11 @@ STDMETHODIMP VirtualAsioDriver::QueryInterface(REFIID riid, void** ppv) {
     if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, CLSID_AudioMatrixASIO)) {
         *ppv = static_cast<IASIO*>(this);
         AddRef();
+        DebugLog("QueryInterface: returning IASIO* at %p", *ppv);
         return S_OK;
     }
 
+    DebugLog("QueryInterface: E_NOINTERFACE");
     return E_NOINTERFACE;
 }
 
@@ -70,8 +95,10 @@ STDMETHODIMP_(ULONG) VirtualAsioDriver::Release() {
 }
 
 // IASIO implementation
-ASIOBool VirtualAsioDriver::init(void* /*sysHandle*/) {
+ASIOBool VirtualAsioDriver::init(void* sysHandle) {
+    DebugLog("init called with sysHandle=%p", sysHandle);
     if (m_initialized) {
+        DebugLog("init: already initialized");
         return ASIOTrue;
     }
 
@@ -81,9 +108,11 @@ ASIOBool VirtualAsioDriver::init(void* /*sysHandle*/) {
         // Service not running or no virtual device configured
         // Use default configuration and wait for service
         strcpy_s(m_errorMessage, "AudioMatrix service not connected");
+        DebugLog("init: service not connected");
     }
 
     m_initialized = true;
+    DebugLog("init: returning ASIOTrue");
     return ASIOTrue;
 }
 
@@ -160,8 +189,10 @@ ASIOError VirtualAsioDriver::stop() {
 }
 
 ASIOError VirtualAsioDriver::getChannels(long* numInputChannels, long* numOutputChannels) {
+    DebugLog("getChannels called");
     if (numInputChannels) *numInputChannels = m_numInputChannels;
     if (numOutputChannels) *numOutputChannels = m_numOutputChannels;
+    DebugLog("getChannels: %ld in, %ld out", m_numInputChannels, m_numOutputChannels);
     return ASE_OK;
 }
 
@@ -273,7 +304,10 @@ ASIOError VirtualAsioDriver::getChannelInfo(ASIOChannelInfo* info) {
 
 ASIOError VirtualAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numChannels,
                                            long bufferSize, ASIOCallbacks* callbacks) {
+    DebugLog("createBuffers called: numChannels=%ld, bufferSize=%ld, callbacks=%p",
+             numChannels, bufferSize, (void*)callbacks);
     if (!bufferInfos || !callbacks || numChannels <= 0 || bufferSize <= 0) {
+        DebugLog("createBuffers: invalid parameters");
         return ASE_InvalidParameter;
     }
 
