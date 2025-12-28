@@ -28,6 +28,8 @@ pub mod router;
 #[cfg(feature = "server")]
 pub mod state;
 #[cfg(feature = "server")]
+pub mod static_files;
+#[cfg(feature = "server")]
 pub mod websocket;
 
 #[cfg(feature = "server")]

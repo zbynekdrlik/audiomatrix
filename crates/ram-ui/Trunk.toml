@@ -3,7 +3,7 @@
 
 [build]
 # Target directory for build output
-target = "../../target/trunk"
+dist = "dist"
 # Release build for production
 release = false
 
@@ -25,7 +25,4 @@ backend = "http://localhost:8080/api/"
 rewrite = "/ws"
 backend = "ws://localhost:8080/api/v1/ws"
 
-[clean]
-# Clean the target directory on trunk clean
-dist = true
-cargo = false
+# Clean settings are handled automatically by trunk

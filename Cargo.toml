@@ -53,6 +53,9 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Static file embedding
+rust-embed = "8.5"
+
 # Utilities
 parking_lot = "0.12"
 crossbeam-channel = "0.5"

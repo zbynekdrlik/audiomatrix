@@ -1,0 +1,18 @@
+{
+  "name": "audiomatrix-e2e",
+  "version": "1.0.0",
+  "description": "E2E tests for AudioMatrix",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:ui": "npx playwright test --ui",
+    "test:debug": "npx playwright test --debug",
+    "test:local": "npx playwright test app.spec.ts devices.spec.ts routing.spec.ts",
+    "test:network": "npx playwright test network.spec.ts",
+    "test:remote": "NO_SERVER=1 npx playwright test",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

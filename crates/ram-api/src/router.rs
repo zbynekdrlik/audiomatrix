@@ -7,6 +7,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers;
 use crate::state::AppState;
+use crate::static_files::serve_path;
 use crate::websocket::ws_handler;
 use crate::API_VERSION;
 
@@ -43,6 +44,8 @@ pub fn create_router_with_state(state: AppState) -> Router {
 
     Router::new()
         .nest(&format!("/api/{API_VERSION}"), api_routes)
+        // Static files and SPA fallback - serves the web UI
+        .fallback(serve_path)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
 }
