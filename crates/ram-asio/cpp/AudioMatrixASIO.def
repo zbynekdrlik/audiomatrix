@@ -1,0 +1,10 @@
+; AudioMatrix Virtual ASIO Driver
+; Module definition file for COM DLL exports
+
+LIBRARY AudioMatrixASIO
+
+EXPORTS
+    DllGetClassObject       PRIVATE
+    DllCanUnloadNow         PRIVATE
+    DllRegisterServer       PRIVATE
+    DllUnregisterServer     PRIVATE
