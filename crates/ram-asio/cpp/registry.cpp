@@ -154,9 +154,15 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
         return CLASS_E_CLASSNOTAVAILABLE;
     }
 
-    // ASIO hosts typically request IID_IUnknown or use the CLSID as the IID
-    // We return the driver instance directly (ASIO doesn't use COM class factories)
-    if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, CLSID_AudioMatrixASIO)) {
+    // ASIO is unusual: it returns the driver instance directly, not a class factory.
+    // Different hosts request different interfaces:
+    // - Some request IID_IUnknown
+    // - Some request CLSID as IID (treating CLSID as the interface ID)
+    // - CoCreateInstance requests IID_IClassFactory
+    // We return the driver for all of these because ASIO doesn't use factories.
+    if (IsEqualIID(riid, IID_IUnknown) ||
+        IsEqualIID(riid, IID_IClassFactory) ||
+        IsEqualIID(riid, CLSID_AudioMatrixASIO)) {
         IASIO* driver = audiomatrix::CreateAudioMatrixDriver();
         if (driver) {
             *ppv = static_cast<void*>(driver);
