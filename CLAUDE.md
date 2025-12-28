@@ -1011,12 +1011,53 @@ cargo bench -- --sample-size 100
 
 ## Target Machines for Testing
 
-### TARGETS.md Management
+### MANDATORY: 3-Point Network Testing
 
-The file `TARGETS.md` (gitignored, local only) contains target machines for testing:
-- Hostname, IP address, OS type
-- SSH/remote access credentials (user/password)
-- Current deployment status
+**ALWAYS test across all 3 machines to verify both local and network features:**
+
+| Machine | Hostname | OS | Role | Restrictions |
+|---------|----------|----|----- |--------------|
+| **stagebox1** | stagebox1.lan | Windows | **PRIMARY Windows testing** | **NONE** - full testing allowed |
+| **develbox** | develbox (10.77.9.21) | Linux | Development + Linux testing | None |
+| **iem** | iem (10.77.9.231) | Windows | Production reference only | **STRICT** - see below |
+
+### stagebox1.lan - PRIMARY WINDOWS TEST MACHINE
+
+**This is the FIRST machine to test Windows builds on.** No restrictions apply.
+
+- Full software installation allowed
+- Service installation allowed
+- Driver testing allowed
+- ASIO device testing allowed
+- Network routing testing allowed
+- **Always test here BEFORE considering IEM**
+
+### develbox - Linux Development Machine
+
+- Primary development environment
+- Linux binary testing
+- API/UI development and testing
+- Network routing endpoint
+
+### 3-Point Network Test Checklist
+
+**Every feature release MUST be tested across all 3 points:**
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│ stagebox1   │◄───►│  develbox   │◄───►│    iem      │
+│  (Windows)  │     │   (Linux)   │     │  (Windows)  │
+│  PRIMARY    │     │   DEV BOX   │     │ PRODUCTION  │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
+
+- [ ] Local audio routing on stagebox1 (Windows)
+- [ ] Local audio routing on develbox (Linux)
+- [ ] Network routing: stagebox1 → develbox
+- [ ] Network routing: develbox → stagebox1
+- [ ] Web UI accessible from all machines
+- [ ] API health check from all machines
+- [ ] Cross-platform device discovery
 
 ### CRITICAL: Build via GitHub Actions, NOT on Target Machines
 
@@ -1048,31 +1089,39 @@ The `iem` PC (10.77.9.231) is a **PRODUCTION** machine running live audio infras
 
 1. **Build**: Push code to GitHub → CI builds binaries
 2. **Download**: Fetch built artifacts from GitHub Actions or releases
-3. **Deploy**: Copy binary to target machine via SSH/SCP
-4. **Test**: Run binary on target, verify functionality
-5. **Cleanup**: Remove test binaries after testing
+3. **Deploy to stagebox1 FIRST**: Test Windows binary thoroughly
+4. **Deploy to develbox**: Test Linux binary
+5. **Network test**: Verify cross-machine routing works
+6. **IEM (optional)**: Only for final production verification
 
 **Example - Correct Testing Flow:**
 ```bash
-# On LOCAL machine: Download CI artifact
-gh run download <run-id> -n audiomatrix-windows
+# 1. Download Windows binary from dev release
+curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe
 
-# Copy to target for testing
-scp audiomatrix.exe user@10.77.9.231:C:/temp/
+# 2. Test on stagebox1.lan FIRST (primary Windows test machine)
+scp audiomatrix-dev-windows-x64.exe user@stagebox1.lan:C:/temp/
+ssh user@stagebox1.lan "C:/temp/audiomatrix-dev-windows-x64.exe --help"
 
-# SSH and run test
-ssh user@10.77.9.231 "C:/temp/audiomatrix.exe --list-devices"
+# 3. Test on develbox (Linux)
+# Service already running at develbox:8080
+
+# 4. Verify network connectivity between machines
+curl http://stagebox1.lan:8080/api/v1/health
+curl http://develbox:8080/api/v1/health
 ```
 
-### Other Targets
+### TARGETS.md Management
 
-- `develbox` (10.77.9.21) - Linux development machine (more flexibility)
-- Other Windows machines in TARGETS.md - testing allowed, no production traffic
+The file `TARGETS.md` (gitignored, local only) contains additional details:
+- SSH/remote access credentials (user/password)
+- Current deployment status
+- Additional test machines
 
 **Important:**
 - TARGETS.md is gitignored - never commit credentials
 - Always verify target availability before testing
-- When in doubt, use GitHub Actions for building
+- stagebox1.lan is the PRIMARY Windows test target
 
 ---
 
