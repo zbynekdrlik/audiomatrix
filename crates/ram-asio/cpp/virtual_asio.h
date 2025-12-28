@@ -5,12 +5,13 @@
  * Communicates with the AudioMatrix service via shared memory for low-latency
  * audio transfer.
  *
- * License: GPLv3 (uses Steinberg ASIO SDK)
+ * License: GPLv3 (uses Steinberg ASIO SDK interface specification)
  */
 
 #pragma once
 
 #include <windows.h>
+#include <unknwn.h>
 #include <atomic>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@ typedef long ASIOError;
 typedef long ASIOBool;
 typedef long long ASIOSamples;
 typedef long long ASIOTimeStamp;
+typedef double ASIOSampleRate;
 
 // ASIO boolean values
 constexpr ASIOBool ASIOTrue = 1;
@@ -119,6 +121,47 @@ constexpr long ASIOSTInt32LSB18 = 25;
 constexpr long ASIOSTInt32LSB20 = 26;
 constexpr long ASIOSTInt32LSB24 = 27;
 
+/**
+ * IASIO - The standard ASIO driver interface.
+ *
+ * This interface inherits from IUnknown and defines the 21 methods that
+ * all ASIO drivers must implement. The order of virtual methods is critical
+ * as ASIO hosts rely on the vtable layout.
+ */
+interface IASIO : public IUnknown
+{
+    // The following methods must be in this exact order for vtable compatibility
+    virtual ASIOBool init(void* sysHandle) = 0;
+    virtual void getDriverName(char* name) = 0;
+    virtual long getDriverVersion() = 0;
+    virtual void getErrorMessage(char* string) = 0;
+    virtual ASIOError start() = 0;
+    virtual ASIOError stop() = 0;
+    virtual ASIOError getChannels(long* numInputChannels, long* numOutputChannels) = 0;
+    virtual ASIOError getLatencies(long* inputLatency, long* outputLatency) = 0;
+    virtual ASIOError getBufferSize(long* minSize, long* maxSize,
+        long* preferredSize, long* granularity) = 0;
+    virtual ASIOError canSampleRate(ASIOSampleRate sampleRate) = 0;
+    virtual ASIOError getSampleRate(ASIOSampleRate* sampleRate) = 0;
+    virtual ASIOError setSampleRate(ASIOSampleRate sampleRate) = 0;
+    virtual ASIOError getClockSources(ASIOClockSource* clocks, long* numSources) = 0;
+    virtual ASIOError setClockSource(long reference) = 0;
+    virtual ASIOError getSamplePosition(ASIOSamples* sPos, ASIOTimeStamp* tStamp) = 0;
+    virtual ASIOError getChannelInfo(ASIOChannelInfo* info) = 0;
+    virtual ASIOError createBuffers(ASIOBufferInfo* bufferInfos, long numChannels,
+        long bufferSize, ASIOCallbacks* callbacks) = 0;
+    virtual ASIOError disposeBuffers() = 0;
+    virtual ASIOError controlPanel() = 0;
+    virtual ASIOError future(long selector, void* opt) = 0;
+    virtual ASIOError outputReady() = 0;
+};
+
+// CLSID for AudioMatrix Virtual ASIO driver
+// {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+DEFINE_GUID(CLSID_AudioMatrixASIO,
+    0xA1B2C3D4, 0xE5F6, 0x7890,
+    0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90);
+
 namespace audiomatrix {
 
 /**
@@ -150,49 +193,51 @@ constexpr uint64_t FLAG_DRIVER_RUNNING = 1 << 1;
 constexpr uint64_t FLAG_BUFFER_SWITCH_REQ = 1 << 2;
 
 /**
- * Virtual ASIO Driver implementation.
+ * AudioMatrix Virtual ASIO Driver implementation.
  *
- * This class implements the ASIO interface and manages communication
- * with the AudioMatrix service via shared memory.
+ * CRITICAL: IASIO must be the FIRST base class to ensure correct vtable layout.
+ * ASIO hosts cast the COM object directly to IASIO*, so the vtable pointer
+ * must point to IASIO's vtable at offset 0.
  */
-class VirtualAsioDriver {
+class VirtualAsioDriver : public IASIO
+{
 public:
     VirtualAsioDriver();
-    ~VirtualAsioDriver();
+    virtual ~VirtualAsioDriver();
 
     // Prevent copying
     VirtualAsioDriver(const VirtualAsioDriver&) = delete;
     VirtualAsioDriver& operator=(const VirtualAsioDriver&) = delete;
 
-    // ASIO Interface Methods
-    ASIOError init(void* sysRef);
-    void getDriverName(char* name);
-    long getDriverVersion();
-    void getErrorMessage(char* message);
+    // IUnknown methods
+    STDMETHOD(QueryInterface)(REFIID riid, void** ppv) override;
+    STDMETHOD_(ULONG, AddRef)() override;
+    STDMETHOD_(ULONG, Release)() override;
 
-    ASIOError start();
-    ASIOError stop();
-
-    ASIOError getChannels(long* numInputChannels, long* numOutputChannels);
-    ASIOError getLatencies(long* inputLatency, long* outputLatency);
-    ASIOError getBufferSize(long* minSize, long* maxSize, long* preferredSize, long* granularity);
-    ASIOError canSampleRate(double sampleRate);
-    ASIOError getSampleRate(double* sampleRate);
-    ASIOError setSampleRate(double sampleRate);
-
-    ASIOError getClockSources(ASIOClockSource* clocks, long* numSources);
-    ASIOError setClockSource(long reference);
-
-    ASIOError getSamplePosition(ASIOSamples* sPos, ASIOTimeStamp* tStamp);
-    ASIOError getChannelInfo(ASIOChannelInfo* info);
-
+    // IASIO methods (must match interface order exactly)
+    ASIOBool init(void* sysHandle) override;
+    void getDriverName(char* name) override;
+    long getDriverVersion() override;
+    void getErrorMessage(char* string) override;
+    ASIOError start() override;
+    ASIOError stop() override;
+    ASIOError getChannels(long* numInputChannels, long* numOutputChannels) override;
+    ASIOError getLatencies(long* inputLatency, long* outputLatency) override;
+    ASIOError getBufferSize(long* minSize, long* maxSize,
+        long* preferredSize, long* granularity) override;
+    ASIOError canSampleRate(ASIOSampleRate sampleRate) override;
+    ASIOError getSampleRate(ASIOSampleRate* sampleRate) override;
+    ASIOError setSampleRate(ASIOSampleRate sampleRate) override;
+    ASIOError getClockSources(ASIOClockSource* clocks, long* numSources) override;
+    ASIOError setClockSource(long reference) override;
+    ASIOError getSamplePosition(ASIOSamples* sPos, ASIOTimeStamp* tStamp) override;
+    ASIOError getChannelInfo(ASIOChannelInfo* info) override;
     ASIOError createBuffers(ASIOBufferInfo* bufferInfos, long numChannels,
-                            long bufferSize, ASIOCallbacks* callbacks);
-    ASIOError disposeBuffers();
-
-    ASIOError controlPanel();
-    ASIOError future(long selector, void* opt);
-    ASIOError outputReady();
+        long bufferSize, ASIOCallbacks* callbacks) override;
+    ASIOError disposeBuffers() override;
+    ASIOError controlPanel() override;
+    ASIOError future(long selector, void* opt) override;
+    ASIOError outputReady() override;
 
 private:
     // Shared memory management
@@ -202,6 +247,9 @@ private:
     // Audio processing thread
     void audioThreadProc();
     void processBuffers();
+
+    // COM reference count
+    std::atomic<ULONG> m_refCount{1};
 
     // State
     bool m_initialized = false;
@@ -246,21 +294,15 @@ private:
 };
 
 /**
- * COM Class Factory for the ASIO driver.
- * Windows COM infrastructure uses this to create driver instances.
+ * Factory function to create the ASIO driver instance.
+ * Called by DllGetClassObject.
  */
-class VirtualAsioDriverFactory {
-public:
-    static VirtualAsioDriver* getInstance();
-    static void releaseInstance();
+IASIO* CreateAudioMatrixDriver();
 
-private:
-    static VirtualAsioDriver* s_instance;
-    static long s_refCount;
-};
+/**
+ * Global driver instance and reference counting for COM.
+ */
+extern VirtualAsioDriver* g_driverInstance;
+extern std::atomic<long> g_serverLockCount;
 
 } // namespace audiomatrix
-
-// COM DLL exports - use STDAPI to match Windows SDK declarations
-// These functions are declared in combaseapi.h with WINOLEAPI linkage
-// We only need to provide implementations in dllmain.cpp

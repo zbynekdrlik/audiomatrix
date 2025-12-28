@@ -16,7 +16,11 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID /*lpvReserved*/)
             break;
 
         case DLL_PROCESS_DETACH:
-            audiomatrix::VirtualAsioDriverFactory::releaseInstance();
+            // Release global driver instance if it exists
+            if (audiomatrix::g_driverInstance) {
+                audiomatrix::g_driverInstance->Release();
+                audiomatrix::g_driverInstance = nullptr;
+            }
             break;
 
         case DLL_THREAD_ATTACH:

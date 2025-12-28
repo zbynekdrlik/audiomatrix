@@ -8,16 +8,8 @@
 #include <objbase.h>
 #include <olectl.h>  // For SELFREG_E_CLASS
 #include <string>
-#include <sstream>
 
 namespace {
-
-// {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
-// Generate a unique CLSID for AudioMatrix Virtual ASIO
-const GUID CLSID_AudioMatrixASIO = {
-    0xA1B2C3D4, 0xE5F6, 0x7890,
-    { 0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x90 }
-};
 
 const wchar_t DRIVER_NAME[] = L"AudioMatrix Virtual";
 const wchar_t DRIVER_DESCRIPTION[] = L"AudioMatrix Virtual ASIO Driver";
@@ -143,6 +135,9 @@ STDAPI DllUnregisterServer() {
 
 /**
  * COM DLL entry point for class factory.
+ *
+ * ASIO is unusual in that it treats the CLSID as an IID and expects
+ * the driver instance directly, not a class factory.
  */
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
     if (!ppv) {
@@ -156,11 +151,15 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
         return CLASS_E_CLASSNOTAVAILABLE;
     }
 
-    // For ASIO drivers, we return the driver instance directly
-    // (ASIO doesn't use standard COM class factories)
-    if (IsEqualIID(riid, IID_IUnknown)) {
-        *ppv = static_cast<void*>(audiomatrix::VirtualAsioDriverFactory::getInstance());
-        return S_OK;
+    // ASIO hosts typically request IID_IUnknown or use the CLSID as the IID
+    // We return the driver instance directly (ASIO doesn't use COM class factories)
+    if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, CLSID_AudioMatrixASIO)) {
+        IASIO* driver = audiomatrix::CreateAudioMatrixDriver();
+        if (driver) {
+            *ppv = static_cast<void*>(driver);
+            return S_OK;
+        }
+        return E_OUTOFMEMORY;
     }
 
     return E_NOINTERFACE;
@@ -170,8 +169,14 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
  * Check if DLL can be unloaded.
  */
 STDAPI DllCanUnloadNow() {
-    // Could check reference count here
-    return S_FALSE; // Don't unload while running
+    // Check if driver instance exists and has references
+    if (audiomatrix::g_driverInstance != nullptr) {
+        return S_FALSE; // Don't unload while driver exists
+    }
+    if (audiomatrix::g_serverLockCount > 0) {
+        return S_FALSE;
+    }
+    return S_OK;
 }
 
 } // extern "C"

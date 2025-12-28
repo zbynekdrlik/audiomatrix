@@ -73,10 +73,57 @@ EXPORTS
     DllUnregisterServer PRIVATE
 ")
 
-# Install target
+# =============================================================================
+# ASIO Driver Test Executable
+# =============================================================================
+add_executable(asio_test
+    asio_test.cpp
+    virtual_asio.cpp
+    shared_memory.cpp
+)
+
+target_include_directories(asio_test PRIVATE
+    ${CMAKE_SOURCE_DIR}
+)
+
+target_link_libraries(asio_test PRIVATE
+    ole32
+    oleaut32
+    uuid
+    advapi32
+    winmm
+)
+
+target_compile_definitions(asio_test PRIVATE
+    UNICODE
+    _UNICODE
+    NOMINMAX
+)
+
+if(MSVC)
+    target_compile_options(asio_test PRIVATE
+        /W4
+        /WX
+        /MP
+    )
+endif()
+
+# Enable CTest
+enable_testing()
+
+# Add test that runs asio_test
+add_test(NAME asio_driver_test COMMAND asio_test)
+
+# =============================================================================
+# Install targets
+# =============================================================================
 install(TARGETS AudioMatrixASIO
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
+)
+
+install(TARGETS asio_test
+    RUNTIME DESTINATION bin
 )
 
 # Installation script

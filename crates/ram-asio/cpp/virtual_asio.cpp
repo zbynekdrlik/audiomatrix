@@ -12,24 +12,16 @@
 
 namespace audiomatrix {
 
-// Static instance
-VirtualAsioDriver* VirtualAsioDriverFactory::s_instance = nullptr;
-long VirtualAsioDriverFactory::s_refCount = 0;
+// Global instance for COM
+VirtualAsioDriver* g_driverInstance = nullptr;
+std::atomic<long> g_serverLockCount{0};
 
-VirtualAsioDriver* VirtualAsioDriverFactory::getInstance() {
-    if (!s_instance) {
-        s_instance = new VirtualAsioDriver();
+IASIO* CreateAudioMatrixDriver() {
+    if (!g_driverInstance) {
+        g_driverInstance = new VirtualAsioDriver();
     }
-    ++s_refCount;
-    return s_instance;
-}
-
-void VirtualAsioDriverFactory::releaseInstance() {
-    if (--s_refCount <= 0 && s_instance) {
-        delete s_instance;
-        s_instance = nullptr;
-        s_refCount = 0;
-    }
+    g_driverInstance->AddRef();
+    return static_cast<IASIO*>(g_driverInstance);
 }
 
 VirtualAsioDriver::VirtualAsioDriver() {
@@ -47,9 +39,40 @@ VirtualAsioDriver::~VirtualAsioDriver() {
     }
 }
 
-ASIOError VirtualAsioDriver::init(void* /*sysRef*/) {
+// IUnknown implementation
+STDMETHODIMP VirtualAsioDriver::QueryInterface(REFIID riid, void** ppv) {
+    if (!ppv) {
+        return E_POINTER;
+    }
+
+    *ppv = nullptr;
+
+    if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, CLSID_AudioMatrixASIO)) {
+        *ppv = static_cast<IASIO*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+STDMETHODIMP_(ULONG) VirtualAsioDriver::AddRef() {
+    return ++m_refCount;
+}
+
+STDMETHODIMP_(ULONG) VirtualAsioDriver::Release() {
+    ULONG count = --m_refCount;
+    if (count == 0) {
+        g_driverInstance = nullptr;
+        delete this;
+    }
+    return count;
+}
+
+// IASIO implementation
+ASIOBool VirtualAsioDriver::init(void* /*sysHandle*/) {
     if (m_initialized) {
-        return ASE_OK;
+        return ASIOTrue;
     }
 
     // Try to connect to AudioMatrix service via shared memory
@@ -61,19 +84,23 @@ ASIOError VirtualAsioDriver::init(void* /*sysRef*/) {
     }
 
     m_initialized = true;
-    return ASE_OK;
+    return ASIOTrue;
 }
 
 void VirtualAsioDriver::getDriverName(char* name) {
-    strcpy_s(name, 32, "AudioMatrix Virtual");
+    if (name) {
+        strcpy_s(name, 32, "AudioMatrix Virtual");
+    }
 }
 
 long VirtualAsioDriver::getDriverVersion() {
     return 1; // Version 1.0
 }
 
-void VirtualAsioDriver::getErrorMessage(char* message) {
-    strcpy_s(message, 128, m_errorMessage);
+void VirtualAsioDriver::getErrorMessage(char* string) {
+    if (string) {
+        strcpy_s(string, 128, m_errorMessage);
+    }
 }
 
 ASIOError VirtualAsioDriver::start() {
@@ -154,7 +181,7 @@ ASIOError VirtualAsioDriver::getBufferSize(long* minSize, long* maxSize,
     return ASE_OK;
 }
 
-ASIOError VirtualAsioDriver::canSampleRate(double sampleRate) {
+ASIOError VirtualAsioDriver::canSampleRate(ASIOSampleRate sampleRate) {
     // Support common sample rates
     if (sampleRate == 44100.0 || sampleRate == 48000.0 ||
         sampleRate == 88200.0 || sampleRate == 96000.0 ||
@@ -164,12 +191,12 @@ ASIOError VirtualAsioDriver::canSampleRate(double sampleRate) {
     return ASE_NoClock;
 }
 
-ASIOError VirtualAsioDriver::getSampleRate(double* sampleRate) {
+ASIOError VirtualAsioDriver::getSampleRate(ASIOSampleRate* sampleRate) {
     if (sampleRate) *sampleRate = m_sampleRate;
     return ASE_OK;
 }
 
-ASIOError VirtualAsioDriver::setSampleRate(double sampleRate) {
+ASIOError VirtualAsioDriver::setSampleRate(ASIOSampleRate sampleRate) {
     ASIOError err = canSampleRate(sampleRate);
     if (err != ASE_OK) {
         return err;
@@ -191,7 +218,7 @@ ASIOError VirtualAsioDriver::getClockSources(ASIOClockSource* clocks, long* numS
         clocks[0].index = 0;
         clocks[0].associatedChannel = -1;
         clocks[0].associatedGroup = -1;
-        clocks[0].isCurrentSource = 1;
+        clocks[0].isCurrentSource = ASIOTrue;
         strcpy_s(clocks[0].name, 32, "Internal");
     }
     return ASE_OK;
@@ -224,7 +251,7 @@ ASIOError VirtualAsioDriver::getChannelInfo(ASIOChannelInfo* info) {
         return ASE_InvalidParameter;
     }
 
-    info->isActive = 0;
+    info->isActive = ASIOFalse;
     info->channelGroup = 0;
     info->type = ASIOSTFloat32LSB; // 32-bit float, little-endian
 
@@ -232,7 +259,7 @@ ASIOError VirtualAsioDriver::getChannelInfo(ASIOChannelInfo* info) {
     for (const auto& bufInfo : m_bufferInfos) {
         if (bufInfo.channelNum == channel &&
             (bufInfo.isInput != 0) == isInput) {
-            info->isActive = 1;
+            info->isActive = ASIOTrue;
             break;
         }
     }
@@ -267,19 +294,19 @@ ASIOError VirtualAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long num
     m_outputBuffers[0].clear();
     m_outputBuffers[1].clear();
 
-    m_bufferInfos.resize(numChannels);
+    m_bufferInfos.resize(static_cast<size_t>(numChannels));
 
     for (long i = 0; i < numChannels; ++i) {
-        m_bufferInfos[i] = bufferInfos[i];
+        m_bufferInfos[static_cast<size_t>(i)] = bufferInfos[i];
 
         if (bufferInfos[i].isInput) {
-            m_inputBuffers[0].emplace_back(bufferSize, 0.0f);
-            m_inputBuffers[1].emplace_back(bufferSize, 0.0f);
+            m_inputBuffers[0].emplace_back(static_cast<size_t>(bufferSize), 0.0f);
+            m_inputBuffers[1].emplace_back(static_cast<size_t>(bufferSize), 0.0f);
             bufferInfos[i].buffers[0] = m_inputBuffers[0].back().data();
             bufferInfos[i].buffers[1] = m_inputBuffers[1].back().data();
         } else {
-            m_outputBuffers[0].emplace_back(bufferSize, 0.0f);
-            m_outputBuffers[1].emplace_back(bufferSize, 0.0f);
+            m_outputBuffers[0].emplace_back(static_cast<size_t>(bufferSize), 0.0f);
+            m_outputBuffers[1].emplace_back(static_cast<size_t>(bufferSize), 0.0f);
             bufferInfos[i].buffers[0] = m_outputBuffers[0].back().data();
             bufferInfos[i].buffers[1] = m_outputBuffers[1].back().data();
         }
@@ -321,7 +348,7 @@ ASIOError VirtualAsioDriver::outputReady() {
 bool VirtualAsioDriver::openSharedMemory(const std::wstring& name) {
     // Calculate required size
     size_t ringBufferSize = static_cast<size_t>(m_bufferSize) *
-                            std::max(m_numInputChannels, m_numOutputChannels) *
+                            static_cast<size_t>(std::max(m_numInputChannels, m_numOutputChannels)) *
                             sizeof(float) * 8; // 8x buffer for ring buffer headroom
     m_sharedMemSize = sizeof(SharedMemoryHeader) + ringBufferSize * 2; // Input + output
 
@@ -358,10 +385,10 @@ bool VirtualAsioDriver::openSharedMemory(const std::wstring& name) {
     m_outputBuffer = reinterpret_cast<float*>(data + sizeof(SharedMemoryHeader) + ringBufferSize);
 
     // Read configuration from shared memory
-    m_numInputChannels = m_header->channels;
-    m_numOutputChannels = m_header->channels;
-    m_sampleRate = m_header->sample_rate;
-    m_bufferSize = m_header->buffer_size;
+    m_numInputChannels = static_cast<long>(m_header->channels);
+    m_numOutputChannels = static_cast<long>(m_header->channels);
+    m_sampleRate = static_cast<double>(m_header->sample_rate);
+    m_bufferSize = static_cast<long>(m_header->buffer_size);
 
     return true;
 }
@@ -385,7 +412,7 @@ void VirtualAsioDriver::audioThreadProc() {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
     // Calculate timer interval in milliseconds
-    double bufferDurationMs = (m_bufferSize / m_sampleRate) * 1000.0;
+    double bufferDurationMs = (static_cast<double>(m_bufferSize) / m_sampleRate) * 1000.0;
     DWORD timerInterval = static_cast<DWORD>(std::max(1.0, bufferDurationMs * 0.9));
 
     while (!m_stopRequested) {
