@@ -21,9 +21,7 @@ fn ws_url() -> String {
 #[tokio::test]
 #[ignore = "Requires running server with audio devices"]
 async fn test_subscribe_metering() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -43,10 +41,7 @@ async fn test_subscribe_metering() {
     let response = timeout(Duration::from_secs(5), read.next()).await;
 
     // Server should respond (either error if device doesn't exist, or success)
-    assert!(
-        response.is_ok(),
-        "Should receive response within timeout"
-    );
+    assert!(response.is_ok(), "Should receive response within timeout");
 
     let _ = write.close().await;
 }
@@ -55,9 +50,7 @@ async fn test_subscribe_metering() {
 #[tokio::test]
 #[ignore = "Requires running server with audio devices"]
 async fn test_unsubscribe_metering() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -101,9 +94,7 @@ async fn test_unsubscribe_metering() {
 #[tokio::test]
 #[ignore = "Requires running server with active audio device"]
 async fn test_metering_data_format() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -143,10 +134,7 @@ async fn test_metering_data_format() {
             data.get("device_id").is_some(),
             "Metering should have device_id"
         );
-        assert!(
-            data.get("levels").is_some(),
-            "Metering should have levels"
-        );
+        assert!(data.get("levels").is_some(), "Metering should have levels");
     }
 
     let _ = write.close().await;
@@ -156,9 +144,7 @@ async fn test_metering_data_format() {
 #[tokio::test]
 #[ignore = "Requires running server with audio devices"]
 async fn test_subscribe_multiple_devices() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, _read) = ws_stream.split();
 
@@ -186,9 +172,7 @@ async fn test_subscribe_multiple_devices() {
 #[tokio::test]
 #[ignore = "Requires running server"]
 async fn test_route_change_events() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -212,9 +196,7 @@ async fn test_route_change_events() {
 #[tokio::test]
 #[ignore = "Requires running server"]
 async fn test_device_status_events() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 

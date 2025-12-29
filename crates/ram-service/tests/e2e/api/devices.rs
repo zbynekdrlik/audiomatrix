@@ -28,7 +28,10 @@ async fn test_list_devices() {
     for device in &devices {
         assert!(!device.id.is_empty(), "Device should have ID");
         assert!(!device.name.is_empty(), "Device should have name");
-        assert!(device.sample_rate > 0, "Device should have valid sample rate");
+        assert!(
+            device.sample_rate > 0,
+            "Device should have valid sample rate"
+        );
     }
 }
 
@@ -50,20 +53,23 @@ async fn test_list_devices_by_type() {
     for device in &devices {
         match device.device_type {
             DeviceType::Input => {
-                assert!(device.input_channels > 0, "Input device should have input channels");
-            }
+                assert!(
+                    device.input_channels > 0,
+                    "Input device should have input channels"
+                );
+            },
             DeviceType::Output => {
                 assert!(
                     device.output_channels > 0,
                     "Output device should have output channels"
                 );
-            }
+            },
             DeviceType::Duplex => {
                 assert!(
                     device.input_channels > 0 || device.output_channels > 0,
                     "Duplex device should have channels"
                 );
-            }
+            },
         }
     }
 }

@@ -26,7 +26,10 @@ async fn test_list_virtual_devices() {
 
     // All virtual devices should have is_virtual = true
     for device in &devices {
-        assert!(device.is_virtual, "Virtual device list should only contain virtual devices");
+        assert!(
+            device.is_virtual,
+            "Virtual device list should only contain virtual devices"
+        );
     }
 }
 
@@ -188,8 +191,7 @@ async fn test_delete_virtual_device() {
             .await
             .expect("Failed to list virtual devices");
 
-        let devices: Vec<DeviceInfo> =
-            list_response.json().await.expect("Failed to parse devices");
+        let devices: Vec<DeviceInfo> = list_response.json().await.expect("Failed to parse devices");
         assert!(
             !devices.iter().any(|d| d.id == device.id),
             "Deleted device should not appear in list"

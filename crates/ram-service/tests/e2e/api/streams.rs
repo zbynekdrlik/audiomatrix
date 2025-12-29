@@ -59,7 +59,10 @@ async fn test_get_stream_stats() {
     if let Some(stream) = streams.first() {
         if let Some(stream_id) = stream.get("id").and_then(|v| v.as_str()) {
             let stats_response = client
-                .get(&format!("/streams/{}/stats", urlencoding::encode(stream_id)))
+                .get(&format!(
+                    "/streams/{}/stats",
+                    urlencoding::encode(stream_id)
+                ))
                 .await
                 .expect("Failed to get stream stats");
 

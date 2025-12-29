@@ -2,6 +2,7 @@
 //!
 //! This module contains all reusable UI components.
 
+mod channel_label_editor;
 mod device_card;
 mod device_list;
 mod header;
@@ -11,6 +12,7 @@ mod route_cell;
 mod route_control;
 mod routing_matrix;
 
+pub use channel_label_editor::ChannelLabelEditor;
 pub use device_card::DeviceCard;
 pub use device_list::DeviceList;
 pub use header::Header;

@@ -39,9 +39,7 @@ async fn test_websocket_connection() {
 #[tokio::test]
 #[ignore = "Requires running server"]
 async fn test_websocket_ping_pong() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -62,10 +60,7 @@ async fn test_websocket_ping_pong() {
     })
     .await;
 
-    assert!(
-        pong_result.is_ok(),
-        "Should receive pong within timeout"
-    );
+    assert!(pong_result.is_ok(), "Should receive pong within timeout");
     assert_eq!(
         pong_result.unwrap(),
         Some(Bytes::from_static(&[1, 2, 3])),
@@ -79,9 +74,7 @@ async fn test_websocket_ping_pong() {
 #[tokio::test]
 #[ignore = "Requires running server"]
 async fn test_websocket_invalid_message() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -111,9 +104,7 @@ async fn test_websocket_invalid_message() {
 #[tokio::test]
 #[ignore = "Requires running server"]
 async fn test_websocket_close() {
-    let (ws_stream, _) = connect_async(&ws_url())
-        .await
-        .expect("Failed to connect");
+    let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
     let (mut write, _read) = ws_stream.split();
 
