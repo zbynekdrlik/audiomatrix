@@ -15,10 +15,12 @@
 //! ram-service (AudioProcessor) --------+
 //! ```
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::latency::LatencyReport;
 use crate::stream_registry::StreamRegistry;
+use crate::subscription::SubscriptionId;
 use crate::subscription_manager::SubscriptionManager;
 use crate::ConnectionId;
 
@@ -78,6 +80,90 @@ pub trait RouteController: Send + Sync {
 
     /// Returns the local node name.
     fn node_name(&self) -> &str;
+
+    /// Starts a VBAN sender for an outgoing subscription.
+    ///
+    /// This is called when a remote node requests a subscription and
+    /// we need to start sending audio via VBAN.
+    ///
+    /// # Arguments
+    ///
+    /// * `subscription_id` - The subscription ID to associate with this sender
+    /// * `stream_name` - VBAN stream name
+    /// * `destination` - Destination socket address
+    /// * `source_buffers` - Buffer indices to read audio from
+    /// * `channels` - Number of channels
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sender cannot be started.
+    fn start_vban_sender(
+        &self,
+        subscription_id: SubscriptionId,
+        stream_name: String,
+        destination: SocketAddr,
+        source_buffers: Vec<usize>,
+        channels: u8,
+    ) -> RouteResult<()>;
+
+    /// Stops a VBAN sender for a subscription.
+    fn stop_vban_sender(&self, subscription_id: SubscriptionId) -> RouteResult<()>;
+
+    /// Ensures an input stream is running for the given device and returns buffer indices.
+    ///
+    /// This is called when a subscription is created for a device to ensure
+    /// audio is being captured from that device.
+    ///
+    /// # Returns
+    ///
+    /// Returns the buffer indices for the requested channels, or an error if
+    /// the device cannot be started.
+    fn ensure_input_stream(&self, device_id: &str, channels: &[u16]) -> RouteResult<Vec<usize>>;
+
+    /// Registers buffer indices for a VBAN stream (receiver side).
+    ///
+    /// This is called when an outgoing subscription is confirmed and we know
+    /// the VBAN stream name the source will use to send audio to us.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream_name` - The VBAN stream name from the subscription acknowledgment
+    /// * `buffer_indices` - Buffer indices where received audio should be written
+    fn register_vban_stream_buffers(&self, stream_name: &str, buffer_indices: Vec<usize>);
+
+    /// Unregisters a VBAN stream (receiver side).
+    ///
+    /// Call this when a subscription is terminated.
+    fn unregister_vban_stream(&self, stream_name: &str);
+
+    /// Allocates buffers for receiving audio from a cross-node route.
+    ///
+    /// This allocates ring buffers that will be written to by the VBAN receiver
+    /// and read from by the output device.
+    ///
+    /// # Arguments
+    ///
+    /// * `dest_device` - Destination device ID
+    /// * `channels` - Channel indices (1-based) for the destination
+    ///
+    /// # Returns
+    ///
+    /// Buffer indices for the allocated buffers.
+    fn allocate_receive_buffers(&self, dest_device: &str, channels: &[u16]) -> RouteResult<Vec<usize>>;
+
+    /// Ensures an output stream is running for the given device.
+    ///
+    /// This is called when a cross-node route targets a local output device,
+    /// to ensure the device is playing audio from the routing table.
+    ///
+    /// # Arguments
+    ///
+    /// * `device_id` - The output device ID to ensure is running
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the device cannot be started.
+    fn ensure_output_stream(&self, device_id: &str) -> RouteResult<()>;
 }
 
 #[cfg(test)]
@@ -138,6 +224,44 @@ mod tests {
 
         fn node_name(&self) -> &str {
             &self.node
+        }
+
+        fn start_vban_sender(
+            &self,
+            _subscription_id: SubscriptionId,
+            _stream_name: String,
+            _destination: SocketAddr,
+            _source_buffers: Vec<usize>,
+            _channels: u8,
+        ) -> RouteResult<()> {
+            Ok(())
+        }
+
+        fn stop_vban_sender(&self, _subscription_id: SubscriptionId) -> RouteResult<()> {
+            Ok(())
+        }
+
+        fn ensure_input_stream(&self, _device_id: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+            // Return mock buffer indices (channel number as index)
+            Ok(channels.iter().map(|&ch| ch as usize).collect())
+        }
+
+        fn register_vban_stream_buffers(&self, _stream_name: &str, _buffer_indices: Vec<usize>) {
+            // Mock: do nothing
+        }
+
+        fn unregister_vban_stream(&self, _stream_name: &str) {
+            // Mock: do nothing
+        }
+
+        fn allocate_receive_buffers(&self, _dest_device: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+            // Return mock buffer indices
+            Ok(channels.iter().map(|&ch| ch as usize).collect())
+        }
+
+        fn ensure_output_stream(&self, _device_id: &str) -> RouteResult<()> {
+            // Mock: do nothing
+            Ok(())
         }
     }
 

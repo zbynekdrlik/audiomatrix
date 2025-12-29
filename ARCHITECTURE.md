@@ -24,8 +24,8 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.5
-> **Last Updated:** 2025-12-28
+> **Current Version:** 0.1.0-dev.7
+> **Last Updated:** 2025-12-29
 
 | Component | Status | Crate | Notes |
 |-----------|--------|-------|-------|
@@ -48,6 +48,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Subscription Protocol** | Complete | ram-core | Subscribe/unsubscribe messages, manager |
 | **Latency Measurement** | Complete | ram-core | Calculator, callback timer, jitter tracking |
 | **Metering** | Complete | ram-core | Lock-free level meters, peak/RMS, per-channel |
+| **Cross-Node VBAN Auto-Creation** | Complete | ram-service | Auto-subscription on cross-node routes (remote→local) |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 
@@ -95,7 +96,8 @@ audiomatrix/
 │   │   ├── resampler.rs        # Sample rate conversion
 │   │   ├── subscription.rs     # Subscription protocol messages
 │   │   ├── subscription_manager.rs # Subscription lifecycle
-│   │   └── latency.rs          # Latency measurement
+│   │   ├── latency.rs          # Latency measurement
+│   │   └── route_controller.rs # RouteController trait for API-audio wiring
 │   ├── ram-asio/           # ASIO support (Windows)
 │   │   └── cpp/                # C++ COM driver
 │   ├── ram-vban/           # VBAN protocol
@@ -107,7 +109,9 @@ audiomatrix/
 │   ├── ram-api/            # REST/WebSocket API
 │   └── ram-service/        # Main service binary
 │       ├── service.rs          # Service lifecycle
-│       └── audio_processor.rs  # Audio coordinator
+│       ├── audio_processor.rs  # Audio coordinator
+│       ├── route_manager.rs    # Cross-node route & buffer management
+│       └── vban_manager.rs     # VBAN sender/receiver lifecycle
 └── docs/
     └── architecture/       # Detailed architecture docs
 ```
@@ -149,21 +153,31 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 Priority order for remaining work:
 
 1. **Metering WebSocket Broadcast**: Push real-time levels to web clients (2 TODOs in websocket.rs)
-2. **Web UI Polish**: Fix remaining UI functionality (device registration with API)
-3. **VBAN Auto-Creation**: Automatically create VBAN streams for cross-node routes
+2. **Web UI Cross-Node Support**: Display/create cross-node routes in UI (currently local-only)
+3. **Bidirectional Cross-Node Routing**: Support local→remote routes (currently only remote→local works)
 4. **E2E Testing**: Full 3-point network testing per CLAUDE.md requirements
 
 ## Known Technical Debt
 
-- Some `AudioProcessor` methods not yet called from handlers (dead code warnings)
 - 2 TODOs in `ram-api/websocket.rs` for metering subscription/unsubscription
 - Windows system tray integration not yet implemented
+- Web UI only shows local devices in routing matrix (can't see/create cross-node routes)
+- VbanManager dead code: `is_running()` and `sender_count()` methods unused
 
 ## Known Bugs
 
 *No known bugs at this time.*
 
 ## Recently Completed
+
+- **Cross-Node VBAN Auto-Creation** (2025-12-29): Automatic subscription on cross-node routes
+  - When route source is remote node, automatically creates VBAN subscription
+  - RouteController trait extended with `ensure_output_stream()` method
+  - RouteManager handles output stream starter callback
+  - Subscription initiates via HTTP POST to remote node's `/api/v1/subscriptions`
+  - VBAN stream registered with buffer allocation on subscription acceptance
+  - Tested: stagebox1 (Windows) → develbox (Linux) verified with ~187 Hz packet rate
+  - Limitation: Only remote→local direction works (local→remote not yet implemented)
 
 - **UDP Broadcast Discovery** (2025-12-28): Reliable cross-node discovery
   - Added `BroadcastDiscovery` as fallback when mDNS doesn't work reliably

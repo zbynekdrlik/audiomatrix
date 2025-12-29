@@ -5,6 +5,7 @@
 //! table, buffer pool, and connection mappings.
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -17,8 +18,18 @@ use ram_core::route_controller::{RouteController, RouteError, RouteResult};
 use ram_core::routing_snapshot::DestinationSnapshot;
 use ram_core::routing_table::RoutingTable;
 use ram_core::stream_registry::StreamRegistry;
+use ram_core::subscription::SubscriptionId;
 use ram_core::subscription_manager::SubscriptionManager;
 use ram_core::ConnectionId;
+
+use crate::vban_manager::VbanManager;
+
+/// Callback for starting an input stream and getting buffer indices.
+pub type StreamStarterFn =
+    Arc<dyn Fn(&str, &[u16]) -> Result<Vec<usize>> + Send + Sync + 'static>;
+
+/// Callback for starting an output stream.
+pub type OutputStreamStarterFn = Arc<dyn Fn(&str) -> Result<()> + Send + Sync + 'static>;
 
 /// Configuration for the route manager.
 #[derive(Debug, Clone)]
@@ -97,6 +108,12 @@ pub struct RouteManager {
     pub(crate) latency_calculator: LatencyCalculator,
     /// Connection ID to buffer index mapping.
     pub(crate) connection_buffers: RwLock<ConnectionBufferMap>,
+    /// VBAN manager for cross-node audio (set after creation).
+    vban_manager: RwLock<Option<Arc<VbanManager>>>,
+    /// Callback for starting input streams (set after creation).
+    stream_starter: RwLock<Option<StreamStarterFn>>,
+    /// Callback for starting output streams (set after creation).
+    output_stream_starter: RwLock<Option<OutputStreamStarterFn>>,
     /// Destination ID to snapshot index mapping.
     pub(crate) dest_indices: RwLock<HashMap<String, usize>>,
 }
@@ -122,8 +139,35 @@ impl RouteManager {
             subscription_manager,
             latency_calculator,
             connection_buffers: RwLock::new(ConnectionBufferMap::new()),
+            vban_manager: RwLock::new(None),
+            stream_starter: RwLock::new(None),
+            output_stream_starter: RwLock::new(None),
             dest_indices: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Sets the VBAN manager for cross-node audio.
+    ///
+    /// This must be called after the VbanManager is created since it depends
+    /// on resources from this RouteManager.
+    pub fn set_vban_manager(&self, vban_manager: Arc<VbanManager>) {
+        *self.vban_manager.write() = Some(vban_manager);
+    }
+
+    /// Sets the stream starter callback for starting input streams.
+    ///
+    /// This must be called after the AudioProcessor is fully initialized
+    /// since it needs access to the audio backend.
+    pub fn set_stream_starter(&self, starter: StreamStarterFn) {
+        *self.stream_starter.write() = Some(starter);
+    }
+
+    /// Sets the output stream starter callback for starting output streams.
+    ///
+    /// This must be called after the AudioProcessor is fully initialized
+    /// since it needs access to the audio backend.
+    pub fn set_output_stream_starter(&self, starter: OutputStreamStarterFn) {
+        *self.output_stream_starter.write() = Some(starter);
     }
 
     /// Adds a route to the routing matrix.
@@ -380,6 +424,165 @@ impl RouteController for RouteManager {
 
     fn node_name(&self) -> &str {
         &self.config.node_name
+    }
+
+    fn start_vban_sender(
+        &self,
+        subscription_id: SubscriptionId,
+        stream_name: String,
+        destination: SocketAddr,
+        source_buffers: Vec<usize>,
+        channels: u8,
+    ) -> RouteResult<()> {
+        let vban_manager_guard = self.vban_manager.read();
+        let vban_manager = vban_manager_guard
+            .as_ref()
+            .ok_or_else(|| RouteError::Internal("VBAN manager not initialized".to_string()))?;
+
+        // Clone what we need before dropping the lock
+        let vban_manager = Arc::clone(vban_manager);
+        drop(vban_manager_guard);
+
+        // Use block_in_place to safely run async code from within an async context.
+        // This is necessary because this method is called from an async axum handler,
+        // and calling block_on directly would panic with "Cannot block from within a runtime".
+        tokio::task::block_in_place(|| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async {
+                vban_manager
+                    .start_sender(subscription_id, stream_name, destination, source_buffers, channels)
+                    .await
+                    .map_err(|e| RouteError::Internal(e.to_string()))
+            })
+        })
+    }
+
+    fn stop_vban_sender(&self, subscription_id: SubscriptionId) -> RouteResult<()> {
+        let vban_manager_guard = self.vban_manager.read();
+        let vban_manager = vban_manager_guard
+            .as_ref()
+            .ok_or_else(|| RouteError::Internal("VBAN manager not initialized".to_string()))?;
+
+        vban_manager
+            .stop_sender(subscription_id)
+            .map_err(|e| RouteError::Internal(e.to_string()))
+    }
+
+    fn ensure_input_stream(&self, device_id: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+        let starter_guard = self.stream_starter.read();
+        let starter = starter_guard
+            .as_ref()
+            .ok_or_else(|| RouteError::Internal("Stream starter not initialized".to_string()))?;
+
+        starter(device_id, channels).map_err(|e| RouteError::Internal(e.to_string()))
+    }
+
+    fn register_vban_stream_buffers(&self, stream_name: &str, buffer_indices: Vec<usize>) {
+        let vban_manager_guard = self.vban_manager.read();
+        if let Some(vban_manager) = vban_manager_guard.as_ref() {
+            vban_manager.register_stream_buffers(stream_name, buffer_indices);
+        } else {
+            tracing::warn!(
+                "Cannot register VBAN stream '{}': VBAN manager not initialized",
+                stream_name
+            );
+        }
+    }
+
+    fn unregister_vban_stream(&self, stream_name: &str) {
+        let vban_manager_guard = self.vban_manager.read();
+        if let Some(vban_manager) = vban_manager_guard.as_ref() {
+            vban_manager.unregister_stream(stream_name);
+        }
+    }
+
+    fn allocate_receive_buffers(&self, dest_device: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+        let mut buffer_indices = Vec::with_capacity(channels.len());
+
+        for ch in channels {
+            match self.buffer_pool.allocate() {
+                Some(idx) => {
+                    buffer_indices.push(idx);
+                    info!(
+                        "Allocated receive buffer {} for {}:{} (VBAN incoming)",
+                        idx, dest_device, ch
+                    );
+                }
+                None => {
+                    // Free any buffers we already allocated
+                    for &idx in &buffer_indices {
+                        self.buffer_pool.free(idx);
+                    }
+                    return Err(RouteError::NoBufferAvailable);
+                }
+            }
+        }
+
+        // Add buffers to routing table so output device can read from them
+        for (i, &buffer_idx) in buffer_indices.iter().enumerate() {
+            let channel = channels.get(i).copied().unwrap_or((i + 1) as u16);
+            let dest_id = format!("LOCAL:{}:{}", dest_device, channel);
+
+            self.routing_table.update_with(|current| {
+                let mut new = current.clone();
+                if let Some(dest) = new.find_destination_mut(&dest_id) {
+                    dest.add_source(buffer_idx);
+                    info!(
+                        "Added VBAN receive buffer {} to existing destination {}",
+                        buffer_idx, dest_id
+                    );
+                } else {
+                    // Create destination if it doesn't exist
+                    let channel_idx = (channel as usize).saturating_sub(1);
+                    let mut dest = DestinationSnapshot::new(
+                        dest_id.clone(),
+                        dest_device.to_string(),
+                        channel_idx,
+                    );
+                    dest.add_source(buffer_idx);
+                    new.destinations.push(dest);
+                    info!(
+                        "Created destination {} with VBAN receive buffer {}",
+                        dest_id, buffer_idx
+                    );
+                }
+                new
+            });
+        }
+
+        Ok(buffer_indices)
+    }
+
+    fn ensure_output_stream(&self, device_id: &str) -> RouteResult<()> {
+        let starter_guard = self.output_stream_starter.read();
+        let Some(starter) = starter_guard.as_ref() else {
+            // No starter configured - this is OK during initialization or when not needed
+            info!(
+                "Output stream starter not configured, skipping output stream start for {}",
+                device_id
+            );
+            return Ok(());
+        };
+
+        match starter(device_id) {
+            Ok(()) => {
+                info!("Output stream ensured for device: {}", device_id);
+                Ok(())
+            }
+            Err(e) => {
+                // If already running, that's fine
+                let err_str = e.to_string();
+                if err_str.contains("already exists") || err_str.contains("already running") {
+                    info!("Output stream already running for device: {}", device_id);
+                    Ok(())
+                } else {
+                    Err(RouteError::Internal(format!(
+                        "Failed to start output stream for {}: {}",
+                        device_id, e
+                    )))
+                }
+            }
+        }
     }
 }
 

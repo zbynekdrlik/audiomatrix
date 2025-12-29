@@ -33,11 +33,23 @@ use ram_core::ConnectionId;
 
 use crate::route_manager::{RouteManager, RouteManagerConfig};
 
+/// Wrapper to make cpal::Stream implement Sync.
+///
+/// SAFETY: This is safe because:
+/// 1. The Stream is only accessed through RwLock, ensuring mutual exclusion
+/// 2. We never share raw references to Stream across threads
+/// 3. All operations (play/pause/drop) happen on the owning thread
+struct SyncStream(Stream);
+
+// SAFETY: See SyncStream doc comment
+unsafe impl Sync for SyncStream {}
+unsafe impl Send for SyncStream {}
+
 /// Wrapper for a cpal stream with its associated metadata.
 struct CpalStreamHandle {
     /// The cpal stream (must be kept alive for audio to flow).
     #[allow(dead_code)]
-    stream: Stream,
+    stream: SyncStream,
     /// Device ID this stream belongs to.
     device_id: String,
     /// Number of channels.
@@ -76,6 +88,14 @@ impl MeteringContexts {
     /// Registers an input context.
     pub fn register_input(&self, device_id: &str, context: Arc<InputCallbackContext>) {
         self.input.write().insert(device_id.to_string(), context);
+    }
+
+    /// Gets buffer indices for an input device if it's registered.
+    pub fn get_input_buffer_indices(&self, device_id: &str) -> Option<Vec<usize>> {
+        self.input
+            .read()
+            .get(device_id)
+            .map(|ctx| ctx.buffer_indices().to_vec())
     }
 
     /// Registers an output context.
@@ -273,6 +293,45 @@ impl AudioProcessor {
     #[must_use]
     pub fn node_name(&self) -> &str {
         &self.route_manager.config.node_name
+    }
+
+    /// Sets the VBAN manager for cross-node audio.
+    ///
+    /// This must be called after the VbanManager is created.
+    pub fn set_vban_manager(&self, vban_manager: Arc<crate::vban_manager::VbanManager>) {
+        self.route_manager.set_vban_manager(vban_manager);
+    }
+
+    /// Sets up the stream starter callback for RouteManager.
+    ///
+    /// This enables the RouteController to start input streams when needed
+    /// for cross-node audio subscriptions.
+    pub fn setup_stream_starter(self: &Arc<Self>) {
+        let processor = Arc::downgrade(self);
+        let starter: crate::route_manager::StreamStarterFn =
+            Arc::new(move |device_id: &str, channels: &[u16]| {
+                let processor = processor
+                    .upgrade()
+                    .ok_or_else(|| anyhow!("AudioProcessor dropped"))?;
+                processor.ensure_input_stream_with_buffers(device_id, channels)
+            });
+        self.route_manager.set_stream_starter(starter);
+    }
+
+    /// Sets up the output stream starter callback for RouteManager.
+    ///
+    /// This enables the RouteController to start output streams when needed
+    /// for cross-node audio subscriptions (receiver side).
+    pub fn setup_output_stream_starter(self: &Arc<Self>) {
+        let processor = Arc::downgrade(self);
+        let starter: crate::route_manager::OutputStreamStarterFn =
+            Arc::new(move |device_id: &str| {
+                let processor = processor
+                    .upgrade()
+                    .ok_or_else(|| anyhow!("AudioProcessor dropped"))?;
+                processor.start_output_stream(device_id)
+            });
+        self.route_manager.set_output_stream_starter(starter);
     }
 
     /// Checks if a connection crosses node boundaries.
@@ -528,7 +587,7 @@ impl AudioProcessor {
         self.input_streams.write().insert(
             device_id.to_string(),
             CpalStreamHandle {
-                stream,
+                stream: SyncStream(stream),
                 device_id: device_id.to_string(),
                 channels,
                 sample_rate,
@@ -537,6 +596,83 @@ impl AudioProcessor {
 
         info!("Input stream started on {device_id}");
         Ok(())
+    }
+
+    /// Ensures an input stream is running and returns buffer indices for the requested channels.
+    ///
+    /// If the stream is already running, returns the existing buffer indices.
+    /// If not, starts the stream and returns the new buffer indices.
+    pub fn ensure_input_stream_with_buffers(
+        &self,
+        device_id: &str,
+        channels: &[u16],
+    ) -> Result<Vec<usize>> {
+        info!(
+            "ensure_input_stream_with_buffers: device='{}', channels={:?}",
+            device_id, channels
+        );
+
+        // Check if stream is already running
+        if let Some(indices) = self.metering_contexts.get_input_buffer_indices(device_id) {
+            info!(
+                "Input stream already running for '{}', existing buffer indices: {:?}",
+                device_id, indices
+            );
+            // Stream is running, return buffer indices for requested channels
+            let requested: Vec<usize> = channels
+                .iter()
+                .filter_map(|&ch| {
+                    let idx = (ch as usize).saturating_sub(1); // 1-based to 0-based
+                    indices.get(idx).copied()
+                })
+                .collect();
+
+            if requested.len() != channels.len() {
+                return Err(anyhow!(
+                    "Not all requested channels available on device {device_id}"
+                ));
+            }
+            info!(
+                "Returning existing buffer indices for requested channels: {:?}",
+                requested
+            );
+            return Ok(requested);
+        }
+
+        // Stream not running, start it
+        info!("Input stream not running, starting stream for '{}'", device_id);
+        self.start_input_stream(device_id)?;
+
+        // Get the buffer indices from the newly started stream
+        let indices = self
+            .metering_contexts
+            .get_input_buffer_indices(device_id)
+            .ok_or_else(|| anyhow!("Failed to get buffer indices after starting stream"))?;
+
+        info!(
+            "Stream started, buffer indices: {:?}",
+            indices
+        );
+
+        let requested: Vec<usize> = channels
+            .iter()
+            .filter_map(|&ch| {
+                let idx = (ch as usize).saturating_sub(1); // 1-based to 0-based
+                indices.get(idx).copied()
+            })
+            .collect();
+
+        if requested.len() != channels.len() {
+            return Err(anyhow!(
+                "Not all requested channels available on device {device_id}"
+            ));
+        }
+
+        info!(
+            "Returning buffer indices for new stream: {:?}",
+            requested
+        );
+        Ok(requested)
     }
 
     /// Starts an output stream for the specified device.
@@ -569,7 +705,7 @@ impl AudioProcessor {
         self.output_streams.write().insert(
             device_id.to_string(),
             CpalStreamHandle {
-                stream,
+                stream: SyncStream(stream),
                 device_id: device_id.to_string(),
                 channels,
                 sample_rate,

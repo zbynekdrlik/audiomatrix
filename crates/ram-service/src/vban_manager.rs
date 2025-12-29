@@ -71,6 +71,9 @@ pub struct VbanManager {
     routing_table: Arc<RoutingTable>,
     /// Subscription manager.
     subscription_manager: Arc<SubscriptionManager>,
+    /// Mapping from VBAN stream name to buffer indices for received audio.
+    /// This maps stream names to the buffer(s) where received audio should be written.
+    stream_buffers: Arc<RwLock<HashMap<String, Vec<usize>>>>,
     /// Whether the manager is running.
     running: std::sync::atomic::AtomicBool,
 }
@@ -90,8 +93,28 @@ impl VbanManager {
             buffer_pool,
             routing_table,
             subscription_manager,
+            stream_buffers: Arc::new(RwLock::new(HashMap::new())),
             running: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Registers buffer indices for a VBAN stream.
+    ///
+    /// Call this when a subscription is confirmed to map the stream name
+    /// to the buffer(s) where received audio should be written.
+    pub fn register_stream_buffers(&self, stream_name: &str, buffer_indices: Vec<usize>) {
+        info!(
+            "Registering VBAN stream '{}' with buffer indices {:?}",
+            stream_name, buffer_indices
+        );
+        self.stream_buffers
+            .write()
+            .insert(stream_name.to_string(), buffer_indices);
+    }
+
+    /// Unregisters buffer indices for a VBAN stream.
+    pub fn unregister_stream(&self, stream_name: &str) {
+        self.stream_buffers.write().remove(stream_name);
     }
 
     /// Starts the VBAN receiver.
@@ -102,7 +125,7 @@ impl VbanManager {
 
         let receiver = VbanReceiver::bind(self.config.local_port).await?;
         let buffer_pool = Arc::clone(&self.buffer_pool);
-        let routing_table = Arc::clone(&self.routing_table);
+        let stream_buffers = Arc::clone(&self.stream_buffers);
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
 
         info!("Starting VBAN receiver on port {}", self.config.local_port);
@@ -119,7 +142,7 @@ impl VbanManager {
                                     &samples,
                                     addr,
                                     &buffer_pool,
-                                    &routing_table,
+                                    &stream_buffers,
                                 );
                             }
                             Err(e) => {
@@ -149,18 +172,58 @@ impl VbanManager {
         samples: &[f32],
         _addr: SocketAddr,
         buffer_pool: &RingBufferPool,
-        _routing_table: &RoutingTable,
+        stream_buffers: &Arc<RwLock<HashMap<String, Vec<usize>>>>,
     ) {
-        debug!(
-            "Received VBAN stream '{}': {} samples",
-            stream_name,
-            samples.len()
-        );
+        // Look up buffer indices for this stream
+        let buffer_indices = {
+            let buffers = stream_buffers.read();
+            buffers.get(stream_name).cloned()
+        };
 
-        // TODO: Look up the subscription by stream name to find the destination buffer
-        // For now, just log that we received audio
-        // This will be connected to the routing table once subscriptions are fully integrated
-        let _ = buffer_pool;
+        let Some(buffer_indices) = buffer_indices else {
+            // Stream not registered - this is normal for unsubscribed streams
+            // Use warn for debugging - we should be registering streams
+            warn!("Received VBAN stream '{}' but it is not registered!", stream_name);
+            return;
+        };
+
+        // Calculate samples per channel
+        let channels = buffer_indices.len();
+        if channels == 0 {
+            return;
+        }
+
+        let samples_per_channel = samples.len() / channels;
+        if samples_per_channel == 0 {
+            return;
+        }
+
+        // De-interleave and write to ring buffers
+        for (ch, &buffer_idx) in buffer_indices.iter().enumerate() {
+            if let Some(ring_buffer) = buffer_pool.get(buffer_idx) {
+                // Extract samples for this channel
+                let channel_samples: Vec<f32> = (0..samples_per_channel)
+                    .map(|i| samples[i * channels + ch])
+                    .collect();
+                ring_buffer.write(&channel_samples);
+            }
+        }
+
+        // Log periodically (every 100th packet approximately)
+        // Use a simple heuristic based on samples_per_channel
+        if samples_per_channel == 256 {
+            // This is a typical packet size, log occasionally
+            static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if count % 100 == 0 {
+                info!(
+                    "VBAN receive: {} packets received for stream '{}' -> {} buffers",
+                    count + 1,
+                    stream_name,
+                    channels
+                );
+            }
+        }
     }
 
     /// Starts a VBAN sender for an outgoing subscription.
@@ -196,22 +259,38 @@ impl VbanManager {
         );
 
         // Spawn send loop
+        let stream_name_for_log = stream_name.clone();
+        let dest_for_log = destination;
         let task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_micros(5333)); // ~188 Hz (256 samples @ 48kHz)
+            let mut packet_count: u64 = 0;
+            let mut last_log_time = std::time::Instant::now();
+
+            debug!(
+                "VBAN sender loop started for stream '{}' -> {}",
+                stream_name_for_log, dest_for_log
+            );
 
             loop {
                 interval.tick().await;
 
                 // Read samples from source buffers
                 let mut samples = Vec::with_capacity(256 * buffers.len());
+                let mut total_read = 0;
                 for &buffer_idx in &buffers {
                     let mut channel_samples = [0.0f32; 256];
                     if let Some(buffer) = buffer_pool.get(buffer_idx) {
                         let read = buffer.read(&mut channel_samples);
+                        total_read += read;
                         if read < 256 {
                             // Underrun - pad with silence
                             channel_samples[read..].fill(0.0);
                         }
+                    } else {
+                        warn!(
+                            "VBAN sender: buffer {} not found in pool",
+                            buffer_idx
+                        );
                     }
                     samples.extend_from_slice(&channel_samples);
                 }
@@ -219,6 +298,17 @@ impl VbanManager {
                 // Send interleaved samples
                 if let Err(e) = sender_clone.send(&samples).await {
                     error!("VBAN send error: {e}");
+                } else {
+                    packet_count += 1;
+                }
+
+                // Log stats every 5 seconds
+                if last_log_time.elapsed() >= std::time::Duration::from_secs(5) {
+                    info!(
+                        "VBAN sender '{}': {} packets sent, last read {} samples",
+                        stream_name_for_log, packet_count, total_read
+                    );
+                    last_log_time = std::time::Instant::now();
                 }
             }
         });

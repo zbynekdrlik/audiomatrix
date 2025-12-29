@@ -138,6 +138,14 @@ impl AudioMatrixService {
             Arc::clone(audio_processor.subscription_manager()),
         ));
 
+        // Wire up VbanManager to RouteManager for API access
+        audio_processor.set_vban_manager(Arc::clone(&vban_manager));
+
+        // Set up stream starter for RouteController to start input streams when needed
+        audio_processor.setup_stream_starter();
+        // Set up output stream starter for cross-node routing (receiver side)
+        audio_processor.setup_output_stream_starter();
+
         Self {
             config,
             app_state,

@@ -15,6 +15,7 @@ use crate::models::{
     DeviceInfo, DeviceType, LatencyInfo, NodeInfo, RouteDefinition, StreamDirection, StreamInfo,
     SubscriptionInfo, SubscriptionState as ApiSubscriptionState, SubscriptionStatsResponse,
 };
+use crate::subscription_client::SubscriptionClient;
 use crate::websocket::{SubscriptionNeededEvent, WsEvent};
 
 /// Shared application state.
@@ -38,6 +39,8 @@ struct AppStateInner {
     /// Route controller for audio processor integration.
     /// None if running without audio processor (e.g., tests).
     route_controller: Option<Arc<dyn RouteController>>,
+    /// Subscription client for cross-node subscriptions.
+    subscription_client: SubscriptionClient,
 }
 
 impl AppState {
@@ -75,6 +78,7 @@ impl AppState {
         };
 
         let (ws_broadcaster, _) = broadcast::channel(256);
+        let subscription_client = SubscriptionClient::new(vban_port);
 
         Self {
             inner: Arc::new(AppStateInner {
@@ -84,6 +88,7 @@ impl AppState {
                 routes: RwLock::new(HashMap::new()),
                 ws_broadcaster,
                 route_controller,
+                subscription_client,
             }),
         }
     }
@@ -137,6 +142,37 @@ impl AppState {
         drop(local);
 
         self.inner.remote_nodes.read().get(id).cloned()
+    }
+
+    /// Gets a remote node by ID or name.
+    ///
+    /// This searches remote nodes by both ID and name, handling various
+    /// formats like "node@host" or just "node".
+    #[must_use]
+    pub fn get_remote_node(&self, node_ref: &str) -> Option<NodeInfo> {
+        let nodes = self.inner.remote_nodes.read();
+
+        // Try exact ID match first
+        if let Some(node) = nodes.get(node_ref) {
+            return Some(node.clone());
+        }
+
+        // Try matching by name or partial ID
+        for node in nodes.values() {
+            if node.name == node_ref || node.id.starts_with(node_ref) {
+                return Some(node.clone());
+            }
+            // Handle format "name@address"
+            if node_ref.contains('@') {
+                if let Some(name) = node_ref.split('@').next() {
+                    if node.name == name {
+                        return Some(node.clone());
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Adds or updates a remote node.
@@ -263,7 +299,7 @@ impl AppState {
         // Store in local state
         self.inner.routes.write().insert(id.clone(), route.clone());
 
-        // For cross-node routes, broadcast subscription needed event
+        // For cross-node routes, broadcast subscription needed event and initiate subscription
         if is_cross_node {
             self.broadcast_event(WsEvent::SubscriptionNeeded(SubscriptionNeededEvent {
                 route_id: id.clone(),
@@ -274,9 +310,146 @@ impl AppState {
                 destination_device: route.destination_device.clone(),
                 destination_channel: route.destination_channel,
             }));
+
+            // If source is remote (we are destination), initiate subscription
+            let source_is_local = self.is_local_node(&route.source_node);
+            if !source_is_local {
+                // Look up source node info
+                if let Some(source_node) = self.get_remote_node(&route.source_node) {
+                    self.initiate_subscription(
+                        route.clone(),
+                        source_node,
+                    );
+                } else {
+                    tracing::warn!(
+                        "Cannot initiate subscription: source node not found: {}",
+                        route.source_node
+                    );
+                }
+            }
         }
 
         Ok(id)
+    }
+
+    /// Checks if a node identifier refers to the local node.
+    fn is_local_node(&self, node_id: &str) -> bool {
+        let local = self.local_node();
+        node_id == "LOCAL" || node_id == local.id || node_id == local.name
+    }
+
+    /// Initiates a subscription to a remote source node.
+    fn initiate_subscription(&self, route: RouteDefinition, source_node: NodeInfo) {
+        let client = self.inner.subscription_client.clone();
+        let local_node = self.local_node();
+        let route_controller = self.inner.route_controller.clone();
+
+        // Spawn async task to send subscription request
+        tokio::spawn(async move {
+            // Determine our local address that the source should send VBAN to
+            // We detect this by creating a UDP socket and connecting to the source's address.
+            // The socket's local address tells us which interface/IP is used to reach that destination.
+            let local_ip = match source_node.addresses.first() {
+                Some(source_ip) => {
+                    // Create a UDP socket and "connect" to the source (doesn't send anything)
+                    match std::net::UdpSocket::bind("0.0.0.0:0") {
+                        Ok(socket) => {
+                            // Connect to the source on any port to determine our local IP
+                            match socket.connect(format!("{}:8080", source_ip)) {
+                                Ok(()) => {
+                                    // Get our local address for this connection
+                                    socket
+                                        .local_addr()
+                                        .map(|addr| addr.ip().to_string())
+                                        .unwrap_or_else(|_| "0.0.0.0".to_string())
+                                }
+                                Err(_) => "0.0.0.0".to_string(),
+                            }
+                        }
+                        Err(_) => "0.0.0.0".to_string(),
+                    }
+                }
+                None => "0.0.0.0".to_string(),
+            };
+
+            tracing::debug!("Detected local IP for VBAN destination: {}", local_ip);
+
+            let local_addr = format!("{}:{}", local_ip, local_node.vban_port)
+                .parse()
+                .unwrap_or_else(|_| "0.0.0.0:6980".parse().unwrap());
+
+            match client
+                .subscribe(
+                    &source_node,
+                    &route.source_device,
+                    vec![route.source_channel],
+                    local_addr,
+                    48000, // Default sample rate
+                )
+                .await
+            {
+                Ok(response) => {
+                    if response.success {
+                        tracing::info!(
+                            "Cross-node subscription established: {} -> {} (stream: {:?})",
+                            route.source_node,
+                            route.destination_node,
+                            response.vban_stream_name
+                        );
+
+                        // Register VBAN stream buffers if we have a route controller
+                        if let (Some(controller), Some(stream_name)) = (&route_controller, &response.vban_stream_name) {
+                            // Allocate receive buffers for incoming VBAN audio
+                            match controller.allocate_receive_buffers(
+                                &route.destination_device,
+                                &[route.destination_channel],
+                            ) {
+                                Ok(buffer_indices) => {
+                                    tracing::info!(
+                                        "Allocated receive buffers {:?} for VBAN stream '{}'",
+                                        buffer_indices,
+                                        stream_name
+                                    );
+
+                                    // Register the stream name to buffer mapping so received
+                                    // VBAN packets will be written to these buffers
+                                    controller.register_vban_stream_buffers(stream_name, buffer_indices);
+
+                                    tracing::info!(
+                                        "VBAN stream '{}' registered for receive routing",
+                                        stream_name
+                                    );
+
+                                    // Start the output stream so audio can play through the destination device
+                                    if let Err(e) = controller.ensure_output_stream(&route.destination_device) {
+                                        tracing::error!(
+                                            "Failed to start output stream for {}: {}",
+                                            route.destination_device,
+                                            e
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to allocate receive buffers for VBAN stream '{}': {}",
+                                        stream_name,
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        tracing::error!(
+                            "Cross-node subscription failed: {}",
+                            response.error.unwrap_or_else(|| "unknown".to_string())
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initiate subscription: {}", e);
+                }
+            }
+        });
     }
 
     /// Checks if a route crosses node boundaries.

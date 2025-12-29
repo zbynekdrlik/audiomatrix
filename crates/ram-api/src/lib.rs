@@ -30,6 +30,8 @@ pub mod state;
 #[cfg(feature = "server")]
 pub mod static_files;
 #[cfg(feature = "server")]
+pub mod subscription_client;
+#[cfg(feature = "server")]
 pub mod websocket;
 
 #[cfg(feature = "server")]

@@ -321,8 +321,67 @@ pub async fn create_subscription(
                 request.destination_addr
             );
 
-            // TODO: Start VBAN sender for this subscription
-            // This requires integration with the VBAN manager
+            // Start VBAN sender for this subscription
+            // First, ensure the input stream is running and get buffer indices
+            tracing::info!(
+                "Ensuring input stream for device '{}' channels {:?}",
+                request.source_device,
+                request.source_channels
+            );
+            let source_buffers = match controller.ensure_input_stream(
+                &request.source_device,
+                &request.source_channels,
+            ) {
+                Ok(buffers) => {
+                    tracing::info!("Got buffer indices: {:?}", buffers);
+                    buffers
+                }
+                Err(e) => {
+                    tracing::error!("Failed to start input stream: {}", e);
+                    return Ok(Json(SubscriptionResponse {
+                        success: false,
+                        subscription_id: None,
+                        vban_stream_name: None,
+                        sample_rate: None,
+                        error: Some(format!("Failed to start input stream: {e}")),
+                    }));
+                }
+            };
+
+            // Start the VBAN sender
+            tracing::info!(
+                "Starting VBAN sender: sub_id={}, stream='{}', dest={}, buffers={:?}, channels={}",
+                ack.subscription_id,
+                ack.vban_stream_name,
+                dest_addr,
+                source_buffers,
+                request.source_channels.len()
+            );
+            if let Err(e) = controller.start_vban_sender(
+                ack.subscription_id,
+                ack.vban_stream_name.clone(),
+                dest_addr,
+                source_buffers,
+                request.source_channels.len() as u8,
+            ) {
+                tracing::error!("Failed to start VBAN sender: {}", e);
+                return Ok(Json(SubscriptionResponse {
+                    success: false,
+                    subscription_id: None,
+                    vban_stream_name: None,
+                    sample_rate: None,
+                    error: Some(format!("Failed to start VBAN sender: {e}")),
+                }));
+            }
+
+            // Activate the subscription now that the VBAN sender is running
+            manager.activate_incoming(ack.subscription_id);
+
+            tracing::info!(
+                "VBAN sender started for subscription {}: stream='{}'",
+                ack.subscription_id,
+                ack.vban_stream_name
+            );
 
             Ok(Json(SubscriptionResponse {
                 success: true,

@@ -163,6 +163,16 @@ impl SubscriptionManager {
             .collect()
     }
 
+    /// Finds an outgoing subscription by VBAN stream name.
+    #[must_use]
+    pub fn find_outgoing_by_stream_name(&self, stream_name: &str) -> Option<Subscription> {
+        self.outgoing
+            .read()
+            .values()
+            .find(|s| s.vban_stream_name == stream_name)
+            .cloned()
+    }
+
     // ========================================================================
     // Incoming Subscriptions (we are the source)
     // ========================================================================
@@ -256,6 +266,16 @@ impl SubscriptionManager {
     /// Removes an incoming subscription.
     pub fn remove_incoming(&self, id: SubscriptionId) -> Option<Subscription> {
         self.incoming.write().remove(&id)
+    }
+
+    /// Activates an incoming subscription (marks it as active after VBAN sender starts).
+    pub fn activate_incoming(&self, id: SubscriptionId) -> bool {
+        if let Some(sub) = self.incoming.write().get_mut(&id) {
+            sub.activate();
+            true
+        } else {
+            false
+        }
     }
 
     /// Returns all active incoming subscriptions.
