@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! Nodes endpoint E2E tests.
 
 use ram_api::models::NodeInfo;

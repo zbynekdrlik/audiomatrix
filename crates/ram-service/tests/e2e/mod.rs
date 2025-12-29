@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! E2E Tests for AudioMatrix Service.
 //!
 //! These tests verify the full system behavior by running against

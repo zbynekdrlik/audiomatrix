@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)]
 //! E2E Test Entry Point
 //!
 //! Run all E2E tests with:
