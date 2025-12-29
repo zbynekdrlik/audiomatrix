@@ -1,0 +1,39 @@
+# Cargo audit configuration
+
+[advisories]
+# Advisories to ignore - acknowledged and don't affect our use case
+ignore = [
+    # GTK3 bindings - only pulled in by tray-icon for Linux support.
+    # We only use tray-icon on Windows, so these don't affect us.
+    "RUSTSEC-2024-0412", # gdk unmaintained
+    "RUSTSEC-2024-0413", # atk unmaintained
+    "RUSTSEC-2024-0415", # gtk unmaintained
+    "RUSTSEC-2024-0416", # atk-sys unmaintained
+    "RUSTSEC-2024-0418", # gdk-sys unmaintained
+    "RUSTSEC-2024-0419", # gtk3-macros unmaintained
+    "RUSTSEC-2024-0420", # gtk-sys unmaintained
+    # glib unsound Iterator impl - we don't use VariantStrIter
+    "RUSTSEC-2024-0429", # glib unsound
+    # proc-macro-error unmaintained - transitive dep from glib-macros
+    "RUSTSEC-2024-0370", # proc-macro-error unmaintained
+    # paste unmaintained - used by Leptos internally, no action available
+    "RUSTSEC-2024-0436", # paste unmaintained
+    # windows 0.24.0 Send bound issue - via winrt-notification (Windows only)
+    "RUSTSEC-2022-0008", # windows delegate Send bound
+]
+informational_warnings = ["unmaintained"]
+
+[database]
+path = "~/.cargo/advisory-db"
+url = "https://github.com/RustSec/advisory-db.git"
+fetch = true
+stale = false
+
+[output]
+deny = []
+format = "terminal"
+quiet = false
+
+[yanked]
+enabled = false
+update_index = false
