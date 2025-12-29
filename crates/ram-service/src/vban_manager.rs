@@ -382,7 +382,6 @@ impl VbanManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ram_core::routing_snapshot::RoutingSnapshot;
 
     #[test]
     fn vban_manager_config_default() {
@@ -395,7 +394,7 @@ mod tests {
     async fn vban_manager_creation() {
         let config = VbanManagerConfig::default();
         let buffer_pool = Arc::new(RingBufferPool::new(16, 2048));
-        let routing_table = Arc::new(RoutingTable::new(RoutingSnapshot::new()));
+        let routing_table = Arc::new(RoutingTable::new());
         let sub_manager = Arc::new(SubscriptionManager::with_defaults("test".to_string()));
 
         let manager = VbanManager::new(config, buffer_pool, routing_table, sub_manager);

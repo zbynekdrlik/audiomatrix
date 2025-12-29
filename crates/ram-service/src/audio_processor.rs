@@ -334,6 +334,14 @@ impl AudioProcessor {
         self.route_manager.set_output_stream_starter(starter);
     }
 
+    /// Sets up metering contexts access for RouteManager.
+    ///
+    /// This enables the RouteController to access meter levels for WebSocket broadcast.
+    pub fn setup_metering_contexts(self: &Arc<Self>) {
+        self.route_manager
+            .set_metering_contexts(Arc::clone(&self.metering_contexts));
+    }
+
     /// Checks if a connection crosses node boundaries.
     #[must_use]
     pub fn is_cross_node(&self, conn_id: &ConnectionId) -> bool {

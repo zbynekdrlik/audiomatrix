@@ -191,11 +191,14 @@ fn handle_command(cmd: WsCommand) {
     match cmd {
         WsCommand::SubscribeMetering { node, device } => {
             debug!("Subscribe metering: {node}/{device}");
-            // TODO: Implement metering subscription
+            // Note: Metering broadcast is implemented in service.rs and sends all meters
+            // to all clients at 30 Hz. Per-device filtering is a future optimization.
+            // For now, clients receive all meter updates and can filter locally.
         },
         WsCommand::UnsubscribeMetering { node, device } => {
             debug!("Unsubscribe metering: {node}/{device}");
-            // TODO: Implement metering unsubscription
+            // Note: Currently all meters are broadcast to all clients.
+            // Per-device subscription filtering is a future optimization.
         },
         WsCommand::Ping => {
             debug!("Ping received");

@@ -88,6 +88,18 @@ pub struct AppState {
 
     /// Selected destination device for routing.
     pub selected_destination: RwSignal<Option<String>>,
+
+    /// Selected source node for cross-node routing.
+    pub source_node: RwSignal<Option<NodeInfo>>,
+
+    /// Selected destination node for cross-node routing.
+    pub dest_node: RwSignal<Option<NodeInfo>>,
+
+    /// Devices from the selected source node.
+    pub source_devices: RwSignal<Vec<DeviceInfo>>,
+
+    /// Devices from the selected destination node.
+    pub dest_devices: RwSignal<Vec<DeviceInfo>>,
 }
 
 impl AppState {
@@ -106,6 +118,10 @@ impl AppState {
             error: RwSignal::new(None),
             selected_source: RwSignal::new(None),
             selected_destination: RwSignal::new(None),
+            source_node: RwSignal::new(None),
+            dest_node: RwSignal::new(None),
+            source_devices: RwSignal::new(Vec::new()),
+            dest_devices: RwSignal::new(Vec::new()),
         }
     }
 
@@ -165,6 +181,44 @@ impl AppState {
             .collect()
     }
 
+    /// Gets input devices from the source node (for cross-node routing).
+    #[must_use]
+    pub fn source_input_devices(&self) -> Vec<DeviceInfo> {
+        self.source_devices
+            .get()
+            .into_iter()
+            .filter(|d| matches!(d.device_type, ram_api::models::DeviceType::Input))
+            .collect()
+    }
+
+    /// Gets output devices from the destination node (for cross-node routing).
+    #[must_use]
+    pub fn dest_output_devices(&self) -> Vec<DeviceInfo> {
+        self.dest_devices
+            .get()
+            .into_iter()
+            .filter(|d| matches!(d.device_type, ram_api::models::DeviceType::Output))
+            .collect()
+    }
+
+    /// Gets the source node ID or "LOCAL" if not set.
+    #[must_use]
+    pub fn source_node_id(&self) -> String {
+        self.source_node
+            .get()
+            .map(|n| n.id)
+            .unwrap_or_else(|| "LOCAL".to_string())
+    }
+
+    /// Gets the destination node ID or "LOCAL" if not set.
+    #[must_use]
+    pub fn dest_node_id(&self) -> String {
+        self.dest_node
+            .get()
+            .map(|n| n.id)
+            .unwrap_or_else(|| "LOCAL".to_string())
+    }
+
     /// Checks if a route exists between source and destination channels.
     #[must_use]
     pub fn has_route(
@@ -194,6 +248,48 @@ impl AppState {
         self.routes.get().into_iter().find(|r| {
             r.source_device == source_device
                 && r.source_channel == source_ch
+                && r.destination_device == dest_device
+                && r.destination_channel == dest_ch
+        })
+    }
+
+    /// Checks if a route exists between source and destination with node info.
+    #[must_use]
+    pub fn has_route_with_nodes(
+        &self,
+        source_node: &str,
+        source_device: &str,
+        source_ch: u16,
+        dest_node: &str,
+        dest_device: &str,
+        dest_ch: u16,
+    ) -> bool {
+        self.routes.get().iter().any(|r| {
+            r.source_node == source_node
+                && r.source_device == source_device
+                && r.source_channel == source_ch
+                && r.destination_node == dest_node
+                && r.destination_device == dest_device
+                && r.destination_channel == dest_ch
+        })
+    }
+
+    /// Gets the route between source and destination with node info.
+    #[must_use]
+    pub fn get_route_with_nodes(
+        &self,
+        source_node: &str,
+        source_device: &str,
+        source_ch: u16,
+        dest_node: &str,
+        dest_device: &str,
+        dest_ch: u16,
+    ) -> Option<RouteWithId> {
+        self.routes.get().into_iter().find(|r| {
+            r.source_node == source_node
+                && r.source_device == source_device
+                && r.source_channel == source_ch
+                && r.destination_node == dest_node
                 && r.destination_device == dest_device
                 && r.destination_channel == dest_ch
         })

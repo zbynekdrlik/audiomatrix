@@ -145,6 +145,8 @@ impl AudioMatrixService {
         audio_processor.setup_stream_starter();
         // Set up output stream starter for cross-node routing (receiver side)
         audio_processor.setup_output_stream_starter();
+        // Set up metering contexts for WebSocket broadcast
+        audio_processor.setup_metering_contexts();
 
         Self {
             config,

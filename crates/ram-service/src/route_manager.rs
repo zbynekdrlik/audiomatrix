@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use tracing::{debug, info};
 
 use ram_core::latency::{LatencyCalculator, LatencyReport};
+use ram_core::metering::MeterLevels;
 use ram_core::ring_buffer_pool::RingBufferPool;
 use ram_core::route_controller::{RouteController, RouteError, RouteResult};
 use ram_core::routing_snapshot::DestinationSnapshot;
@@ -21,6 +22,8 @@ use ram_core::stream_registry::StreamRegistry;
 use ram_core::subscription::SubscriptionId;
 use ram_core::subscription_manager::SubscriptionManager;
 use ram_core::ConnectionId;
+
+use crate::audio_processor::MeteringContexts;
 
 use crate::vban_manager::VbanManager;
 
@@ -116,6 +119,8 @@ pub struct RouteManager {
     output_stream_starter: RwLock<Option<OutputStreamStarterFn>>,
     /// Destination ID to snapshot index mapping.
     pub(crate) dest_indices: RwLock<HashMap<String, usize>>,
+    /// Metering contexts for level data (set after creation).
+    metering_contexts: RwLock<Option<Arc<MeteringContexts>>>,
 }
 
 impl RouteManager {
@@ -143,6 +148,7 @@ impl RouteManager {
             stream_starter: RwLock::new(None),
             output_stream_starter: RwLock::new(None),
             dest_indices: RwLock::new(HashMap::new()),
+            metering_contexts: RwLock::new(None),
         }
     }
 
@@ -168,6 +174,14 @@ impl RouteManager {
     /// since it needs access to the audio backend.
     pub fn set_output_stream_starter(&self, starter: OutputStreamStarterFn) {
         *self.output_stream_starter.write() = Some(starter);
+    }
+
+    /// Sets the metering contexts for level data access.
+    ///
+    /// This must be called after the AudioProcessor is created since it owns
+    /// the metering contexts.
+    pub fn set_metering_contexts(&self, contexts: Arc<MeteringContexts>) {
+        *self.metering_contexts.write() = Some(contexts);
     }
 
     /// Adds a route to the routing matrix.
@@ -582,6 +596,24 @@ impl RouteController for RouteManager {
                     )))
                 }
             }
+        }
+    }
+
+    fn all_input_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
+        let contexts_guard = self.metering_contexts.read();
+        if let Some(contexts) = contexts_guard.as_ref() {
+            contexts.all_input_meters()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn all_output_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
+        let contexts_guard = self.metering_contexts.read();
+        if let Some(contexts) = contexts_guard.as_ref() {
+            contexts.all_output_meters()
+        } else {
+            Vec::new()
         }
     }
 }

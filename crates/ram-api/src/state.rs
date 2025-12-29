@@ -313,8 +313,18 @@ impl AppState {
 
             // If source is remote (we are destination), initiate subscription
             let source_is_local = self.is_local_node(&route.source_node);
+            let dest_is_local = self.is_local_node(&route.destination_node);
+
+            tracing::debug!(
+                "Cross-node routing decision: source_is_local={}, dest_is_local={}, source={}, dest={}",
+                source_is_local,
+                dest_is_local,
+                route.source_node,
+                route.destination_node
+            );
+
             if !source_is_local {
-                // Look up source node info
+                // Source is remote, we are destination - initiate subscription to source
                 if let Some(source_node) = self.get_remote_node(&route.source_node) {
                     self.initiate_subscription(
                         route.clone(),
@@ -324,6 +334,16 @@ impl AppState {
                     tracing::warn!(
                         "Cannot initiate subscription: source node not found: {}",
                         route.source_node
+                    );
+                }
+            } else if !dest_is_local {
+                // Source is local, destination is remote - forward route to destination node
+                if let Some(dest_node) = self.get_remote_node(&route.destination_node) {
+                    self.forward_route_to_destination(route.clone(), dest_node);
+                } else {
+                    tracing::warn!(
+                        "Cannot forward route: destination node not found: {}",
+                        route.destination_node
                     );
                 }
             }
@@ -447,6 +467,88 @@ impl AppState {
                 }
                 Err(e) => {
                     tracing::error!("Failed to initiate subscription: {}", e);
+                }
+            }
+        });
+    }
+
+    /// Forwards a route to the destination node for outgoing cross-node routes.
+    ///
+    /// When we create a local→remote route, we need the remote node to:
+    /// 1. Store the route (from its perspective, source is remote)
+    /// 2. Initiate a subscription back to us
+    fn forward_route_to_destination(&self, route: RouteDefinition, dest_node: NodeInfo) {
+        let local_node = self.local_node();
+
+        // Transform the route so the destination node sees it correctly:
+        // - Replace "LOCAL" source with our actual node ID
+        // - The destination node will treat this as remote→local from its perspective
+        let transformed_route = RouteDefinition {
+            source_node: local_node.id.clone(),
+            source_device: route.source_device.clone(),
+            source_channel: route.source_channel,
+            destination_node: "LOCAL".to_string(), // Destination is local from their perspective
+            destination_device: route.destination_device.clone(),
+            destination_channel: route.destination_channel,
+            volume: route.volume,
+            muted: route.muted,
+        };
+
+        // Spawn async task to send route to destination
+        tokio::spawn(async move {
+            // Get destination node's API address
+            let Some(dest_ip) = dest_node.addresses.first() else {
+                tracing::warn!(
+                    "Cannot forward route to {}: no addresses available",
+                    dest_node.name
+                );
+                return;
+            };
+
+            let dest_api_url = format!("http://{}:{}/api/v1/routes", dest_ip, dest_node.api_port);
+
+            tracing::info!(
+                "Forwarding route to {} ({}): {}:{} -> {}:{}",
+                dest_node.name,
+                dest_api_url,
+                transformed_route.source_device,
+                transformed_route.source_channel,
+                transformed_route.destination_device,
+                transformed_route.destination_channel,
+            );
+
+            // Send the route to the destination node
+            let client = reqwest::Client::new();
+            match client
+                .post(&dest_api_url)
+                .json(&transformed_route)
+                .timeout(std::time::Duration::from_secs(5))
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        tracing::info!(
+                            "Route forwarded successfully to {}",
+                            dest_node.name
+                        );
+                    } else {
+                        let status = response.status();
+                        let body = response.text().await.unwrap_or_default();
+                        tracing::error!(
+                            "Failed to forward route to {}: {} - {}",
+                            dest_node.name,
+                            status,
+                            body
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to forward route to {}: {}",
+                        dest_node.name,
+                        e
+                    );
                 }
             }
         });

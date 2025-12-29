@@ -329,17 +329,22 @@ mod tests {
     #[test]
     fn subscription_request_serialization() {
         let sub = SubscriptionRequest {
-            source_node: "remote-node".into(),
+            stream_name: "AM_TEST_1".into(),
             source_device: "input-device".into(),
-            source_channel: 3,
+            source_channels: vec![1, 2, 3],
+            destination_node: "remote-node".into(),
+            destination_addr: "192.168.1.100:6980".into(),
+            sample_rate: 48000,
         };
 
         let json = serde_json::to_string(&sub).unwrap();
         let parsed: SubscriptionRequest = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(parsed.source_node, "remote-node");
+        assert_eq!(parsed.stream_name, "AM_TEST_1");
         assert_eq!(parsed.source_device, "input-device");
-        assert_eq!(parsed.source_channel, 3);
+        assert_eq!(parsed.source_channels, vec![1, 2, 3]);
+        assert_eq!(parsed.destination_node, "remote-node");
+        assert_eq!(parsed.sample_rate, 48000);
     }
 
     #[test]

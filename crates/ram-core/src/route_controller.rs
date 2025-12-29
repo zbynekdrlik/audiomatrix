@@ -19,6 +19,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::latency::LatencyReport;
+use crate::metering::MeterLevels;
 use crate::stream_registry::StreamRegistry;
 use crate::subscription::SubscriptionId;
 use crate::subscription_manager::SubscriptionManager;
@@ -164,6 +165,18 @@ pub trait RouteController: Send + Sync {
     ///
     /// Returns an error if the device cannot be started.
     fn ensure_output_stream(&self, device_id: &str) -> RouteResult<()>;
+
+    /// Returns meter levels for all input devices.
+    ///
+    /// Returns a vector of (device_id, channel_levels) pairs.
+    /// The levels are reset after reading.
+    fn all_input_meters(&self) -> Vec<(String, Vec<MeterLevels>)>;
+
+    /// Returns meter levels for all output devices.
+    ///
+    /// Returns a vector of (device_id, channel_levels) pairs.
+    /// The levels are reset after reading.
+    fn all_output_meters(&self) -> Vec<(String, Vec<MeterLevels>)>;
 }
 
 #[cfg(test)]
@@ -262,6 +275,14 @@ mod tests {
         fn ensure_output_stream(&self, _device_id: &str) -> RouteResult<()> {
             // Mock: do nothing
             Ok(())
+        }
+
+        fn all_input_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
+            Vec::new()
+        }
+
+        fn all_output_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
+            Vec::new()
         }
     }
 

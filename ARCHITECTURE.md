@@ -42,13 +42,14 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **VBAN Streaming** | Complete | ram-vban | Sender, receiver, jitter buffer |
 | **mDNS Discovery** | Complete | ram-discovery | Announce and browse |
 | **REST API** | Complete | ram-api | Route CRUD wired to AudioProcessor via RouteController trait |
-| **WebSocket Events** | Partial | ram-api | Event types defined, metering broadcast TODO |
+| **WebSocket Events** | Complete | ram-api | Event types, metering broadcast at 30Hz |
 | **Configuration** | Complete | ram-core | JSON persistence |
 | **Audio Processing Loop** | Complete | ram-service | cpal streams, auto-start default devices |
 | **Subscription Protocol** | Complete | ram-core | Subscribe/unsubscribe messages, manager |
 | **Latency Measurement** | Complete | ram-core | Calculator, callback timer, jitter tracking |
 | **Metering** | Complete | ram-core | Lock-free level meters, peak/RMS, per-channel |
-| **Cross-Node VBAN Auto-Creation** | Complete | ram-service | Auto-subscription on cross-node routes (remote→local) |
+| **Cross-Node VBAN Auto-Creation** | Complete | ram-service | Auto-subscription on cross-node routes (bidirectional) |
+| **Web UI Cross-Node Support** | Complete | ram-ui | Node selectors, cross-node route creation |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 
@@ -152,23 +153,40 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 
 Priority order for remaining work:
 
-1. **Metering WebSocket Broadcast**: Push real-time levels to web clients (2 TODOs in websocket.rs)
-2. **Web UI Cross-Node Support**: Display/create cross-node routes in UI (currently local-only)
-3. **Bidirectional Cross-Node Routing**: Support local→remote routes (currently only remote→local works)
-4. **E2E Testing**: Full 3-point network testing per CLAUDE.md requirements
+1. **Windows System Tray**: Implement tray icon with menu for service control
+2. **Split state.rs**: File exceeds 1000 lines (currently 1027) - extract subscription/stream logic
+3. **Ableton-IEM Update**: Deploy 0.1.0-dev.7 to complete 3-node network
+4. **Per-Device Metering Subscriptions**: Optional WebSocket filtering by device
 
 ## Known Technical Debt
 
-- 2 TODOs in `ram-api/websocket.rs` for metering subscription/unsubscription
+- `ram-api/state.rs` exceeds 1000 lines (1027) - needs refactoring
 - Windows system tray integration not yet implemented
-- Web UI only shows local devices in routing matrix (can't see/create cross-node routes)
 - VbanManager dead code: `is_running()` and `sender_count()` methods unused
+- Per-device metering subscriptions not implemented (broadcasts all meters)
 
 ## Known Bugs
 
 *No known bugs at this time.*
 
 ## Recently Completed
+
+- **Bidirectional Cross-Node Routing** (2025-12-29): Full support for local→remote routes
+  - When route destination is remote, forwards route to destination node
+  - Destination node receives route as remote→local and initiates VBAN subscription
+  - Tested: develbox → stagebox1 routes correctly forward and create subscriptions
+  - E2E verified: 3-point network (develbox, stagebox1, Ableton-IEM) all discovered
+
+- **Web UI Cross-Node Support** (2025-12-29): Multi-node routing in web interface
+  - Added node selectors for source and destination in routing matrix
+  - Devices fetched dynamically from selected nodes via API
+  - RouteCell component updated to pass node IDs for cross-node routes
+  - AppState extended with source_devices, dest_devices, source_node, dest_node
+
+- **Metering WebSocket Broadcast** (2025-12-29): Real-time levels to web clients
+  - RouteController trait extended with metering methods
+  - RouteManager wired to MeteringContexts via setter
+  - Service broadcasts all input/output meters at 30 Hz
 
 - **Cross-Node VBAN Auto-Creation** (2025-12-29): Automatic subscription on cross-node routes
   - When route source is remote node, automatically creates VBAN subscription
@@ -177,7 +195,6 @@ Priority order for remaining work:
   - Subscription initiates via HTTP POST to remote node's `/api/v1/subscriptions`
   - VBAN stream registered with buffer allocation on subscription acceptance
   - Tested: stagebox1 (Windows) → develbox (Linux) verified with ~187 Hz packet rate
-  - Limitation: Only remote→local direction works (local→remote not yet implemented)
 
 - **UDP Broadcast Discovery** (2025-12-28): Reliable cross-node discovery
   - Added `BroadcastDiscovery` as fallback when mDNS doesn't work reliably
