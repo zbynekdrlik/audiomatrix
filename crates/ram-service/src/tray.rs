@@ -485,14 +485,32 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
 
     info!("Starting system tray");
 
+    // Set up shutdown detection
+    let shutdown_rx = shutdown.subscribe();
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = shutdown_flag.clone();
+
+    // Spawn shutdown listener
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            let mut rx = shutdown_rx;
+            let _ = rx.recv().await;
+            shutdown_flag_clone.store(true, Ordering::SeqCst);
+        });
+    });
+
     let event_loop = match EventLoop::<AppEvent>::with_user_event().build() {
         Ok(el) => el,
         Err(e) => {
             warn!("Failed to create event loop (no GUI session?): {}", e);
             // Keep the thread alive but do nothing - service runs headlessly
             loop {
-                std::thread::sleep(Duration::from_secs(60));
-                if shutdown.is_shutdown() {
+                std::thread::sleep(Duration::from_secs(1));
+                if shutdown_flag.load(Ordering::SeqCst) {
                     return;
                 }
             }
