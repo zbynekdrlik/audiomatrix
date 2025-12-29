@@ -246,7 +246,7 @@ pub struct CreateVirtualDevice {
     pub output_channels: u16,
 
     /// Sample rate in Hz.
-    /// Supported: 44100, 48000, 88200, 96000, 176400, 192000.
+    /// Supported: 96000, 48000, 44100 ONLY (in order of preference).
     pub sample_rate: u32,
 
     /// Buffer size in samples.

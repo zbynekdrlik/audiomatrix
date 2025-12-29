@@ -228,7 +228,7 @@ Users can create virtual ASIO devices on any node from the Web UI.
 │  ┌─ Audio Settings ──────────────────────────────────────────┐  │
 │  │                                                            │  │
 │  │  Sample Rate:      [48000 Hz___] ▼                        │  │
-│  │                    44100 / 48000 / 88200 / 96000          │  │
+│  │                    96000 / 48000 / 44100 (by usage)       │  │
 │  │                                                            │  │
 │  │  Buffer Size:      [64 samples_] ▼                        │  │
 │  │                    32 / 64 / 128 / 256 / 512 / 1024       │  │
@@ -282,7 +282,7 @@ After creation, users can modify channel count without deleting:
 | Input Channels | 2 | 256 | Even numbers recommended |
 | Output Channels | 2 | 256 | Even numbers recommended |
 | Total Channels | 4 | 512 | Per device |
-| Sample Rate | 44100 | 192000 | Standard rates |
+| Sample Rate | 44100 | 96000 | Only 96000, 48000, 44100 Hz |
 | Buffer Size | 32 | 2048 | Power of 2 |
 | Name Length | 1 | 31 | ASIO driver name limit |
 
@@ -472,6 +472,217 @@ When a route is selected, show detailed controls:
 │                                            [Delete Route]        │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Sync Wave Generator (Test Signal)
+
+### Purpose
+
+The Sync Wave Generator injects test audio signals into **output channels** to verify:
+- Routing/patching correctness
+- Signal flow through the matrix
+- Resampling quality
+- Cross-node VBAN transmission
+- Physical output connectivity
+
+**No external equipment required** - test without mics, DAWs, or test gear.
+
+### Generator Types
+
+| Type | Signal | Use Case |
+|------|--------|----------|
+| **Sine Wave** | Pure tone at selectable frequency | Level checks, frequency response |
+| **Pink Noise** | Equal energy per octave | Speaker/room testing |
+| **Channel ID** | Different frequency per channel | Identify which channel is which |
+| **Sweep** | Rising frequency 20Hz→20kHz | Find resonances, check resampling |
+| **Click** | Periodic impulse | Latency measurement |
+
+### Generator Parameters
+
+| Parameter | Range | Default | Notes |
+|-----------|-------|---------|-------|
+| **Frequency** | 20-20000 Hz | 1000 Hz | For Sine Wave |
+| **Level** | -60 to 0 dBFS | -20 dBFS | Safety default |
+| **Duration** | Continuous / 1s / 5s / 10s | Continuous | Auto-stop option |
+| **Sweep Time** | 1s / 5s / 10s / 30s | 5s | For Sweep mode |
+
+### Channel ID Frequencies
+
+When "Channel ID" mode is selected, each channel gets a unique frequency:
+
+| Channel | Frequency | Musical Note |
+|---------|-----------|--------------|
+| 1 | 440 Hz | A4 |
+| 2 | 494 Hz | B4 |
+| 3 | 523 Hz | C5 |
+| 4 | 587 Hz | D5 |
+| 5 | 659 Hz | E5 |
+| 6 | 698 Hz | F5 |
+| 7 | 784 Hz | G5 |
+| 8 | 880 Hz | A5 |
+| 9+ | +1 semitone each | ... |
+
+### UI: Per-Channel Generator Control
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│      Output: VASIO-IEM (8 channels)                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Ch │ Label      │ Level        │ Generator                     │
+│ ────┼────────────┼──────────────┼──────────────────────────────│
+│  1  │ IEM Mix L  │ ██████░░ -12 │ [Off___▼] [▶ Start]          │
+│  2  │ IEM Mix R  │ ██████░░ -12 │ [Off___▼] [▶ Start]          │
+│  3  │ Click L    │ ░░░░░░░░ -∞  │ [Sine__▼] [■ Stop ] 1kHz     │
+│  4  │ Click R    │ ░░░░░░░░ -∞  │ [Off___▼] [▶ Start]          │
+│  5  │            │ ░░░░░░░░ -∞  │ [Off___▼] [▶ Start]          │
+│  6  │            │ ░░░░░░░░ -∞  │ [Off___▼] [▶ Start]          │
+│  7  │            │ ░░░░░░░░ -∞  │ [Off___▼] [▶ Start]          │
+│  8  │            │ ░░░░░░░░ -∞  │ [Off___▼] [▶ Start]          │
+│                                                                  │
+│  ┌─ Bulk Generator ─────────────────────────────────────────┐   │
+│  │  [Start All: Channel ID]  [Stop All]  Level: [-20dB__▼]  │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ⚠ Generator outputs real audio. Check levels before enabling.  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Generator Dropdown Options
+
+```
+┌──────────────────┐
+│ Off              │  ← No signal
+├──────────────────┤
+│ Sine Wave        │  ← Pure tone
+│ Pink Noise       │  ← Broadband
+│ Channel ID       │  ← Unique frequency
+│ Sweep            │  ← 20Hz→20kHz
+│ Click            │  ← Impulse train
+└──────────────────┘
+```
+
+### Safety Features
+
+| Feature | Description |
+|---------|-------------|
+| **Default Off** | Generator disabled on startup |
+| **Level Limit** | Max -6 dBFS to prevent clipping |
+| **Auto-Stop** | Optional timeout (1s/5s/10s) |
+| **Visual Warning** | Red border on active generators |
+| **No Persistence** | Generator state NOT saved to config |
+
+### API Endpoints
+
+```http
+POST /api/v1/nodes/{node}/devices/{device}/channels/{ch}/generator
+Content-Type: application/json
+
+{
+    "enabled": true,
+    "type": "sine",        // sine, pink_noise, channel_id, sweep, click
+    "frequency": 1000,     // Hz (for sine)
+    "level_db": -20,       // dBFS
+    "duration_ms": null    // null = continuous, or timeout in ms
+}
+```
+
+```http
+POST /api/v1/nodes/{node}/devices/{device}/generator/all
+Content-Type: application/json
+
+{
+    "enabled": true,
+    "type": "channel_id",
+    "level_db": -20
+}
+```
+
+---
+
+## System Tray Icon
+
+### AudioMatrix Icon Identity
+
+The tray icon must be **visually distinct** from other audio software (including DanteSync).
+
+**AudioMatrix Icon Concept**: Matrix grid with diamond accent
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    Tray Icon Design                             │
+├────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│    Normal State          Active State         Error State       │
+│                                                                 │
+│    ┌───┬───┬───┐        ┌───┬───┬───┐       ┌───┬───┬───┐     │
+│    │   │   │   │        │ ◆ │   │ ◆ │       │   │ ✕ │   │     │
+│    ├───┼───┼───┤        ├───┼───┼───┤       ├───┼───┼───┤     │
+│    │   │ ◆ │   │        │   │ ◆ │   │       │   │ ◆ │   │     │
+│    ├───┼───┼───┤        ├───┼───┼───┤       ├───┼───┼───┤     │
+│    │   │   │   │        │ ◆ │   │ ◆ │       │   │ ✕ │   │     │
+│    └───┴───┴───┘        └───┴───┴───┘       └───┴───┴───┘     │
+│                                                                 │
+│    Gray grid with       Green diamonds       Gray with red X    │
+│    blue diamond         showing routes       for errors         │
+│    in center            active                                  │
+│                                                                 │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Icon States
+
+| State | Icon | Tooltip |
+|-------|------|---------|
+| **Idle** | Gray 3x3 grid, blue ◆ center | "AudioMatrix v0.1.0 - Idle" |
+| **Active** | Grid with green ◆ at crosspoints | "AudioMatrix - 5 routes active" |
+| **Warning** | Grid with amber ◈ | "AudioMatrix - 2 routes pending" |
+| **Error** | Grid with red ✕ | "AudioMatrix - Error: [message]" |
+| **Updating** | Spinning animation | "AudioMatrix - Updating..." |
+
+### Tray Menu
+
+```
+┌────────────────────────────────────┐
+│ AudioMatrix v0.1.0-dev.8           │
+│ Node: stagebox1                    │
+├────────────────────────────────────┤
+│ ▣ 3 devices attached               │
+│ ◆ 12 routes active                 │
+│ ⟷ 2 nodes connected                │
+├────────────────────────────────────┤
+│ Open Web UI                  ⌘O    │
+│ Open Logs Folder             ⌘L    │
+├────────────────────────────────────┤
+│ ▶ Start All Routes                 │
+│ ⏸ Pause All Routes                 │
+├────────────────────────────────────┤
+│ Check for Updates...               │
+│ About AudioMatrix...               │
+├────────────────────────────────────┤
+│ Exit                         ⌘Q    │
+└────────────────────────────────────┘
+```
+
+### Icon Colors
+
+| Element | Light Mode | Dark Mode |
+|---------|------------|-----------|
+| Grid lines | #9CA3AF | #4B5563 |
+| Idle diamond | #3B82F6 | #60A5FA |
+| Active diamond | #22C55E | #4ADE80 |
+| Warning diamond | #F59E0B | #FBBF24 |
+| Error X | #EF4444 | #F87171 |
+| Background | Transparent | Transparent |
+
+### Icon Sizes
+
+| Platform | Size | Notes |
+|----------|------|-------|
+| Windows | 16x16, 32x32, 48x48 | ICO format |
+| macOS | 16x16, 32x32 | Template image (black/white) |
+| Linux | 22x22, 24x24, 48x48 | PNG format |
 
 ---
 

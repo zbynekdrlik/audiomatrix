@@ -63,6 +63,9 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Web UI Device Attachment** | Not Started | ram-ui | Attach/detach workflow |
 | **Web UI Virtual Device Creation** | Not Started | ram-ui | Create virtual ASIO from browser |
 | **Web UI Channel Naming** | Not Started | ram-ui | Per-channel label editor |
+| **Sync Wave Generator** | Not Started | ram-core | Per-output test signal generator |
+| **State Persistence** | Not Started | ram-service | Full config restore on restart |
+| **Unique Tray Icon** | Not Started | ram-service | 3x3 grid with diamond accent design |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 

@@ -505,6 +505,104 @@ Response:
 
 ---
 
+## Sync Wave Generator Endpoints
+
+Test signal generator for output channels. **Generator state is NOT persisted** - always disabled on restart.
+
+### Start Generator on Channel
+
+```http
+POST /api/v1/nodes/{node_id}/devices/{device_id}/channels/{channel}/generator
+Content-Type: application/json
+
+{
+    "enabled": true,
+    "type": "sine",         // sine, pink_noise, channel_id, sweep, click
+    "frequency": 1000,      // Hz (for sine mode only)
+    "level_db": -20,        // dBFS, max -6 to prevent clipping
+    "duration_ms": null     // null = continuous, or timeout in ms
+}
+```
+
+Response:
+```json
+{
+    "device_id": "VASIO-IEM",
+    "channel": 1,
+    "generator": {
+        "enabled": true,
+        "type": "sine",
+        "frequency": 1000,
+        "level_db": -20
+    }
+}
+```
+
+### Stop Generator on Channel
+
+```http
+POST /api/v1/nodes/{node_id}/devices/{device_id}/channels/{channel}/generator
+Content-Type: application/json
+
+{
+    "enabled": false
+}
+```
+
+### Start Generator on All Channels
+
+```http
+POST /api/v1/nodes/{node_id}/devices/{device_id}/generator/all
+Content-Type: application/json
+
+{
+    "enabled": true,
+    "type": "channel_id",   // Each channel gets unique frequency
+    "level_db": -20
+}
+```
+
+### Stop All Generators
+
+```http
+POST /api/v1/nodes/{node_id}/devices/{device_id}/generator/all
+Content-Type: application/json
+
+{
+    "enabled": false
+}
+```
+
+### Get Generator Status
+
+```http
+GET /api/v1/nodes/{node_id}/devices/{device_id}/generator
+```
+
+Response:
+```json
+{
+    "device_id": "VASIO-IEM",
+    "channels": [
+        {"channel": 1, "enabled": true, "type": "sine", "frequency": 1000, "level_db": -20},
+        {"channel": 2, "enabled": false},
+        {"channel": 3, "enabled": true, "type": "channel_id", "level_db": -20}
+    ]
+}
+```
+
+### Generator Types
+
+| Type | Description | Parameters |
+|------|-------------|------------|
+| `sine` | Pure sine wave | frequency (20-20000 Hz) |
+| `pink_noise` | Pink noise (equal energy per octave) | None |
+| `channel_id` | Unique frequency per channel (440Hz×2^(n/12)) | None |
+| `sweep` | Linear frequency sweep 20Hz→20kHz | duration_ms |
+| `click` | Periodic impulse (4 Hz) | None |
+
+---
+
 ## Health Endpoint
 
 ```http
@@ -656,5 +754,6 @@ Service type: `_audiomatrix._tcp.local`
 | Latency endpoint | Complete | Per-route latency |
 | WebSocket events | Partial | Route/metering events |
 | WebSocket device events | Not Started | Status, label changes |
+| Sync Wave Generator | Not Started | Per-output test signals |
 | mDNS announce | Complete | Full TXT records |
 | mDNS browse | Complete | Node discovery |
