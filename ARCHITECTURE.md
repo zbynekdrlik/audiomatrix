@@ -187,10 +187,11 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
   - Helper: `detect_local_ip_for_target()`, `register_vban_stream()`
 
 - **3-Node Network Deployment** (2025-12-29): Complete 3-point network operational
-  - develbox (Linux) running 0.1.0-dev.7
-  - stagebox1 (Windows) running 0.1.0-dev.7
-  - Ableton-IEM (Windows) deployed and verified
+  - develbox (Linux) running 0.1.0-dev.8
+  - stagebox1 (Windows) running 0.1.0-dev.8 with tray icon
+  - Ableton-IEM (Windows) running 0.1.0-dev.8 with tray icon
   - All nodes discover each other, cross-node routes working
+  - Task Scheduler used for GUI session access on Windows
 
 - **Bidirectional Cross-Node Routing** (2025-12-29): Full support for local→remote routes
   - When route destination is remote, forwards route to destination node
