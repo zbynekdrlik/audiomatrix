@@ -22,7 +22,7 @@
 #![allow(clippy::assigning_clones)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::double_ended_iterator_last)]
-#![allow(clippy::unchecked_duration_subtraction)]
+#![allow(clippy::unchecked_time_subtraction)]
 #![allow(clippy::float_cmp)]
 #![allow(clippy::missing_fields_in_debug)]
 
