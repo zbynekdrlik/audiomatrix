@@ -96,8 +96,9 @@ async fn test_create_route() {
     assert!(!route_response.id.is_empty(), "Should return route ID");
 
     // Clean up: delete the created route
+    let route_id = &route_response.id;
     let delete_response = client
-        .delete(&format!("/routes/{}", route_response.id))
+        .delete(&format!("/routes/{route_id}"))
         .await
         .expect("Failed to delete route");
 

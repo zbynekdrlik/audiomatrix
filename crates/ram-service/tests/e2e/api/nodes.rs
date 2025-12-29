@@ -42,7 +42,7 @@ async fn test_get_node_by_id() {
 
     // Now fetch by ID
     let node: NodeInfo = client
-        .get_json(&format!("/nodes/{}", node_id))
+        .get_json(&format!("/nodes/{node_id}"))
         .await
         .expect("Failed to get node by ID");
 
