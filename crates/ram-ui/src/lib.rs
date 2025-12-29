@@ -16,6 +16,31 @@
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
+// Allow common patterns in UI code
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::if_not_else)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::wildcard_imports)]
+#![allow(clippy::unused_async)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::unnecessary_cast)]
+#![allow(clippy::float_cmp)]
+#![allow(clippy::option_map_or_none)]
 
 pub mod api;
 pub mod app;

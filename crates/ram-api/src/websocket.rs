@@ -30,6 +30,22 @@ pub enum WsEvent {
     /// Device state changed.
     #[serde(rename = "device_status")]
     DeviceStatus(DeviceStatusUpdate),
+    /// Device attached by user.
+    #[serde(rename = "device_attached")]
+    DeviceAttached {
+        /// Device identifier.
+        device_id: String,
+        /// Device name.
+        device_name: String,
+        /// Display name (alias).
+        display_name: Option<String>,
+    },
+    /// Device detached by user.
+    #[serde(rename = "device_detached")]
+    DeviceDetached {
+        /// Device identifier.
+        device_id: String,
+    },
     /// Subscription needed for cross-node route.
     #[serde(rename = "subscription_needed")]
     SubscriptionNeeded(SubscriptionNeededEvent),

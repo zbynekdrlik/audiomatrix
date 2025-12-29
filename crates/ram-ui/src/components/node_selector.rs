@@ -36,7 +36,7 @@ pub fn NodeSelector() -> impl IntoView {
                         let is_online = node.online;
                         let is_selected = {
                             let node_id = node_id.clone();
-                            move || current_node.get().map_or(false, |n| n.id == node_id)
+                            move || current_node.get().is_some_and(|n| n.id == node_id)
                         };
                         let display = if is_online {
                             node_name

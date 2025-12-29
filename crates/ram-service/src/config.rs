@@ -30,6 +30,9 @@ pub struct ServiceConfig {
     /// Logging configuration.
     #[serde(default)]
     pub logging: LoggingConfig,
+    /// Audio configuration.
+    #[serde(default)]
+    pub audio: AudioConfig,
 }
 
 fn default_node_name() -> String {
@@ -48,6 +51,7 @@ impl Default for ServiceConfig {
             discovery: DiscoveryConfig::default(),
             security: SecurityConfig::default(),
             logging: LoggingConfig::default(),
+            audio: AudioConfig::default(),
         }
     }
 }
@@ -210,6 +214,44 @@ impl Default for LoggingConfig {
     }
 }
 
+/// Audio configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioConfig {
+    /// Whether to auto-start default audio devices on startup.
+    /// CRITICAL: Default is FALSE for zero auto-connect policy.
+    /// Professional audio engineers need explicit control over device attachment.
+    #[serde(default)]
+    pub auto_start_devices: bool,
+
+    /// Default sample rate for new virtual devices.
+    /// Only 96000, 48000, 44100 Hz are supported.
+    #[serde(default = "default_sample_rate")]
+    pub default_sample_rate: u32,
+
+    /// Default buffer size in samples.
+    /// Must be power of 2: 32, 64, 128, 256, 512, 1024, 2048.
+    #[serde(default = "default_buffer_size")]
+    pub default_buffer_size: u32,
+}
+
+fn default_sample_rate() -> u32 {
+    48000
+}
+
+fn default_buffer_size() -> u32 {
+    64
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            auto_start_devices: false, // CRITICAL: Zero auto-connect by default
+            default_sample_rate: default_sample_rate(),
+            default_buffer_size: default_buffer_size(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,6 +263,8 @@ mod tests {
         assert_eq!(config.api.port, 8080);
         assert_eq!(config.vban.port, 6980);
         assert!(config.discovery.enabled);
+        // CRITICAL: Zero auto-connect by default
+        assert!(!config.audio.auto_start_devices);
     }
 
     #[test]
@@ -264,6 +308,23 @@ mod tests {
         let config = LoggingConfig::default();
         assert_eq!(config.level, "info");
         assert!(!config.include_target);
+    }
+
+    #[test]
+    fn audio_config_default() {
+        let config = AudioConfig::default();
+        // CRITICAL: Zero auto-connect policy - must be false by default
+        assert!(!config.auto_start_devices);
+        assert_eq!(config.default_sample_rate, 48000);
+        assert_eq!(config.default_buffer_size, 64);
+    }
+
+    #[test]
+    fn audio_config_sample_rates() {
+        // Only 96000, 48000, 44100 are supported
+        let config = AudioConfig::default();
+        let supported = [96000, 48000, 44100];
+        assert!(supported.contains(&config.default_sample_rate));
     }
 
     #[test]

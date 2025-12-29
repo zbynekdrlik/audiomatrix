@@ -349,7 +349,7 @@ jobs:
   # All checks must pass
   ci-complete:
     name: CI Complete
-    needs: [build-ui, version-check, fmt, clippy, test, coverage, audit, docs, file-size]
+    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -360,6 +360,8 @@ jobs:
              [ "${{ needs.fmt.result }}" != "success" ] || \
              [ "${{ needs.clippy.result }}" != "success" ] || \
              [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.test-windows-asio.result }}" != "success" ] || \
+             [ "${{ needs.build-virtual-asio.result }}" != "success" ] || \
              [ "${{ needs.coverage.result }}" != "success" ] || \
              [ "${{ needs.audit.result }}" != "success" ] || \
              [ "${{ needs.docs.result }}" != "success" ] || \

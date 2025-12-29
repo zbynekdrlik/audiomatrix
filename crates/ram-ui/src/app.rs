@@ -165,8 +165,6 @@ fn NotFound() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn app_compiles() {
         // Basic compilation test - actual rendering tests need wasm-bindgen-test

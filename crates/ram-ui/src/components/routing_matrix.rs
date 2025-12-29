@@ -13,7 +13,7 @@ use crate::api;
 use crate::state::AppState;
 
 /// Channel info tuple: (device_id, device_name, channel_number)
-type ChannelInfo = (String, String, u8);
+type ChannelInfo = (String, String, u16);
 
 /// Main routing matrix grid with node and device selection.
 #[component]
@@ -90,7 +90,7 @@ pub fn RoutingMatrix() -> impl IntoView {
             .flat_map(|d| {
                 let id = d.id.clone();
                 let name = d.name.clone();
-                (1..=d.channels).map(move |ch| (id.clone(), name.clone(), ch))
+                (1..=d.input_channels).map(move |ch| (id.clone(), name.clone(), ch))
             })
             .collect()
     });
@@ -105,7 +105,7 @@ pub fn RoutingMatrix() -> impl IntoView {
             .flat_map(|d| {
                 let id = d.id.clone();
                 let name = d.name.clone();
-                (1..=d.channels).map(move |ch| (id.clone(), name.clone(), ch))
+                (1..=d.output_channels).map(move |ch| (id.clone(), name.clone(), ch))
             })
             .collect()
     });
@@ -145,7 +145,8 @@ pub fn RoutingMatrix() -> impl IntoView {
     fn device_option(device: &DeviceInfo, selected: Option<&String>) -> impl IntoView {
         let is_selected = selected == Some(&device.id);
         let id = device.id.clone();
-        let label = format!("{} ({} ch)", device.name, device.channels);
+        let channels = device.input_channels.max(device.output_channels);
+        let label = format!("{} ({} ch)", device.name, channels);
         view! {
             <option value=id selected=is_selected>
                 {label}

@@ -133,6 +133,8 @@ impl ServiceAnnouncer {
         let hostname =
             hostname::get().map_or_else(|_| "unknown".into(), |h| h.to_string_lossy().into_owned());
         // mDNS requires hostname to end with .local.
+        // Note: This is hostname suffix checking, not file extension checking
+        #[allow(clippy::case_sensitive_file_extension_comparisons)]
         let hostname = if hostname.ends_with(".local.") {
             hostname
         } else if hostname.ends_with(".local") {

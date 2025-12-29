@@ -55,17 +55,17 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Web UI Cross-Node Support** | Complete | ram-ui | Node selectors, cross-node route creation |
 | **Windows System Tray** | Complete | ram-service | Tray icon with menu (Open UI, Logs, Updates, Exit) |
 | **Per-Device Metering Subscriptions** | Complete | ram-api | WebSocket filtering by device |
-| **Device Attachment API** | Not Started | ram-api | Explicit attach/detach endpoints |
-| **Device Naming/Aliasing** | Not Started | ram-api | User-defined display names |
-| **Virtual Device Creation API** | Not Started | ram-api | Create/modify/delete via Web UI |
-| **Channel Label API** | Not Started | ram-api | Per-channel naming CRUD |
-| **Zero Auto-Connect** | Not Started | ram-service | Disable auto-start of devices |
+| **Device Attachment API** | Complete | ram-api | Explicit attach/detach endpoints |
+| **Device Naming/Aliasing** | Complete | ram-api | User-defined display names via PATCH |
+| **Virtual Device Creation API** | Complete | ram-api | Create/modify/delete via Web UI |
+| **Channel Label API** | Complete | ram-api | Per-channel naming CRUD |
+| **Zero Auto-Connect** | Complete | ram-service | Config option `auto_start_devices` (default: false) |
+| **Sync Wave Generator** | Complete | ram-core | Lock-free per-channel test signal generator |
+| **State Persistence** | Complete | ram-core | Device attachments, channel labels, virtual devices |
+| **Unique Tray Icon** | Complete | ram-service | Programmatic 3x3 grid with diamond symbols |
 | **Web UI Device Attachment** | Not Started | ram-ui | Attach/detach workflow |
 | **Web UI Virtual Device Creation** | Not Started | ram-ui | Create virtual ASIO from browser |
 | **Web UI Channel Naming** | Not Started | ram-ui | Per-channel label editor |
-| **Sync Wave Generator** | Not Started | ram-core | Per-output test signal generator |
-| **State Persistence** | Not Started | ram-service | Full config restore on restart |
-| **Unique Tray Icon** | Not Started | ram-service | 3x3 grid with diamond accent design |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 
@@ -114,6 +114,7 @@ audiomatrix/
 │   │   ├── subscription.rs     # Subscription protocol messages
 │   │   ├── subscription_manager.rs # Subscription lifecycle
 │   │   ├── latency.rs          # Latency measurement
+│   │   ├── wave_generator.rs   # Lock-free test signal generator
 │   │   └── route_controller.rs # RouteController trait for API-audio wiring
 │   ├── ram-asio/           # ASIO support (Windows)
 │   │   └── cpp/                # C++ COM driver
@@ -180,6 +181,23 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 
 ## Recently Completed
 
+- **File Size Refactoring** (2025-12-29): All files now under 1000 lines per CLAUDE.md guidelines
+  - `state.rs` (1275 lines) → `state/mod.rs` (957) + `devices.rs` (303) + `generators.rs` (108)
+  - `device.rs` (1080 lines) → `device/mod.rs` (16) + `types.rs` (529) + `manager.rs` (569)
+  - `handlers.rs` (1017 lines) → `handlers/mod.rs` (745) + `subscriptions.rs` (153)
+  - `persistence.rs` (1011 lines) → `persistence/mod.rs` (37) + `config.rs` (342) + `store.rs` (455) + `types.rs` (228)
+
+- **8-Phase Architecture Sync** (2025-12-29): Full implementation of architecture specifications
+  - **Phase 1 - Zero Auto-Connect**: Added `auto_start_devices` config option (default: false)
+  - **Phase 2 - Device State Machine**: Added `AttachmentState` enum (Available, Attached, Detached)
+  - **Phase 3 - State Persistence**: Extended `PersistedConfig` with device attachments, channel labels, virtual devices
+  - **Phase 4 - Device Attachment API**: Added attach/detach/rename endpoints with persistence
+  - **Phase 5 - Channel Labels**: Per-channel naming with 31-char limit, bulk update support
+  - **Phase 6 - Virtual Device CRUD API**: Create/update/delete virtual ASIO devices via REST
+  - **Phase 7 - Sync Wave Generator**: Lock-free per-channel test signal injection (Sine, PinkNoise, ChannelId, Sweep, Click)
+  - **Phase 8 - Unique Tray Icon**: Programmatic 3x3 grid with diamond symbols (Idle=blue, Active=green, Error=red)
+  - All 278 workspace tests pass
+
 - **Windows System Tray** (2025-12-29): System tray icon with menu for Windows
   - Version display in tooltip and menu header
   - Open Web UI menu item (opens browser to localhost:port)
@@ -194,11 +212,6 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
   - MeteringSubscriptions struct tracks per-client subscriptions
   - Backwards compatible: clients without subscriptions receive all meters
   - Commands: `subscribe_metering`, `unsubscribe_metering`
-
-- **state.rs Refactoring** (2025-12-29): Reduced from 1027 to 839 lines
-  - Extracted cross-node routing logic to `cross_node.rs` module
-  - Functions: `initiate_subscription()`, `forward_route_to_destination()`
-  - Helper: `detect_local_ip_for_target()`, `register_vban_stream()`
 
 - **3-Node Network Deployment** (2025-12-29): Complete 3-point network operational
   - develbox (Linux) running 0.1.0-dev.8

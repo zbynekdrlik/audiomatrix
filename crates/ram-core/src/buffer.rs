@@ -134,7 +134,7 @@ impl std::fmt::Debug for RingBuffer {
             .field("capacity", &self.capacity)
             .field("available", &self.available())
             .field("free", &self.free())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

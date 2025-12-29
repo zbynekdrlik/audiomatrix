@@ -18,7 +18,7 @@ use crate::Result;
 /// Default port for broadcast discovery.
 pub const BROADCAST_PORT: u16 = 6981;
 
-/// Magic bytes to identify AudioMatrix broadcast packets.
+/// Magic bytes to identify `AudioMatrix` broadcast packets.
 const MAGIC: &[u8; 4] = b"AMBC";
 
 /// Protocol version.
@@ -52,6 +52,8 @@ impl BroadcastAnnouncement {
 
         // Serialize using JSON for simplicity (could optimize later)
         let json = serde_json::to_vec(self).unwrap_or_default();
+        // Wire format uses u16 length; truncate large payloads (unlikely in practice)
+        #[allow(clippy::cast_possible_truncation)]
         let len = (json.len() as u16).to_le_bytes();
         buf.extend_from_slice(&len);
         buf.extend_from_slice(&json);
@@ -119,7 +121,7 @@ pub enum BroadcastEvent {
 }
 
 /// Configuration for broadcast discovery.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct BroadcastConfig {
     /// Port to use for discovery.
     pub port: u16,
@@ -150,26 +152,20 @@ pub struct BroadcastDiscovery {
 
 impl BroadcastDiscovery {
     /// Creates a new broadcast discovery service.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if socket binding fails.
-    pub fn new(announcement: BroadcastAnnouncement, config: BroadcastConfig) -> Result<Self> {
-        Ok(Self {
+    #[must_use]
+    pub fn new(announcement: BroadcastAnnouncement, config: BroadcastConfig) -> Self {
+        Self {
             config,
             announcement: Arc::new(RwLock::new(announcement)),
             nodes: Arc::new(RwLock::new(HashMap::new())),
             running: Arc::new(AtomicBool::new(false)),
             event_senders: Arc::new(RwLock::new(Vec::new())),
-        })
+        }
     }
 
     /// Creates with default configuration.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if socket binding fails.
-    pub fn with_defaults(announcement: BroadcastAnnouncement) -> Result<Self> {
+    #[must_use]
+    pub fn with_defaults(announcement: BroadcastAnnouncement) -> Self {
         Self::new(announcement, BroadcastConfig::default())
     }
 
@@ -185,7 +181,8 @@ impl BroadcastDiscovery {
     ///
     /// # Errors
     ///
-    /// Returns an error if the socket cannot be bound.
+    /// Currently always succeeds, but returns `Result` for API stability.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn start(&self) -> Result<()> {
         if self.running.load(Ordering::Acquire) {
             return Ok(());
@@ -193,12 +190,26 @@ impl BroadcastDiscovery {
 
         self.running.store(true, Ordering::Release);
 
-        // Clone what we need for threads
-        let running = self.running.clone();
-        let announcement = self.announcement.clone();
-        let config = self.config.clone();
+        // Start sender and receiver threads
+        Self::spawn_sender_thread(self.running.clone(), self.announcement.clone(), self.config);
+        Self::spawn_receiver_thread(
+            self.running.clone(),
+            self.nodes.clone(),
+            self.event_senders.clone(),
+            self.config,
+            self.announcement.read().name.clone(),
+        );
 
-        // Start sender thread
+        info!("Broadcast discovery started");
+        Ok(())
+    }
+
+    /// Spawns the broadcast sender thread.
+    fn spawn_sender_thread(
+        running: Arc<AtomicBool>,
+        announcement: Arc<RwLock<BroadcastAnnouncement>>,
+        config: BroadcastConfig,
+    ) {
         std::thread::spawn(move || {
             let socket = match UdpSocket::bind("0.0.0.0:0") {
                 Ok(s) => s,
@@ -213,8 +224,7 @@ impl BroadcastDiscovery {
                 return;
             }
 
-            let broadcast_addr =
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), config.port);
+            let broadcast_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), config.port);
 
             info!("Broadcast discovery sender started on port {}", config.port);
 
@@ -230,15 +240,16 @@ impl BroadcastDiscovery {
 
             debug!("Broadcast sender stopped");
         });
+    }
 
-        // Clone for receiver thread
-        let running = self.running.clone();
-        let nodes = self.nodes.clone();
-        let event_senders = self.event_senders.clone();
-        let config = self.config.clone();
-        let my_name = self.announcement.read().name.clone();
-
-        // Start receiver thread
+    /// Spawns the broadcast receiver thread.
+    fn spawn_receiver_thread(
+        running: Arc<AtomicBool>,
+        nodes: Arc<RwLock<HashMap<String, DiscoveredNode>>>,
+        event_senders: Arc<RwLock<Vec<crossbeam_channel::Sender<BroadcastEvent>>>>,
+        config: BroadcastConfig,
+        my_name: String,
+    ) {
         std::thread::spawn(move || {
             let socket = match UdpSocket::bind(SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::UNSPECIFIED),
@@ -260,89 +271,110 @@ impl BroadcastDiscovery {
                 config.port
             );
 
-            let mut buf = [0u8; 1024];
-
-            while running.load(Ordering::Acquire) {
-                match socket.recv_from(&mut buf) {
-                    Ok((len, addr)) => {
-                        if let Some(announcement) = BroadcastAnnouncement::from_bytes(&buf[..len]) {
-                            // Skip our own announcements
-                            if announcement.name == my_name {
-                                continue;
-                            }
-
-                            let node = DiscoveredNode {
-                                name: announcement.name.clone(),
-                                address: addr.ip(),
-                                api_port: announcement.api_port,
-                                vban_port: announcement.vban_port,
-                                input_channels: announcement.input_channels,
-                                output_channels: announcement.output_channels,
-                                sample_rate: announcement.sample_rate,
-                                version: announcement.version,
-                                last_seen: Instant::now(),
-                            };
-
-                            let is_new = !nodes.read().contains_key(&node.name);
-
-                            nodes.write().insert(node.name.clone(), node.clone());
-
-                            if is_new {
-                                info!(
-                                    "Discovered node via broadcast: {} at {}",
-                                    node.name, node.address
-                                );
-                            }
-
-                            // Emit event
-                            let event = BroadcastEvent::NodeDiscovered(node);
-                            let senders = event_senders.read();
-                            for sender in senders.iter() {
-                                let _ = sender.send(event.clone());
-                            }
-                        }
-                    },
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        // Timeout, check for stale nodes
-                    },
-                    Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                        // Timeout, check for stale nodes
-                    },
-                    Err(e) => {
-                        debug!("Broadcast recv error: {e}");
-                    },
-                }
-
-                // Clean up stale nodes
-                let now = Instant::now();
-                let mut timed_out = Vec::new();
-
-                {
-                    let nodes_guard = nodes.read();
-                    for (name, node) in nodes_guard.iter() {
-                        if now.duration_since(node.last_seen) > config.node_timeout {
-                            timed_out.push(name.clone());
-                        }
-                    }
-                }
-
-                for name in timed_out {
-                    nodes.write().remove(&name);
-                    info!("Node timed out: {name}");
-
-                    let event = BroadcastEvent::NodeTimeout(name);
-                    let senders = event_senders.read();
-                    for sender in senders.iter() {
-                        let _ = sender.send(event.clone());
-                    }
-                }
-            }
+            Self::receiver_loop(&socket, &running, &nodes, &event_senders, config, &my_name);
 
             debug!("Broadcast receiver stopped");
         });
+    }
 
-        info!("Broadcast discovery started");
-        Ok(())
+    /// Main receiver loop - processes incoming announcements and cleans up stale nodes.
+    fn receiver_loop(
+        socket: &UdpSocket,
+        running: &AtomicBool,
+        nodes: &RwLock<HashMap<String, DiscoveredNode>>,
+        event_senders: &RwLock<Vec<crossbeam_channel::Sender<BroadcastEvent>>>,
+        config: BroadcastConfig,
+        my_name: &str,
+    ) {
+        let mut buf = [0u8; 1024];
+
+        while running.load(Ordering::Acquire) {
+            match socket.recv_from(&mut buf) {
+                Ok((len, addr)) => {
+                    Self::handle_announcement(&buf[..len], addr, nodes, event_senders, my_name);
+                },
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {},
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {},
+                Err(e) => {
+                    debug!("Broadcast recv error: {e}");
+                },
+            }
+
+            Self::cleanup_stale_nodes(nodes, event_senders, config);
+        }
+    }
+
+    /// Handles an incoming announcement packet.
+    fn handle_announcement(
+        data: &[u8],
+        addr: SocketAddr,
+        nodes: &RwLock<HashMap<String, DiscoveredNode>>,
+        event_senders: &RwLock<Vec<crossbeam_channel::Sender<BroadcastEvent>>>,
+        my_name: &str,
+    ) {
+        if let Some(announcement) = BroadcastAnnouncement::from_bytes(data) {
+            // Skip our own announcements
+            if announcement.name == my_name {
+                return;
+            }
+
+            let node = DiscoveredNode {
+                name: announcement.name.clone(),
+                address: addr.ip(),
+                api_port: announcement.api_port,
+                vban_port: announcement.vban_port,
+                input_channels: announcement.input_channels,
+                output_channels: announcement.output_channels,
+                sample_rate: announcement.sample_rate,
+                version: announcement.version,
+                last_seen: Instant::now(),
+            };
+
+            let is_new = !nodes.read().contains_key(&node.name);
+            nodes.write().insert(node.name.clone(), node.clone());
+
+            if is_new {
+                info!(
+                    "Discovered node via broadcast: {} at {}",
+                    node.name, node.address
+                );
+            }
+
+            // Emit event
+            let event = BroadcastEvent::NodeDiscovered(node);
+            for sender in event_senders.read().iter() {
+                let _ = sender.send(event.clone());
+            }
+        }
+    }
+
+    /// Cleans up nodes that haven't been seen recently.
+    fn cleanup_stale_nodes(
+        nodes: &RwLock<HashMap<String, DiscoveredNode>>,
+        event_senders: &RwLock<Vec<crossbeam_channel::Sender<BroadcastEvent>>>,
+        config: BroadcastConfig,
+    ) {
+        let now = Instant::now();
+        let mut timed_out = Vec::new();
+
+        {
+            let nodes_guard = nodes.read();
+            for (name, node) in nodes_guard.iter() {
+                if now.duration_since(node.last_seen) > config.node_timeout {
+                    timed_out.push(name.clone());
+                }
+            }
+        }
+
+        for name in timed_out {
+            nodes.write().remove(&name);
+            info!("Node timed out: {name}");
+
+            let event = BroadcastEvent::NodeTimeout(name);
+            for sender in event_senders.read().iter() {
+                let _ = sender.send(event.clone());
+            }
+        }
     }
 
     /// Returns all discovered nodes.

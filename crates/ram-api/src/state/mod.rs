@@ -3,6 +3,9 @@
 //! This module provides the shared state that handlers use to access
 //! the audio engine, device manager, and other core services.
 
+mod devices;
+mod generators;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -13,8 +16,9 @@ use ram_core::{ConnectionId, RouteController, SubscriptionStats};
 
 use crate::cross_node;
 use crate::models::{
-    DeviceInfo, DeviceType, LatencyInfo, NodeInfo, RouteDefinition, StreamDirection, StreamInfo,
-    SubscriptionInfo, SubscriptionState as ApiSubscriptionState, SubscriptionStatsResponse,
+    ChannelInfo, DeviceInfo, DeviceType, GeneratorStatus, LatencyInfo, NodeInfo, RouteDefinition,
+    StreamDirection, StreamInfo, SubscriptionInfo, SubscriptionState as ApiSubscriptionState,
+    SubscriptionStatsResponse, WaveformType,
 };
 use crate::subscription_client::SubscriptionClient;
 use crate::websocket::{SubscriptionNeededEvent, WsEvent};
@@ -26,22 +30,27 @@ pub struct AppState {
     inner: Arc<AppStateInner>,
 }
 
-struct AppStateInner {
+pub(crate) struct AppStateInner {
     /// Local node info.
-    local_node: RwLock<NodeInfo>,
+    pub local_node: RwLock<NodeInfo>,
     /// Known remote nodes.
-    remote_nodes: RwLock<HashMap<String, NodeInfo>>,
+    pub remote_nodes: RwLock<HashMap<String, NodeInfo>>,
     /// Local devices.
-    devices: RwLock<HashMap<String, DeviceInfo>>,
+    pub devices: RwLock<HashMap<String, DeviceInfo>>,
+    /// Channel labels by device ID.
+    pub channel_labels: RwLock<HashMap<String, HashMap<u16, String>>>,
     /// Active routes.
-    routes: RwLock<HashMap<String, RouteDefinition>>,
+    pub routes: RwLock<HashMap<String, RouteDefinition>>,
+    /// Wave generators by "device_id:channel" key.
+    /// NOT persisted (safety - always disabled on restart).
+    pub generators: RwLock<HashMap<String, Arc<ram_core::WaveGeneratorConfig>>>,
     /// WebSocket event broadcaster.
-    ws_broadcaster: broadcast::Sender<WsEvent>,
+    pub ws_broadcaster: broadcast::Sender<WsEvent>,
     /// Route controller for audio processor integration.
     /// None if running without audio processor (e.g., tests).
-    route_controller: Option<Arc<dyn RouteController>>,
+    pub route_controller: Option<Arc<dyn RouteController>>,
     /// Subscription client for cross-node subscriptions.
-    subscription_client: SubscriptionClient,
+    pub subscription_client: SubscriptionClient,
 }
 
 impl AppState {
@@ -86,7 +95,9 @@ impl AppState {
                 local_node: RwLock::new(local_node),
                 remote_nodes: RwLock::new(HashMap::new()),
                 devices: RwLock::new(HashMap::new()),
+                channel_labels: RwLock::new(HashMap::new()),
                 routes: RwLock::new(HashMap::new()),
+                generators: RwLock::new(HashMap::new()),
                 ws_broadcaster,
                 route_controller,
                 subscription_client,
@@ -146,9 +157,6 @@ impl AppState {
     }
 
     /// Gets a remote node by ID or name.
-    ///
-    /// This searches remote nodes by both ID and name, handling various
-    /// formats like "node@host" or just "node".
     #[must_use]
     pub fn get_remote_node(&self, node_ref: &str) -> Option<NodeInfo> {
         let nodes = self.inner.remote_nodes.read();
@@ -190,7 +198,7 @@ impl AppState {
         self.inner.remote_nodes.write().remove(id)
     }
 
-    // --- Device Management ---
+    // --- Device Management (delegated to devices module) ---
 
     /// Returns all local devices.
     #[must_use]
@@ -227,6 +235,175 @@ impl AppState {
         self.inner.devices.write().remove(id)
     }
 
+    /// Attaches a device for routing.
+    pub fn attach_device(
+        &self,
+        id: &str,
+        display_name: Option<String>,
+    ) -> Result<DeviceInfo, String> {
+        devices::attach_device(&self.inner.devices, id, display_name)
+    }
+
+    /// Detaches a device from routing.
+    pub fn detach_device(&self, id: &str) -> Result<DeviceInfo, String> {
+        devices::detach_device(&self.inner.devices, id)
+    }
+
+    /// Updates device settings.
+    pub fn update_device(
+        &self,
+        id: &str,
+        display_name: Option<String>,
+    ) -> Result<DeviceInfo, String> {
+        devices::update_device(&self.inner.devices, id, display_name)
+    }
+
+    /// Gets channel information for a device.
+    #[must_use]
+    pub fn get_device_channels(&self, device_id: &str) -> Option<Vec<ChannelInfo>> {
+        devices::get_device_channels(&self.inner.devices, &self.inner.channel_labels, device_id)
+    }
+
+    /// Sets a channel label.
+    pub fn set_channel_label(
+        &self,
+        device_id: &str,
+        channel: u16,
+        label: String,
+    ) -> Result<ChannelInfo, String> {
+        devices::set_channel_label(
+            &self.inner.devices,
+            &self.inner.channel_labels,
+            device_id,
+            channel,
+            label,
+        )
+    }
+
+    /// Sets multiple channel labels at once.
+    pub fn set_channel_labels(
+        &self,
+        device_id: &str,
+        labels_map: HashMap<u16, String>,
+    ) -> Result<Vec<ChannelInfo>, String> {
+        devices::set_channel_labels(
+            &self.inner.devices,
+            &self.inner.channel_labels,
+            device_id,
+            labels_map,
+        )
+    }
+
+    // --- Virtual Device Management (delegated to devices module) ---
+
+    /// Lists all virtual devices.
+    #[must_use]
+    pub fn list_virtual_devices(&self) -> Vec<DeviceInfo> {
+        self.inner
+            .devices
+            .read()
+            .values()
+            .filter(|d| d.is_virtual)
+            .cloned()
+            .collect()
+    }
+
+    /// Creates a virtual device.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_virtual_device(
+        &self,
+        name: String,
+        input_channels: u16,
+        output_channels: u16,
+        sample_rate: u32,
+        buffer_size: u32,
+    ) -> Result<DeviceInfo, String> {
+        devices::create_virtual_device(
+            &self.inner.devices,
+            name,
+            input_channels,
+            output_channels,
+            sample_rate,
+            buffer_size,
+        )
+    }
+
+    /// Updates a virtual device.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_virtual_device(
+        &self,
+        id: &str,
+        name: Option<String>,
+        input_channels: Option<u16>,
+        output_channels: Option<u16>,
+        sample_rate: Option<u32>,
+        buffer_size: Option<u32>,
+    ) -> Result<DeviceInfo, String> {
+        devices::update_virtual_device(
+            &self.inner.devices,
+            id,
+            name,
+            input_channels,
+            output_channels,
+            sample_rate,
+            buffer_size,
+        )
+    }
+
+    /// Deletes a virtual device.
+    pub fn delete_virtual_device(&self, id: &str) -> Result<DeviceInfo, String> {
+        devices::delete_virtual_device(&self.inner.devices, id)
+    }
+
+    // --- Wave Generator Management (delegated to generators module) ---
+
+    /// Get generator status for all output channels of a device.
+    #[must_use]
+    pub fn get_generator_status(&self, device_id: &str) -> Vec<GeneratorStatus> {
+        generators::get_generator_status(&self.inner.generators, &self.inner.devices, device_id)
+    }
+
+    /// Set generator for a specific channel.
+    pub fn set_channel_generator(
+        &self,
+        device_id: &str,
+        channel: u16,
+        enabled: bool,
+        waveform: WaveformType,
+        frequency: u32,
+        level_db: f32,
+    ) {
+        generators::set_channel_generator(
+            &self.inner.generators,
+            device_id,
+            channel,
+            enabled,
+            waveform,
+            frequency,
+            level_db,
+        );
+    }
+
+    /// Set generator for all output channels of a device.
+    pub fn set_all_generators(
+        &self,
+        device_id: &str,
+        enabled: bool,
+        waveform: WaveformType,
+        frequency: u32,
+        level_db: f32,
+    ) {
+        generators::set_all_generators(
+            &self.inner.generators,
+            &self.inner.devices,
+            device_id,
+            enabled,
+            waveform,
+            frequency,
+            level_db,
+        );
+    }
+
     // --- Route Management ---
 
     /// Returns all routes.
@@ -242,25 +419,12 @@ impl AppState {
     }
 
     /// Creates or updates a route.
-    ///
-    /// If a route controller is available, the route will also be applied
-    /// to the live audio processor.
-    ///
-    /// For cross-node routes (source on different node), this also triggers
-    /// VBAN subscription setup.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the route controller rejects the route.
     pub fn upsert_route(&self, route: RouteDefinition) -> Result<String, String> {
         let id = Self::route_id(&route);
-
-        // Check if this is a cross-node route
         let is_cross_node = self.is_cross_node_route(&route);
 
         // If we have a route controller, apply the route to the audio processor
         if let Some(controller) = &self.inner.route_controller {
-            // Convert RouteDefinition to ConnectionId
             let conn_id = ConnectionId::new(
                 &route.source_node,
                 &route.source_device,
@@ -270,17 +434,12 @@ impl AppState {
                 route.destination_channel,
             );
 
-            // For local routes, add to audio processor directly
-            // For cross-node routes, we need subscription handshake first
             if !is_cross_node {
-                // Check if route already exists in controller
                 if !controller.has_route(&conn_id) {
                     controller
                         .add_route(conn_id.clone())
                         .map_err(|e| e.to_string())?;
                 }
-
-                // Apply gain and mute settings
                 controller
                     .set_route_gain(&conn_id, route.volume)
                     .map_err(|e| e.to_string())?;
@@ -288,7 +447,6 @@ impl AppState {
                     .set_route_muted(&conn_id, route.muted)
                     .map_err(|e| e.to_string())?;
             } else {
-                // Cross-node route: Log for now, subscription handler will set up VBAN
                 tracing::info!(
                     "Cross-node route created: {} -> {} (requires VBAN subscription)",
                     route.source_node,
@@ -297,7 +455,6 @@ impl AppState {
             }
         }
 
-        // Store in local state
         self.inner.routes.write().insert(id.clone(), route.clone());
 
         // For cross-node routes, broadcast subscription needed event and initiate subscription
@@ -312,20 +469,16 @@ impl AppState {
                 destination_channel: route.destination_channel,
             }));
 
-            // If source is remote (we are destination), initiate subscription
             let source_is_local = self.is_local_node(&route.source_node);
             let dest_is_local = self.is_local_node(&route.destination_node);
 
             tracing::debug!(
-                "Cross-node routing decision: source_is_local={}, dest_is_local={}, source={}, dest={}",
+                "Cross-node routing decision: source_is_local={}, dest_is_local={}",
                 source_is_local,
-                dest_is_local,
-                route.source_node,
-                route.destination_node
+                dest_is_local
             );
 
             if !source_is_local {
-                // Source is remote, we are destination - initiate subscription to source
                 if let Some(source_node) = self.get_remote_node(&route.source_node) {
                     cross_node::initiate_subscription(
                         self.inner.subscription_client.clone(),
@@ -341,7 +494,6 @@ impl AppState {
                     );
                 }
             } else if !dest_is_local {
-                // Source is local, destination is remote - forward route to destination node
                 if let Some(dest_node) = self.get_remote_node(&route.destination_node) {
                     cross_node::forward_route_to_destination(
                         self.local_node(),
@@ -371,29 +523,21 @@ impl AppState {
         let local_id = self.local_node().id;
         let local_name = self.local_node().name;
 
-        // Check if source is local
         let source_is_local = route.source_node == "LOCAL"
             || route.source_node == local_id
             || route.source_node == local_name;
 
-        // Check if destination is local
         let dest_is_local = route.destination_node == "LOCAL"
             || route.destination_node == local_id
             || route.destination_node == local_name;
 
-        // It's cross-node if either endpoint is remote
         !source_is_local || !dest_is_local
     }
 
     /// Removes a route.
-    ///
-    /// If a route controller is available, the route will also be removed
-    /// from the live audio processor.
     pub fn remove_route(&self, id: &str) -> Result<Option<RouteDefinition>, String> {
-        // Remove from local state first
         let route = self.inner.routes.write().remove(id);
 
-        // If we have a route controller and the route existed, remove from audio processor
         if let (Some(controller), Some(ref route_def)) = (&self.inner.route_controller, &route) {
             let conn_id = ConnectionId::new(
                 &route_def.source_node,
@@ -403,8 +547,6 @@ impl AppState {
                 &route_def.destination_device,
                 route_def.destination_channel,
             );
-
-            // Ignore not found errors (route may have been removed elsewhere)
             let _ = controller.remove_route(&conn_id);
         }
 
@@ -412,17 +554,12 @@ impl AppState {
     }
 
     /// Updates the volume for a route.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the route doesn't exist or the controller rejects the update.
     pub fn set_route_volume(&self, id: &str, volume: f32) -> Result<(), String> {
         let mut routes = self.inner.routes.write();
         let route = routes
             .get_mut(id)
             .ok_or_else(|| format!("Route not found: {id}"))?;
 
-        // Update in audio processor if available
         if let Some(controller) = &self.inner.route_controller {
             let conn_id = ConnectionId::new(
                 &route.source_node,
@@ -442,17 +579,12 @@ impl AppState {
     }
 
     /// Updates the mute state for a route.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the route doesn't exist or the controller rejects the update.
     pub fn set_route_muted(&self, id: &str, muted: bool) -> Result<(), String> {
         let mut routes = self.inner.routes.write();
         let route = routes
             .get_mut(id)
             .ok_or_else(|| format!("Route not found: {id}"))?;
 
-        // Update in audio processor if available
         if let Some(controller) = &self.inner.route_controller {
             let conn_id = ConnectionId::new(
                 &route.source_node,
@@ -487,9 +619,6 @@ impl AppState {
     // --- Stream Management ---
 
     /// Returns all active streams.
-    ///
-    /// If a route controller is available, returns actual stream data.
-    /// Otherwise returns an empty list.
     #[must_use]
     pub fn all_streams(&self) -> Vec<StreamInfo> {
         let Some(controller) = &self.inner.route_controller else {
@@ -499,11 +628,10 @@ impl AppState {
         let registry = controller.stream_registry();
         let mut streams = Vec::new();
 
-        // Collect input streams
         registry.for_each_input(|stream| {
             streams.push(StreamInfo {
                 device_id: stream.device_id().to_string(),
-                device_name: stream.device_id().to_string(), // Use device_id as name for now
+                device_name: stream.device_id().to_string(),
                 direction: StreamDirection::Input,
                 channels: stream.config().channels as u16,
                 sample_rate: stream.config().sample_rate,
@@ -511,11 +639,10 @@ impl AppState {
             });
         });
 
-        // Collect output streams
         registry.for_each_output(|stream| {
             streams.push(StreamInfo {
                 device_id: stream.device_id().to_string(),
-                device_name: stream.device_id().to_string(), // Use device_id as name for now
+                device_name: stream.device_id().to_string(),
                 direction: StreamDirection::Output,
                 channels: stream.config().channels as u16,
                 sample_rate: stream.config().sample_rate,
@@ -541,9 +668,6 @@ impl AppState {
     // --- Subscription Management ---
 
     /// Returns all subscriptions (incoming and outgoing).
-    ///
-    /// If a route controller is available, returns actual subscription data.
-    /// Otherwise returns an empty list.
     #[must_use]
     pub fn all_subscriptions(&self) -> Vec<SubscriptionInfo> {
         let Some(controller) = &self.inner.route_controller else {
@@ -553,7 +677,6 @@ impl AppState {
         let manager = controller.subscription_manager();
         let mut subscriptions = Vec::new();
 
-        // Helper to convert subscription state
         let convert_state = |state: ram_core::SubscriptionState| -> ApiSubscriptionState {
             match state {
                 ram_core::SubscriptionState::Pending => ApiSubscriptionState::Pending,
@@ -564,7 +687,6 @@ impl AppState {
             }
         };
 
-        // Collect outgoing subscriptions
         for sub in manager.active_outgoing() {
             subscriptions.push(SubscriptionInfo {
                 id: sub.id,
@@ -579,7 +701,6 @@ impl AppState {
             });
         }
 
-        // Collect incoming subscriptions
         for sub in manager.active_incoming() {
             subscriptions.push(SubscriptionInfo {
                 id: sub.id,
@@ -624,15 +745,10 @@ impl AppState {
     // --- Latency Information ---
 
     /// Returns latency information for a route.
-    ///
-    /// If a route controller is available, uses accurate latency calculation.
-    /// Otherwise falls back to estimated values.
     #[must_use]
     pub fn get_route_latency(&self, id: &str) -> Option<LatencyInfo> {
-        // Check if route exists
         let route = self.get_route(id)?;
 
-        // If we have a route controller, use accurate calculation
         if let Some(controller) = &self.inner.route_controller {
             let conn_id = ConnectionId::new(
                 &route.source_node,
@@ -656,11 +772,9 @@ impl AppState {
             });
         }
 
-        // Fallback: estimate latency based on route type
         let is_local = route.source_node == "LOCAL" && route.destination_node == "LOCAL";
 
         if is_local {
-            // Local route: ~53ms typical (256 + 2048 + 256 samples @ 48kHz)
             Some(LatencyInfo {
                 route_id: id.to_string(),
                 input_buffer_ms: 5.33,
@@ -672,13 +786,12 @@ impl AppState {
                 is_local: true,
             })
         } else {
-            // Network route: adds jitter buffer and network latency
             Some(LatencyInfo {
                 route_id: id.to_string(),
                 input_buffer_ms: 5.33,
                 ring_buffer_ms: 42.67,
                 output_buffer_ms: 5.33,
-                network_ms: 11.17, // jitter buffer + RTT
+                network_ms: 11.17,
                 processing_ms: 0.1,
                 total_ms: 64.6,
                 is_local: false,
@@ -696,6 +809,7 @@ impl Default for AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::DeviceStatus;
 
     #[test]
     fn app_state_new() {
@@ -739,7 +853,7 @@ mod tests {
         state.upsert_remote_node(remote.clone());
 
         let all = state.all_nodes();
-        assert_eq!(all.len(), 2); // Local + remote
+        assert_eq!(all.len(), 2);
 
         let found = state.get_node("remote-1");
         assert!(found.is_some());
@@ -757,10 +871,15 @@ mod tests {
         let device = DeviceInfo {
             id: "device-1".to_string(),
             name: "Test Device".to_string(),
+            display_name: None,
             device_type: DeviceType::Input,
-            channels: 2,
+            input_channels: 2,
+            output_channels: 0,
             sample_rate: 48000,
+            buffer_size: 256,
             is_virtual: false,
+            status: DeviceStatus::Available,
+            backend: None,
         };
 
         state.register_device(device);
@@ -821,7 +940,6 @@ mod tests {
             online: true,
         }));
 
-        // Try to receive (non-blocking)
         match receiver.try_recv() {
             Ok(event) => {
                 if let WsEvent::NodeStatus(status) = event {

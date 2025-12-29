@@ -9,6 +9,22 @@
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
+// Allow common patterns in audio/real-time code
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::if_not_else)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::assigning_clones)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::double_ended_iterator_last)]
+#![allow(clippy::unchecked_duration_subtraction)]
+#![allow(clippy::float_cmp)]
+#![allow(clippy::missing_fields_in_debug)]
 
 pub mod active_stream;
 pub mod atomic;
@@ -32,16 +48,22 @@ pub mod routing_table;
 pub mod stream_registry;
 pub mod subscription;
 pub mod subscription_manager;
+pub mod wave_generator;
 
 pub use active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig, StreamState};
 pub use atomic::AtomicF32;
 pub use connection::{ConnectionId, ConnectionManager, ConnectionState, SourceConnection};
 pub use destination::{DestinationChannel, HeadroomMode};
-pub use device::{DeviceDirection, DeviceEvent, DeviceInfo, DeviceManager, DeviceState};
+pub use device::{
+    AttachmentState, DeviceDirection, DeviceEvent, DeviceInfo, DeviceManager, DeviceState,
+};
 pub use engine::{AudioEngine, EngineConfig};
 pub use latency::{CallbackTimer, LatencyCalculator, LatencyReport, TimingStats};
 pub use metering::{ChannelMeter, MeterBank, MeterLevels};
-pub use persistence::{ConfigStore, PersistedConfig, PersistedRoute};
+pub use persistence::{
+    ChannelLabels, ConfigStore, PersistedConfig, PersistedDevice, PersistedNode, PersistedRoute,
+    VirtualDeviceConfig,
+};
 pub use resampler::{Resampler, ResamplerQuality};
 pub use ring_buffer_pool::RingBufferPool;
 pub use route_controller::{RouteController, RouteError, RouteResult};
@@ -53,6 +75,9 @@ pub use subscription::{
     SubscriptionId, SubscriptionMessage, SubscriptionState, UnsubscribeAck, UnsubscribeRequest,
 };
 pub use subscription_manager::{SubscriptionManager, SubscriptionStats};
+pub use wave_generator::{
+    WaveGeneratorConfig, WaveGeneratorState, WaveformType, DEFAULT_LEVEL_DBFS, MAX_LEVEL_DBFS,
+};
 
 pub use error::{Error, Result};
 

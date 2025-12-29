@@ -1,6 +1,6 @@
 //! API router configuration.
 
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -23,7 +23,42 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/nodes/:node_id/devices", get(handlers::list_devices))
         .route(
             "/nodes/:node_id/devices/:device_id",
-            get(handlers::get_device),
+            get(handlers::get_device).patch(handlers::update_device),
+        )
+        .route(
+            "/nodes/:node_id/devices/:device_id/attach",
+            post(handlers::attach_device),
+        )
+        .route(
+            "/nodes/:node_id/devices/:device_id/detach",
+            post(handlers::detach_device),
+        )
+        // Channel labels
+        .route(
+            "/nodes/:node_id/devices/:device_id/channels",
+            get(handlers::get_device_channels).put(handlers::bulk_update_channel_labels),
+        )
+        .route(
+            "/nodes/:node_id/devices/:device_id/channels/:channel",
+            patch(handlers::update_channel_label),
+        )
+        // Virtual devices
+        .route(
+            "/nodes/:node_id/virtual-devices",
+            get(handlers::list_virtual_devices).post(handlers::create_virtual_device),
+        )
+        .route(
+            "/nodes/:node_id/virtual-devices/:device_id",
+            patch(handlers::update_virtual_device).delete(handlers::delete_virtual_device),
+        )
+        // Wave generators (test signal injection)
+        .route(
+            "/nodes/:node_id/devices/:device_id/generator",
+            get(handlers::get_device_generator).post(handlers::set_all_generators),
+        )
+        .route(
+            "/nodes/:node_id/devices/:device_id/channels/:channel/generator",
+            post(handlers::set_channel_generator),
         )
         // Routes
         .route("/routes", get(handlers::list_routes))

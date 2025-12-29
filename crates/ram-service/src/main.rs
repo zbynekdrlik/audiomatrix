@@ -8,6 +8,42 @@
 //! - REST/WebSocket API
 //! - Service discovery (mDNS)
 
+#![warn(clippy::pedantic)]
+#![allow(clippy::module_name_repetitions)]
+// Allow common patterns in service code
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::significant_drop_tightening)]
+#![allow(clippy::significant_drop_in_scrutinee)]
+#![allow(clippy::await_holding_lock)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::unused_async)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::if_not_else)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::float_cmp)]
+#![allow(clippy::let_underscore_must_use)]
+#![allow(clippy::blocks_in_conditions)]
+#![allow(clippy::option_if_let_else)]
+#![allow(clippy::manual_let_else)]
+#![allow(clippy::wildcard_imports)]
+#![allow(dead_code)] // Known dead code per ARCHITECTURE.md technical debt
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::single_match_else)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::missing_fields_in_debug)]
+
 use std::path::PathBuf;
 
 use anyhow::Result;

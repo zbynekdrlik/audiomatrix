@@ -214,16 +214,39 @@ impl AudioMatrixService {
             // Get first supported sample rate or default to 48000
             let sample_rate = device.configs.first().map_or(48000, |c| c.sample_rate_max);
 
+            // Determine input/output channel counts based on device direction
+            let (input_channels, output_channels, device_type) = match device.direction {
+                ram_core::DeviceDirection::Input => {
+                    (device.max_channels(), 0, ram_api::models::DeviceType::Input)
+                },
+                ram_core::DeviceDirection::Output => (
+                    0,
+                    device.max_channels(),
+                    ram_api::models::DeviceType::Output,
+                ),
+            };
+
+            // Convert attachment state to API device status
+            let status = match device.attachment_state {
+                ram_core::AttachmentState::Available => ram_api::models::DeviceStatus::Available,
+                ram_core::AttachmentState::Attached => ram_api::models::DeviceStatus::Attached,
+                ram_core::AttachmentState::Active => ram_api::models::DeviceStatus::Active,
+                ram_core::AttachmentState::Detached => ram_api::models::DeviceStatus::Detached,
+                ram_core::AttachmentState::Error => ram_api::models::DeviceStatus::Error,
+            };
+
             self.app_state.register_device(ram_api::models::DeviceInfo {
                 id: device.id.clone(),
                 name: device.name.clone(),
-                device_type: match device.direction {
-                    ram_core::DeviceDirection::Input => ram_api::models::DeviceType::Input,
-                    ram_core::DeviceDirection::Output => ram_api::models::DeviceType::Output,
-                },
-                channels: u8::try_from(device.max_channels()).unwrap_or(2),
+                display_name: device.display_name.clone(),
+                device_type,
+                input_channels,
+                output_channels,
                 sample_rate,
-                is_virtual: false,
+                buffer_size: self.config.audio.default_buffer_size,
+                is_virtual: device.is_virtual,
+                status,
+                backend: Some(device.host.clone()),
             });
         }
 
@@ -239,8 +262,13 @@ impl AudioMatrixService {
         self.audio_processor.start();
         info!("Audio processor started");
 
-        // Start default audio streams
-        self.start_default_streams();
+        // Start default audio streams ONLY if explicitly enabled (zero auto-connect policy)
+        if self.config.audio.auto_start_devices {
+            warn!("Auto-start devices is enabled - this bypasses zero auto-connect policy");
+            self.start_default_streams();
+        } else {
+            info!("Zero auto-connect: No devices started automatically. Use Web UI to attach devices.");
+        }
 
         // Start metering broadcast
         self.start_metering_broadcast();
@@ -346,61 +374,54 @@ impl AudioMatrixService {
             version: env!("CARGO_PKG_VERSION").to_string(),
         };
 
-        match BroadcastDiscovery::with_defaults(announcement) {
-            Ok(discovery) => {
-                let discovery = Arc::new(discovery);
+        let discovery = Arc::new(BroadcastDiscovery::with_defaults(announcement));
 
-                // Subscribe to broadcast events
-                let rx = discovery.subscribe();
-                let app_state = self.app_state.clone();
-                let running = self.running.clone();
+        // Subscribe to broadcast events
+        let rx = discovery.subscribe();
+        let app_state = self.app_state.clone();
+        let running = self.running.clone();
 
-                // Spawn task to handle broadcast discovery events
-                let task = tokio::task::spawn_blocking(move || {
-                    while running.load(Ordering::SeqCst) {
-                        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
-                            Ok(event) => match event {
-                                BroadcastEvent::NodeDiscovered(node) => {
-                                    info!(
-                                        "Discovered node via broadcast: {} at {}:{}",
-                                        node.name, node.address, node.api_port
-                                    );
-                                    let id = format!("{}@{}", node.name, node.address);
-                                    app_state.upsert_remote_node(ram_api::models::NodeInfo {
-                                        id,
-                                        name: node.name.clone(),
-                                        addresses: vec![node.address.to_string()],
-                                        api_port: node.api_port,
-                                        vban_port: node.vban_port,
-                                        online: true,
-                                    });
-                                },
-                                BroadcastEvent::NodeTimeout(name) => {
-                                    info!("Node timed out: {name}");
-                                    // Don't remove immediately - mDNS might still have it
-                                },
-                            },
-                            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                                // Continue polling
-                            },
-                            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                                break;
-                            },
-                        }
-                    }
-                });
-
-                if let Err(e) = discovery.start() {
-                    warn!("Failed to start broadcast discovery: {e}");
-                } else {
-                    self.broadcast_task = Some(task);
-                    self.broadcast_discovery = Some(discovery);
-                    info!("Broadcast discovery started");
+        // Spawn task to handle broadcast discovery events
+        let task = tokio::task::spawn_blocking(move || {
+            while running.load(Ordering::SeqCst) {
+                match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                    Ok(event) => match event {
+                        BroadcastEvent::NodeDiscovered(node) => {
+                            info!(
+                                "Discovered node via broadcast: {} at {}:{}",
+                                node.name, node.address, node.api_port
+                            );
+                            let id = format!("{}@{}", node.name, node.address);
+                            app_state.upsert_remote_node(ram_api::models::NodeInfo {
+                                id,
+                                name: node.name.clone(),
+                                addresses: vec![node.address.to_string()],
+                                api_port: node.api_port,
+                                vban_port: node.vban_port,
+                                online: true,
+                            });
+                        },
+                        BroadcastEvent::NodeTimeout(name) => {
+                            info!("Node timed out: {name}");
+                            // Don't remove immediately - mDNS might still have it
+                        },
+                    },
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
+                        // Continue polling
+                    },
+                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
+                        break;
+                    },
                 }
-            },
-            Err(e) => {
-                warn!("Failed to create broadcast discovery: {e}");
-            },
+            }
+        });
+
+        if let Err(e) = discovery.start() {
+            warn!("Failed to start broadcast discovery: {e}");
+        } else {
+            self.broadcast_task = Some(task);
+            self.broadcast_discovery = Some(discovery);
+            info!("Broadcast discovery started");
         }
     }
 

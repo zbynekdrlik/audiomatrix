@@ -139,7 +139,7 @@ impl std::fmt::Debug for CachedSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CachedSnapshot")
             .field("generation", &self.generation)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -421,10 +421,7 @@ fn apply_clip(samples: &mut [Sample]) {
 #[inline]
 fn apply_auto_gain(samples: &mut [Sample]) {
     // Find peak
-    let peak = samples
-        .iter()
-        .map(|s| s.abs())
-        .fold(0.0f32, |a, b| a.max(b));
+    let peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
 
     if peak > 1.0 {
         let scale = 1.0 / peak;
@@ -461,7 +458,7 @@ fn db_to_linear(db: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::routing_snapshot::{DestinationSnapshot, RoutingSnapshot, SourceSlot};
+    use crate::routing_snapshot::{DestinationSnapshot, RoutingSnapshot};
 
     #[test]
     fn input_context_creation() {

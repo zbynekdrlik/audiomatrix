@@ -18,7 +18,11 @@ pub fn DeviceCard(
     let app_state = expect_context::<AppState>();
     let device_id = device.id.clone();
     let device_name = device.name.clone();
-    let channel_count = device.channels;
+    let channel_count = if is_input {
+        device.input_channels
+    } else {
+        device.output_channels
+    };
     let sample_rate = device.sample_rate;
 
     // Get levels for this device

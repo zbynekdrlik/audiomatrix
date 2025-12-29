@@ -591,7 +591,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "pool_size must be greater than 0")]
     fn zero_pool_size_panics() {
-        RingBufferPool::new(0, 256);
+        let _ = RingBufferPool::new(0, 256);
     }
 
     #[test]

@@ -157,65 +157,184 @@ fn show_notification(title: &str, message: &str) {
 }
 
 // ============================================================================
-// ICON GENERATION
+// ICON GENERATION - Unique 3x3 Grid with Diamonds
 // ============================================================================
 
-/// Generate a dynamic icon with optional update badge
-fn generate_icon(r: u8, g: u8, b: u8, show_update_badge: bool) -> Icon {
-    let width = 32u32;
-    let height = 32u32;
-    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+/// Tray icon state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayIconState {
+    /// Starting up (yellow center diamond).
+    Starting,
+    /// Running with no routes (blue center diamond).
+    Idle,
+    /// Running with active routes (green pattern of diamonds).
+    Active,
+    /// Offline/error (red X).
+    Error,
+}
 
-    let cx = 16.0f32;
-    let cy = 16.0f32;
-    let radius = 12.0f32;
+/// RGBA color type.
+type Rgba = (u8, u8, u8, u8);
 
-    // Update badge position
-    let badge_cx = 25.0f32;
-    let badge_cy = 7.0f32;
-    let badge_radius = 5.0f32;
+/// Color palette for icons.
+mod colors {
+    use super::Rgba;
 
-    for y in 0..height {
-        for x in 0..width {
-            let dx = x as f32 - cx + 0.5;
-            let dy = y as f32 - cy + 0.5;
-            let dist = (dx * dx + dy * dy).sqrt();
+    pub const GRID_LINE: Rgba = (100, 100, 100, 255);
+    pub const GRID_BG: Rgba = (30, 30, 30, 255);
 
-            // Check if pixel is in update badge area
-            let badge_dx = x as f32 - badge_cx + 0.5;
-            let badge_dy = y as f32 - badge_cy + 0.5;
-            let badge_dist = (badge_dx * badge_dx + badge_dy * badge_dy).sqrt();
+    // Diamond colors
+    pub const BLUE: Rgba = (66, 135, 245, 255); // Idle
+    pub const GREEN: Rgba = (40, 167, 69, 255); // Active
+    pub const YELLOW: Rgba = (255, 193, 7, 255); // Starting
+    pub const RED: Rgba = (220, 53, 69, 255); // Error
 
-            if show_update_badge && badge_dist <= badge_radius {
-                // Update badge - orange color
-                let mut alpha = 255u8;
-                if badge_dist > badge_radius - 1.0 {
-                    alpha = ((badge_radius - badge_dist) * 255.0).max(0.0) as u8;
+    // Update badge
+    pub const ORANGE: Rgba = (255, 152, 0, 255);
+}
+
+/// Generate a unique 3x3 grid tray icon with diamond symbols.
+///
+/// Design distinct from DanteSync:
+/// - 3x3 grid structure
+/// - Diamond symbols indicate state
+///
+/// ```text
+/// Starting: [   ][   ][   ]    Idle:    [   ][   ][   ]
+///           [   ][ ◆ ][   ]             [   ][ ◆ ][   ]
+///           [   ][   ][   ]             [   ][   ][   ]
+///
+/// Active:   [ ◆ ][   ][ ◆ ]    Error:   [ \ ][   ][ / ]
+///           [   ][ ◆ ][   ]             [   ][ X ][   ]
+///           [ ◆ ][   ][ ◆ ]             [ / ][   ][ \ ]
+/// ```
+fn generate_icon(state: TrayIconState, show_update_badge: bool) -> Icon {
+    const SIZE: u32 = 32;
+    const CELL_SIZE: u32 = 10; // Each grid cell
+    const GRID_START: u32 = 1; // Offset from edge
+    const LINE_WIDTH: u32 = 1;
+
+    let mut rgba = vec![0u8; (SIZE * SIZE * 4) as usize];
+
+    // Helper to set pixel
+    let set_pixel = |rgba: &mut [u8], x: u32, y: u32, color: Rgba| {
+        if x < SIZE && y < SIZE {
+            let idx = ((y * SIZE + x) * 4) as usize;
+            rgba[idx] = color.0;
+            rgba[idx + 1] = color.1;
+            rgba[idx + 2] = color.2;
+            rgba[idx + 3] = color.3;
+        }
+    };
+
+    // Draw background and grid
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            // Check if we're in the grid area
+            let gx = x.saturating_sub(GRID_START);
+            let gy = y.saturating_sub(GRID_START);
+
+            if x >= GRID_START
+                && x < GRID_START + CELL_SIZE * 3 + LINE_WIDTH * 2
+                && y >= GRID_START
+                && y < GRID_START + CELL_SIZE * 3 + LINE_WIDTH * 2
+            {
+                // Check if on grid line
+                let on_vline = gx == CELL_SIZE || gx == CELL_SIZE * 2 + LINE_WIDTH;
+                let on_hline = gy == CELL_SIZE || gy == CELL_SIZE * 2 + LINE_WIDTH;
+
+                if on_vline || on_hline {
+                    set_pixel(&mut rgba, x, y, colors::GRID_LINE);
+                } else {
+                    set_pixel(&mut rgba, x, y, colors::GRID_BG);
                 }
-                rgba.push(255); // R - orange
-                rgba.push(152); // G
-                rgba.push(0); // B
-                rgba.push(alpha);
-            } else if dist <= radius {
-                // Main fill
-                let mut alpha = 255u8;
-                if dist > radius - 1.0 {
-                    alpha = ((radius - dist) * 255.0).max(0.0) as u8;
-                }
-                rgba.push(r);
-                rgba.push(g);
-                rgba.push(b);
-                rgba.push(alpha);
-            } else {
-                // Transparent
-                rgba.push(0);
-                rgba.push(0);
-                rgba.push(0);
-                rgba.push(0);
             }
         }
     }
-    Icon::from_rgba(rgba, width, height).unwrap()
+
+    // Helper to draw diamond in a cell (0-2, 0-2)
+    let draw_diamond = |rgba: &mut [u8], cell_x: u32, cell_y: u32, color: Rgba| {
+        // Calculate cell center
+        let cx = GRID_START + cell_x * (CELL_SIZE + LINE_WIDTH) + CELL_SIZE / 2;
+        let cy = GRID_START + cell_y * (CELL_SIZE + LINE_WIDTH) + CELL_SIZE / 2;
+        let half = 3u32; // Half-size of diamond
+
+        // Diamond shape (rotated square)
+        for dy in 0..=half * 2 {
+            for dx in 0..=half * 2 {
+                let lx = dx as i32 - half as i32;
+                let ly = dy as i32 - half as i32;
+                // Manhattan distance for diamond shape
+                if lx.abs() + ly.abs() <= half as i32 {
+                    let px = (cx as i32 + lx) as u32;
+                    let py = (cy as i32 + ly) as u32;
+                    set_pixel(rgba, px, py, color);
+                }
+            }
+        }
+    };
+
+    // Helper to draw X in a cell
+    let draw_x = |rgba: &mut [u8], cell_x: u32, cell_y: u32, color: Rgba| {
+        let start_x = GRID_START + cell_x * (CELL_SIZE + LINE_WIDTH) + 2;
+        let start_y = GRID_START + cell_y * (CELL_SIZE + LINE_WIDTH) + 2;
+        let size = CELL_SIZE - 4;
+
+        for i in 0..size {
+            // Main diagonal
+            set_pixel(rgba, start_x + i, start_y + i, color);
+            // Anti-diagonal
+            set_pixel(rgba, start_x + size - 1 - i, start_y + i, color);
+        }
+    };
+
+    // Draw state-specific pattern
+    match state {
+        TrayIconState::Starting => {
+            // Yellow center diamond
+            draw_diamond(&mut rgba, 1, 1, colors::YELLOW);
+        },
+        TrayIconState::Idle => {
+            // Blue center diamond
+            draw_diamond(&mut rgba, 1, 1, colors::BLUE);
+        },
+        TrayIconState::Active => {
+            // Green diamonds in X pattern
+            draw_diamond(&mut rgba, 0, 0, colors::GREEN); // Top-left
+            draw_diamond(&mut rgba, 2, 0, colors::GREEN); // Top-right
+            draw_diamond(&mut rgba, 1, 1, colors::GREEN); // Center
+            draw_diamond(&mut rgba, 0, 2, colors::GREEN); // Bottom-left
+            draw_diamond(&mut rgba, 2, 2, colors::GREEN); // Bottom-right
+        },
+        TrayIconState::Error => {
+            // Red X pattern
+            draw_x(&mut rgba, 0, 0, colors::RED);
+            draw_x(&mut rgba, 2, 0, colors::RED);
+            draw_x(&mut rgba, 1, 1, colors::RED);
+            draw_x(&mut rgba, 0, 2, colors::RED);
+            draw_x(&mut rgba, 2, 2, colors::RED);
+        },
+    }
+
+    // Draw update badge (orange circle in top-right)
+    if show_update_badge {
+        let badge_cx = 26u32;
+        let badge_cy = 6u32;
+        let badge_r = 4u32;
+
+        for y in badge_cy.saturating_sub(badge_r)..=badge_cy + badge_r {
+            for x in badge_cx.saturating_sub(badge_r)..=badge_cx + badge_r {
+                let dx = x as i32 - badge_cx as i32;
+                let dy = y as i32 - badge_cy as i32;
+                let dist_sq = dx * dx + dy * dy;
+                if dist_sq <= (badge_r * badge_r) as i32 {
+                    set_pixel(&mut rgba, x, y, colors::ORANGE);
+                }
+            }
+        }
+    }
+
+    Icon::from_rgba(rgba, SIZE, SIZE).expect("Failed to create icon")
 }
 
 // ============================================================================
@@ -275,7 +394,7 @@ impl TrayApp {
         menu.append(&quit_item).unwrap();
 
         // Create initial icon (yellow - starting)
-        let icon = generate_icon(255, 193, 7, false);
+        let icon = generate_icon(TrayIconState::Starting, false);
         let tooltip = format!("AudioMatrix v{version}\nStarting...");
 
         let tray_icon = TrayIconBuilder::new()
@@ -304,11 +423,16 @@ impl TrayApp {
         let version = env!("CARGO_PKG_VERSION");
         let has_update = self.update_available.load(Ordering::Relaxed);
 
-        // Update icon color based on status
+        // Update icon based on status
+        // Use Active (green diamonds) if routes > 0, otherwise Idle (blue center)
         let icon = if status.healthy {
-            generate_icon(40, 167, 69, has_update) // Green - healthy
+            if status.routes > 0 {
+                generate_icon(TrayIconState::Active, has_update)
+            } else {
+                generate_icon(TrayIconState::Idle, has_update)
+            }
         } else {
-            generate_icon(255, 193, 7, has_update) // Yellow - degraded
+            generate_icon(TrayIconState::Starting, has_update) // Yellow - degraded
         };
 
         // Update tooltip
@@ -340,7 +464,7 @@ impl TrayApp {
         let version = env!("CARGO_PKG_VERSION");
         let has_update = self.update_available.load(Ordering::Relaxed);
 
-        let icon = generate_icon(220, 53, 69, has_update); // Red - offline
+        let icon = generate_icon(TrayIconState::Error, has_update);
         let tooltip = format!("AudioMatrix v{version}\nService Offline");
 
         self.status_item.set_text("Status: Offline");
@@ -675,5 +799,23 @@ mod tests {
         assert!(is_newer_version("0.1.0", "0.1.1"));
         assert!(is_newer_version("0.1.0-dev.5", "0.1.0"));
         assert!(!is_newer_version("0.2.0", "0.1.0"));
+    }
+
+    #[test]
+    fn tray_icon_state_coverage() {
+        // Verify all states can be generated without panic
+        let states = [
+            TrayIconState::Starting,
+            TrayIconState::Idle,
+            TrayIconState::Active,
+            TrayIconState::Error,
+        ];
+
+        for state in states {
+            // Without update badge
+            let _icon = generate_icon(state, false);
+            // With update badge
+            let _icon = generate_icon(state, true);
+        }
     }
 }

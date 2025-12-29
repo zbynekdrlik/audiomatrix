@@ -55,6 +55,7 @@ impl StreamState {
 
 /// Statistics for an active stream.
 #[derive(Debug, Default)]
+#[allow(clippy::struct_field_names)] // Field names are semantic: callback_count, underrun_count, overrun_count
 pub struct StreamStats {
     /// Number of callbacks processed.
     pub callback_count: AtomicU64,

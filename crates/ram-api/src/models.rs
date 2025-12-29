@@ -30,31 +30,188 @@ pub struct NodeInfo {
     pub online: bool,
 }
 
-/// Device information.
+/// Device information for API responses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceInfo {
-    /// Device identifier.
+    /// Device identifier (system-assigned).
     pub id: String,
-    /// Device name.
+    /// Device name (from driver/OS).
     pub name: String,
-    /// Device type (input/output).
+    /// User-defined display name (alias).
+    /// If None, UI should display `name` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// Device type (input/output/duplex).
     pub device_type: DeviceType,
-    /// Number of channels.
-    pub channels: u8,
-    /// Sample rate.
+    /// Number of input channels (0 for output-only devices).
+    #[serde(default)]
+    pub input_channels: u16,
+    /// Number of output channels (0 for input-only devices).
+    #[serde(default)]
+    pub output_channels: u16,
+    /// Sample rate in Hz.
     pub sample_rate: u32,
-    /// Whether this is a virtual device.
+    /// Buffer size in samples.
+    #[serde(default)]
+    pub buffer_size: u32,
+    /// Whether this is a virtual device created by AudioMatrix.
     pub is_virtual: bool,
+    /// Device attachment status (zero auto-connect policy).
+    pub status: DeviceStatus,
+    /// Audio backend (ASIO, WASAPI, ALSA, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+}
+
+/// Device attachment status.
+///
+/// Represents the user-controlled lifecycle of a device in AudioMatrix.
+/// By default, all devices are `Available` (zero auto-connect policy).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceStatus {
+    /// Device detected but not attached to AudioMatrix.
+    #[default]
+    Available,
+    /// User explicitly attached device, ready for routing.
+    Attached,
+    /// Device attached and actively streaming audio.
+    Active,
+    /// Device was attached but now detached.
+    Detached,
+    /// Device in error state.
+    Error,
 }
 
 /// Device type.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum DeviceType {
-    /// Input device (capture).
+    /// Input device (capture only).
     Input,
-    /// Output device (playback).
+    /// Output device (playback only).
     Output,
+    /// Full-duplex device (both input and output).
+    Duplex,
+}
+
+/// Request to attach a device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachDeviceRequest {
+    /// Optional display name for the device.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+/// Response after attaching a device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachDeviceResponse {
+    /// Whether the operation succeeded.
+    pub success: bool,
+    /// Updated device info.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<DeviceInfo>,
+    /// Error message if failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Request to update a device (rename, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateDeviceRequest {
+    /// New display name (None to keep current, empty string to clear).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+/// Channel information for API responses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelInfo {
+    /// Channel number (1-based).
+    pub number: u16,
+    /// Channel label (user-defined).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Current level in dBFS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level_dbfs: Option<f32>,
+    /// Peak level in dBFS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_dbfs: Option<f32>,
+}
+
+/// Request to update a channel label.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateChannelLabelRequest {
+    /// New label (empty string to clear).
+    pub label: String,
+}
+
+/// Request to update multiple channel labels at once.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkChannelLabelsRequest {
+    /// Map of channel number (1-based) to label.
+    pub labels: std::collections::HashMap<u16, String>,
+}
+
+/// Request to create a virtual device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateVirtualDeviceRequest {
+    /// Device name (required).
+    pub name: String,
+    /// Number of input channels (0-256).
+    #[serde(default)]
+    pub input_channels: u16,
+    /// Number of output channels (0-256).
+    #[serde(default)]
+    pub output_channels: u16,
+    /// Sample rate (44100, 48000, or 96000 only).
+    #[serde(default = "default_sample_rate")]
+    pub sample_rate: u32,
+    /// Buffer size in samples.
+    #[serde(default = "default_buffer_size")]
+    pub buffer_size: u32,
+}
+
+fn default_sample_rate() -> u32 {
+    48000
+}
+
+fn default_buffer_size() -> u32 {
+    256
+}
+
+/// Request to update a virtual device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateVirtualDeviceRequest {
+    /// New name (None to keep current).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// New input channel count (None to keep current).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_channels: Option<u16>,
+    /// New output channel count (None to keep current).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_channels: Option<u16>,
+    /// New sample rate (None to keep current).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<u32>,
+    /// New buffer size (None to keep current).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buffer_size: Option<u32>,
+}
+
+/// Response after creating/updating a virtual device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VirtualDeviceResponse {
+    /// Whether the operation succeeded.
+    pub success: bool,
+    /// Created/updated device info.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<DeviceInfo>,
+    /// Error message if failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Route definition.
@@ -80,7 +237,6 @@ pub struct RouteDefinition {
 
 /// Subscription request (sent from destination node to source node).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::struct_field_names)]
 pub struct SubscriptionRequest {
     /// Stream name for VBAN.
     pub stream_name: String,
@@ -222,6 +378,117 @@ pub struct LatencyInfo {
     pub is_local: bool,
 }
 
+// ============================================================================
+// Wave Generator API Models
+// ============================================================================
+
+/// Waveform type for test signal generation.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WaveformType {
+    /// Sine wave at specified frequency.
+    #[default]
+    Sine,
+    /// Pink noise (1/f spectrum).
+    PinkNoise,
+    /// Channel ID tone - unique frequency per channel.
+    ChannelId,
+    /// Frequency sweep (20Hz - 20kHz).
+    Sweep,
+    /// Click/impulse (single sample pulse).
+    Click,
+}
+
+impl WaveformType {
+    /// Convert to/from core type.
+    #[cfg(feature = "server")]
+    pub fn to_core(self) -> ram_core::WaveformType {
+        match self {
+            Self::Sine => ram_core::WaveformType::Sine,
+            Self::PinkNoise => ram_core::WaveformType::PinkNoise,
+            Self::ChannelId => ram_core::WaveformType::ChannelId,
+            Self::Sweep => ram_core::WaveformType::Sweep,
+            Self::Click => ram_core::WaveformType::Click,
+        }
+    }
+
+    /// Convert from core type.
+    #[cfg(feature = "server")]
+    pub fn from_core(core: ram_core::WaveformType) -> Self {
+        match core {
+            ram_core::WaveformType::Sine => Self::Sine,
+            ram_core::WaveformType::PinkNoise => Self::PinkNoise,
+            ram_core::WaveformType::ChannelId => Self::ChannelId,
+            ram_core::WaveformType::Sweep => Self::Sweep,
+            ram_core::WaveformType::Click => Self::Click,
+        }
+    }
+}
+
+/// Request to set wave generator configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetGeneratorRequest {
+    /// Whether the generator is enabled.
+    pub enabled: bool,
+    /// Waveform type.
+    #[serde(default)]
+    pub waveform: WaveformType,
+    /// Frequency in Hz (for sine, ignored for other waveforms).
+    #[serde(default = "default_frequency")]
+    pub frequency: u32,
+    /// Output level in dBFS (clamped to -6.0..0.0).
+    #[serde(default = "default_level")]
+    pub level_db: f32,
+}
+
+fn default_frequency() -> u32 {
+    1000
+}
+
+fn default_level() -> f32 {
+    -18.0
+}
+
+/// Request to set generator for all channels of a device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetAllGeneratorsRequest {
+    /// Whether generators are enabled.
+    pub enabled: bool,
+    /// Waveform type.
+    #[serde(default)]
+    pub waveform: WaveformType,
+    /// Frequency in Hz (for sine, ignored for other waveforms).
+    #[serde(default = "default_frequency")]
+    pub frequency: u32,
+    /// Output level in dBFS (clamped to -6.0..0.0).
+    #[serde(default = "default_level")]
+    pub level_db: f32,
+}
+
+/// Wave generator status for a single channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneratorStatus {
+    /// Channel number (1-based).
+    pub channel: u16,
+    /// Whether the generator is enabled.
+    pub enabled: bool,
+    /// Current waveform type.
+    pub waveform: WaveformType,
+    /// Frequency in Hz.
+    pub frequency: u32,
+    /// Output level in dBFS.
+    pub level_db: f32,
+}
+
+/// Response containing generator status for a device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceGeneratorResponse {
+    /// Device identifier.
+    pub device_id: String,
+    /// Generator status for each output channel.
+    pub channels: Vec<GeneratorStatus>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,10 +538,15 @@ mod tests {
         let device = DeviceInfo {
             id: "device-1".into(),
             name: "Test Device".into(),
+            display_name: None,
             device_type: DeviceType::Input,
-            channels: 2,
+            input_channels: 2,
+            output_channels: 0,
             sample_rate: 48000,
+            buffer_size: 256,
             is_virtual: false,
+            status: DeviceStatus::Available,
+            backend: None,
         };
 
         let json = serde_json::to_string(&device).unwrap();
@@ -290,10 +562,15 @@ mod tests {
         let device = DeviceInfo {
             id: "device-2".into(),
             name: "Output Device".into(),
+            display_name: Some("Main Out".into()),
             device_type: DeviceType::Output,
-            channels: 8,
+            input_channels: 0,
+            output_channels: 8,
             sample_rate: 96000,
+            buffer_size: 128,
             is_virtual: true,
+            status: DeviceStatus::Attached,
+            backend: Some("ASIO".into()),
         };
 
         let json = serde_json::to_string(&device).unwrap();

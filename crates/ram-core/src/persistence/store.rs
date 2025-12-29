@@ -1,152 +1,17 @@
-//! Configuration persistence for `AudioMatrix`.
+//! Configuration store for file-based persistence.
 //!
-//! This module provides functionality to save and load configuration
-//! from disk, enabling state persistence across restarts.
+//! This module provides the `ConfigStore` which manages loading and saving
+//! configuration to disk.
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tracing::{debug, info, warn};
 
-/// Persistence errors.
-#[derive(Debug, Error)]
-pub enum PersistenceError {
-    /// I/O error.
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    /// Serialization error.
-    #[error("Serialization error: {0}")]
-    Serialize(#[from] serde_json::Error),
-    /// Configuration directory not found.
-    #[error("Configuration directory not found")]
-    ConfigDirNotFound,
-}
-
-/// Result type for persistence operations.
-pub type Result<T> = std::result::Result<T, PersistenceError>;
-
-/// Route definition for persistence.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedRoute {
-    /// Source node.
-    pub source_node: String,
-    /// Source device.
-    pub source_device: String,
-    /// Source channel (1-based).
-    pub source_channel: u16,
-    /// Destination node.
-    pub destination_node: String,
-    /// Destination device.
-    pub destination_device: String,
-    /// Destination channel (1-based).
-    pub destination_channel: u16,
-    /// Volume (0.0 to 1.0+).
-    pub volume: f32,
-    /// Mute state.
-    pub muted: bool,
-}
-
-/// Node configuration for persistence.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedNode {
-    /// Node name.
-    pub name: String,
-    /// API port.
-    pub api_port: u16,
-    /// VBAN port.
-    pub vban_port: u16,
-}
-
-/// Full configuration state.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PersistedConfig {
-    /// Configuration version for migrations.
-    #[serde(default = "default_version")]
-    pub version: u32,
-    /// Node configuration.
-    pub node: Option<PersistedNode>,
-    /// Active routes.
-    #[serde(default)]
-    pub routes: Vec<PersistedRoute>,
-    /// Custom key-value settings.
-    #[serde(default)]
-    pub settings: HashMap<String, String>,
-}
-
-fn default_version() -> u32 {
-    1
-}
-
-impl PersistedConfig {
-    /// Creates a new empty configuration.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            version: 1,
-            node: None,
-            routes: Vec::new(),
-            settings: HashMap::new(),
-        }
-    }
-
-    /// Creates configuration with node settings.
-    #[must_use]
-    pub fn with_node(name: String, api_port: u16, vban_port: u16) -> Self {
-        Self {
-            version: 1,
-            node: Some(PersistedNode {
-                name,
-                api_port,
-                vban_port,
-            }),
-            routes: Vec::new(),
-            settings: HashMap::new(),
-        }
-    }
-
-    /// Adds a route to the configuration.
-    pub fn add_route(&mut self, route: PersistedRoute) {
-        self.routes.push(route);
-    }
-
-    /// Removes a route by matching source and destination.
-    #[allow(clippy::too_many_arguments)]
-    pub fn remove_route(
-        &mut self,
-        source_node: &str,
-        source_device: &str,
-        source_channel: u16,
-        dest_node: &str,
-        dest_device: &str,
-        dest_channel: u16,
-    ) -> bool {
-        let initial_len = self.routes.len();
-        self.routes.retain(|r| {
-            !(r.source_node == source_node
-                && r.source_device == source_device
-                && r.source_channel == source_channel
-                && r.destination_node == dest_node
-                && r.destination_device == dest_device
-                && r.destination_channel == dest_channel)
-        });
-        self.routes.len() != initial_len
-    }
-
-    /// Sets a custom setting.
-    pub fn set_setting(&mut self, key: String, value: String) {
-        self.settings.insert(key, value);
-    }
-
-    /// Gets a custom setting.
-    #[must_use]
-    pub fn get_setting(&self, key: &str) -> Option<&String> {
-        self.settings.get(key)
-    }
-}
+use super::config::PersistedConfig;
+use super::types::{ChannelLabels, PersistedDevice, PersistedRoute, VirtualDeviceConfig};
+use super::{PersistenceError, Result};
 
 /// Manages configuration persistence.
 pub struct ConfigStore {
@@ -342,6 +207,100 @@ impl ConfigStore {
     pub fn routes(&self) -> Vec<PersistedRoute> {
         self.config.read().routes.clone()
     }
+
+    /// Records a device as attached.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auto-save is enabled and saving fails.
+    pub fn attach_device(&self, device_id: String, display_name: Option<String>) -> Result<()> {
+        self.update(|config| {
+            config.attach_device(device_id, display_name);
+        })
+    }
+
+    /// Records a device as detached.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auto-save is enabled and saving fails.
+    pub fn detach_device(&self, device_id: &str) -> Result<()> {
+        self.update(|config| {
+            config.detach_device(device_id);
+        })
+    }
+
+    /// Returns the list of device IDs that were attached.
+    #[must_use]
+    pub fn attached_device_ids(&self) -> Vec<String> {
+        self.config
+            .read()
+            .attached_device_ids()
+            .into_iter()
+            .map(String::from)
+            .collect()
+    }
+
+    /// Returns attached device info (ID and display name).
+    #[must_use]
+    pub fn attached_devices(&self) -> Vec<PersistedDevice> {
+        self.config
+            .read()
+            .attached_devices
+            .iter()
+            .filter(|d| d.attached)
+            .cloned()
+            .collect()
+    }
+
+    /// Sets a channel label.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auto-save is enabled and saving fails.
+    pub fn set_channel_label(&self, device_id: &str, channel: u16, label: String) -> Result<bool> {
+        let mut success = false;
+        self.update(|config| {
+            success = config.set_channel_label(device_id, channel, label);
+        })?;
+        Ok(success)
+    }
+
+    /// Gets channel labels for a device.
+    #[must_use]
+    pub fn get_channel_labels(&self, device_id: &str) -> Option<ChannelLabels> {
+        self.config.read().get_channel_labels(device_id).cloned()
+    }
+
+    /// Adds a virtual device configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auto-save is enabled and saving fails.
+    pub fn add_virtual_device(&self, config: VirtualDeviceConfig) -> Result<()> {
+        self.update(|c| {
+            c.add_virtual_device(config);
+        })
+    }
+
+    /// Removes a virtual device configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auto-save is enabled and saving fails.
+    pub fn remove_virtual_device(&self, name: &str) -> Result<bool> {
+        let mut removed = false;
+        self.update(|config| {
+            removed = config.remove_virtual_device(name);
+        })?;
+        Ok(removed)
+    }
+
+    /// Returns all virtual device configurations.
+    #[must_use]
+    pub fn virtual_devices(&self) -> Vec<VirtualDeviceConfig> {
+        self.config.read().virtual_devices.clone()
+    }
 }
 
 #[cfg(test)]
@@ -349,96 +308,6 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
-
-    #[test]
-    fn persisted_config_new() {
-        let config = PersistedConfig::new();
-        assert_eq!(config.version, 1);
-        assert!(config.node.is_none());
-        assert!(config.routes.is_empty());
-        assert!(config.settings.is_empty());
-    }
-
-    #[test]
-    fn persisted_config_with_node() {
-        let config = PersistedConfig::with_node("TestNode".into(), 8080, 6980);
-        let node = config.node.unwrap();
-        assert_eq!(node.name, "TestNode");
-        assert_eq!(node.api_port, 8080);
-        assert_eq!(node.vban_port, 6980);
-    }
-
-    #[test]
-    fn persisted_config_add_route() {
-        let mut config = PersistedConfig::new();
-        config.add_route(PersistedRoute {
-            source_node: "node-a".into(),
-            source_device: "dev-1".into(),
-            source_channel: 1,
-            destination_node: "node-b".into(),
-            destination_device: "dev-2".into(),
-            destination_channel: 1,
-            volume: 1.0,
-            muted: false,
-        });
-
-        assert_eq!(config.routes.len(), 1);
-    }
-
-    #[test]
-    fn persisted_config_remove_route() {
-        let mut config = PersistedConfig::new();
-        config.add_route(PersistedRoute {
-            source_node: "node-a".into(),
-            source_device: "dev-1".into(),
-            source_channel: 1,
-            destination_node: "node-b".into(),
-            destination_device: "dev-2".into(),
-            destination_channel: 1,
-            volume: 1.0,
-            muted: false,
-        });
-
-        let removed = config.remove_route("node-a", "dev-1", 1, "node-b", "dev-2", 1);
-        assert!(removed);
-        assert!(config.routes.is_empty());
-
-        let removed_again = config.remove_route("node-a", "dev-1", 1, "node-b", "dev-2", 1);
-        assert!(!removed_again);
-    }
-
-    #[test]
-    fn persisted_config_settings() {
-        let mut config = PersistedConfig::new();
-        config.set_setting("key1".into(), "value1".into());
-
-        assert_eq!(config.get_setting("key1"), Some(&"value1".to_string()));
-        assert_eq!(config.get_setting("nonexistent"), None);
-    }
-
-    #[test]
-    fn persisted_config_serialization() {
-        let mut config = PersistedConfig::with_node("Test".into(), 8080, 6980);
-        config.add_route(PersistedRoute {
-            source_node: "a".into(),
-            source_device: "d1".into(),
-            source_channel: 1,
-            destination_node: "b".into(),
-            destination_device: "d2".into(),
-            destination_channel: 2,
-            volume: 0.8,
-            muted: true,
-        });
-        config.set_setting("test".into(), "value".into());
-
-        let json = serde_json::to_string(&config).unwrap();
-        let parsed: PersistedConfig = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(parsed.version, 1);
-        assert!(parsed.node.is_some());
-        assert_eq!(parsed.routes.len(), 1);
-        assert_eq!(parsed.settings.len(), 1);
-    }
 
     #[test]
     fn config_store_new_file() {
@@ -518,5 +387,66 @@ mod tests {
         let removed = store.remove_route("a", "d1", 1, "b", "d2", 2).unwrap();
         assert!(removed);
         assert!(store.routes().is_empty());
+    }
+
+    #[test]
+    fn config_store_device_attachment() {
+        let temp = NamedTempFile::new().unwrap();
+        let path = temp.path().to_path_buf();
+        drop(temp);
+
+        let mut store = ConfigStore::new(&path).unwrap();
+        store.set_auto_save(false);
+
+        store
+            .attach_device("dev-1".into(), Some("Mic".into()))
+            .unwrap();
+        store.attach_device("dev-2".into(), None).unwrap();
+
+        let attached = store.attached_device_ids();
+        assert_eq!(attached.len(), 2);
+
+        store.detach_device("dev-1").unwrap();
+        assert_eq!(store.attached_device_ids().len(), 1);
+    }
+
+    #[test]
+    fn config_store_channel_labels() {
+        let temp = NamedTempFile::new().unwrap();
+        let path = temp.path().to_path_buf();
+        drop(temp);
+
+        let mut store = ConfigStore::new(&path).unwrap();
+        store.set_auto_save(false);
+
+        store.set_channel_label("dev-1", 1, "Kick".into()).unwrap();
+
+        let labels = store.get_channel_labels("dev-1").unwrap();
+        assert_eq!(labels.get_label(1), Some(&"Kick".to_string()));
+    }
+
+    #[test]
+    fn config_store_virtual_devices() {
+        let temp = NamedTempFile::new().unwrap();
+        let path = temp.path().to_path_buf();
+        drop(temp);
+
+        let mut store = ConfigStore::new(&path).unwrap();
+        store.set_auto_save(false);
+
+        store
+            .add_virtual_device(VirtualDeviceConfig {
+                name: "Test Virtual".into(),
+                input_channels: 8,
+                output_channels: 8,
+                sample_rate: 96000,
+                buffer_size: 128,
+            })
+            .unwrap();
+
+        assert_eq!(store.virtual_devices().len(), 1);
+
+        store.remove_virtual_device("Test Virtual").unwrap();
+        assert!(store.virtual_devices().is_empty());
     }
 }
