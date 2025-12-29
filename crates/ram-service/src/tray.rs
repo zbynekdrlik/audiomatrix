@@ -485,9 +485,19 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
 
     info!("Starting system tray");
 
-    let event_loop = EventLoop::<AppEvent>::with_user_event()
-        .build()
-        .expect("Failed to create event loop");
+    let event_loop = match EventLoop::<AppEvent>::with_user_event().build() {
+        Ok(el) => el,
+        Err(e) => {
+            warn!("Failed to create event loop (no GUI session?): {}", e);
+            // Keep the thread alive but do nothing - service runs headlessly
+            loop {
+                std::thread::sleep(Duration::from_secs(60));
+                if shutdown.is_shutdown() {
+                    return;
+                }
+            }
+        },
+    };
 
     let proxy = event_loop.create_proxy();
     let running = Arc::new(AtomicBool::new(true));
