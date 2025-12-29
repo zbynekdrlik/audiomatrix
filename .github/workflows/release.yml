@@ -43,7 +43,7 @@ jobs:
           echo "version=$CARGO_VERSION" >> $GITHUB_OUTPUT
           echo "✓ Valid release version: $CARGO_VERSION"
 
-  # Build binaries for all platforms
+  # Build binaries (Windows only - macOS and Linux disabled to reduce costs)
   build:
     name: Build (${{ matrix.target }})
     needs: validate
@@ -51,22 +51,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: linux-x64
-            ext: ""
+          # NOTE: Linux and macOS builds disabled to reduce CI costs
+          # Re-enable when needed:
+          # - target: x86_64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   name: linux-x64
+          #   ext: ""
+          # - target: x86_64-apple-darwin
+          #   os: macos-latest
+          #   name: macos-x64
+          #   ext: ""
+          # - target: aarch64-apple-darwin
+          #   os: macos-latest
+          #   name: macos-arm64
+          #   ext: ""
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: windows-x64
             ext: ".exe"
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            name: macos-x64
-            ext: ""
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            name: macos-arm64
-            ext: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -255,27 +257,14 @@ jobs:
           body: |
             ## AudioMatrix v${{ needs.validate.outputs.version }}
 
-            Professional audio routing system for Windows, macOS, and Linux.
+            Professional audio routing system for Windows.
 
-            ### Quick Install
+            > Note: Linux and macOS builds are temporarily disabled.
 
-            **Windows (PowerShell):**
+            ### Quick Install (Windows PowerShell)
+
             ```powershell
             irm https://github.com/zbynekdrlik/audiomatrix/releases/download/v${{ needs.validate.outputs.version }}/install.ps1 | iex
-            ```
-
-            **Linux:**
-            ```bash
-            curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/v${{ needs.validate.outputs.version }}/audiomatrix-${{ needs.validate.outputs.version }}-linux-x64.tar.gz
-            tar xzf audiomatrix-${{ needs.validate.outputs.version }}-linux-x64.tar.gz
-            sudo mv audiomatrix /usr/local/bin/
-            ```
-
-            **macOS:**
-            ```bash
-            curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/v${{ needs.validate.outputs.version }}/audiomatrix-${{ needs.validate.outputs.version }}-macos-x64.tar.gz
-            tar xzf audiomatrix-${{ needs.validate.outputs.version }}-macos-x64.tar.gz
-            sudo mv audiomatrix /usr/local/bin/
             ```
 
             ### Changes

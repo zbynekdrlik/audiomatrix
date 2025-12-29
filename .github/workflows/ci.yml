@@ -101,14 +101,16 @@ jobs:
       # Don't use --all-features as 'asio' feature is Windows-only
       - run: cargo clippy --all-targets --workspace -- -D warnings -D clippy::pedantic -A clippy::module_name_repetitions
 
-  # Tests on all platforms
+  # Tests on Windows only (macOS and Linux disabled to reduce CI costs)
   test:
     name: Test (${{ matrix.os }})
     needs: build-ui
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # NOTE: macOS and Linux builds disabled to reduce CI costs
+        # Re-enable when needed: os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
