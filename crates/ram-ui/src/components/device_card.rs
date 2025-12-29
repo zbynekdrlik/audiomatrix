@@ -128,7 +128,7 @@ pub fn DeviceCard(
 
             spawn_local(async move {
                 match api::detach_device(&node_id, &device_id).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         // Update device status in state
                         app_state.devices.update(|devices| {
                             if let Some(d) = devices.iter_mut().find(|d| d.id == device_id) {

@@ -76,7 +76,7 @@ pub fn RouteControl(
             let app_state = app_state.clone();
             spawn_local(async move {
                 match api::update_route(&route_id, &route_def).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         app_state.upsert_route(route_def);
                     },
                     Err(e) => {
@@ -117,7 +117,7 @@ pub fn RouteControl(
             let app_state = app_state.clone();
             spawn_local(async move {
                 match api::update_route(&route_id, &route_def).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         app_state.upsert_route(route_def);
                     },
                     Err(e) => {

@@ -54,7 +54,7 @@ impl TestClient {
 
     /// Makes a GET request and returns the response.
     pub async fn get(&self, path: &str) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.get(&self.api_url(path)).send().await
+        self.client.get(self.api_url(path)).send().await
     }
 
     /// Makes a GET request and returns JSON.
@@ -63,7 +63,7 @@ impl TestClient {
         path: &str,
     ) -> Result<T, reqwest::Error> {
         self.client
-            .get(&self.api_url(path))
+            .get(self.api_url(path))
             .send()
             .await?
             .json()
@@ -76,11 +76,7 @@ impl TestClient {
         path: &str,
         body: &B,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        self.client
-            .post(&self.api_url(path))
-            .json(body)
-            .send()
-            .await
+        self.client.post(self.api_url(path)).json(body).send().await
     }
 
     /// Makes a PUT request with JSON body.
@@ -90,12 +86,12 @@ impl TestClient {
         path: &str,
         body: &B,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.put(&self.api_url(path)).json(body).send().await
+        self.client.put(self.api_url(path)).json(body).send().await
     }
 
     /// Makes a DELETE request.
     pub async fn delete(&self, path: &str) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.delete(&self.api_url(path)).send().await
+        self.client.delete(self.api_url(path)).send().await
     }
 }
 

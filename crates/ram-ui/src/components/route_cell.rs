@@ -127,7 +127,7 @@ pub fn RouteCell(
                 };
                 wasm_bindgen_futures::spawn_local(async move {
                     match api::create_route(&route).await {
-                        Ok(_) => {
+                        Ok(_response) => {
                             app_state.upsert_route(route);
                         },
                         Err(e) => {
@@ -154,7 +154,7 @@ pub fn RouteCell(
     };
 
     // Close popover callback
-    let on_close_popover = Callback::new(move |_| {
+    let on_close_popover = Callback::new(move |()| {
         popover_state.set(None);
     });
 
@@ -185,22 +185,18 @@ pub fn RouteCell(
             {cell_content}
         </div>
         {move || {
-            if let Some((x, y)) = popover_state.get() {
-                if let Some(r) = route.get() {
-                    Some(view! {
+            popover_state.get().and_then(|(x, y)| {
+                route.get().map(|r| {
+                    view! {
                         <RouteControl
                             route=r
                             x=x
                             y=y
                             on_close=on_close_popover
                         />
-                    })
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+                    }
+                })
+            })
         }}
     }
 }

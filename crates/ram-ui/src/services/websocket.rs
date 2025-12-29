@@ -141,12 +141,9 @@ impl WsService {
     /// Connects to the WebSocket server.
     pub fn connect(&self, app_state: AppState) {
         // Build WebSocket URL from current location
-        let window = match web_sys::window() {
-            Some(w) => w,
-            None => {
-                log::error!("No window object available");
-                return;
-            },
+        let Some(window) = web_sys::window() else {
+            log::error!("No window object available");
+            return;
         };
 
         let location = window.location();
@@ -191,7 +188,6 @@ impl WsService {
 
         // onerror handler
         {
-            let error_signal = error_signal;
             let on_error = Closure::wrap(Box::new(move |e: ErrorEvent| {
                 log::error!("WebSocket error: {:?}", e);
                 error_signal.set(Some("WebSocket error".into()));

@@ -125,9 +125,28 @@ fn parse_version(version: &str) -> Option<(u32, u32, u32, Option<u32>)> {
 }
 
 /// Compare versions, returns true if remote is newer than local
+/// In semver, release versions are newer than pre-releases with same major.minor.patch
 fn is_newer_version(local: &str, remote: &str) -> bool {
     match (parse_version(local), parse_version(remote)) {
-        (Some(l), Some(r)) => r > l,
+        (Some((lmaj, lmin, lpat, ldev)), Some((rmaj, rmin, rpat, rdev))) => {
+            // Compare major.minor.patch first
+            match (rmaj.cmp(&lmaj), rmin.cmp(&lmin), rpat.cmp(&lpat)) {
+                (std::cmp::Ordering::Greater, _, _) => true,
+                (std::cmp::Ordering::Less, _, _) => false,
+                (_, std::cmp::Ordering::Greater, _) => true,
+                (_, std::cmp::Ordering::Less, _) => false,
+                (_, _, std::cmp::Ordering::Greater) => true,
+                (_, _, std::cmp::Ordering::Less) => false,
+                // Same major.minor.patch - compare pre-release
+                // None (release) is newer than Some(_) (pre-release)
+                (_, _, std::cmp::Ordering::Equal) => match (ldev, rdev) {
+                    (Some(_), None) => true,         // local is pre-release, remote is release
+                    (None, Some(_)) => false,        // local is release, remote is pre-release
+                    (Some(ld), Some(rd)) => rd > ld, // both pre-release, compare dev numbers
+                    (None, None) => false,           // same release version
+                },
+            }
+        },
         _ => false,
     }
 }
