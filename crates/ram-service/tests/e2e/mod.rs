@@ -62,7 +62,12 @@ impl TestClient {
         &self,
         path: &str,
     ) -> Result<T, reqwest::Error> {
-        self.client.get(&self.api_url(path)).send().await?.json().await
+        self.client
+            .get(&self.api_url(path))
+            .send()
+            .await?
+            .json()
+            .await
     }
 
     /// Makes a POST request with JSON body.
@@ -85,11 +90,7 @@ impl TestClient {
         path: &str,
         body: &B,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        self.client
-            .put(&self.api_url(path))
-            .json(body)
-            .send()
-            .await
+        self.client.put(&self.api_url(path)).json(body).send().await
     }
 
     /// Makes a DELETE request.
@@ -111,7 +112,10 @@ mod tests {
     #[test]
     fn test_api_url() {
         let client = TestClient::new();
-        assert_eq!(client.api_url("/health"), "http://localhost:8080/api/v1/health");
+        assert_eq!(
+            client.api_url("/health"),
+            "http://localhost:8080/api/v1/health"
+        );
     }
 
     #[test]

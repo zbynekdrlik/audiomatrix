@@ -17,10 +17,7 @@ pub struct HealthResponse {
 async fn test_health_returns_ok() {
     let client = TestClient::new();
 
-    let response = client
-        .get("/health")
-        .await
-        .expect("Failed to send request");
+    let response = client.get("/health").await.expect("Failed to send request");
 
     assert!(
         response.status().is_success(),

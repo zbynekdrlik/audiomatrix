@@ -146,12 +146,14 @@ impl WsService {
             None => {
                 log::error!("No window object available");
                 return;
-            }
+            },
         };
 
         let location = window.location();
         let protocol = location.protocol().unwrap_or_else(|_| "http:".to_string());
-        let host = location.host().unwrap_or_else(|_| "localhost:8080".to_string());
+        let host = location
+            .host()
+            .unwrap_or_else(|_| "localhost:8080".to_string());
 
         let ws_protocol = if protocol == "https:" { "wss" } else { "ws" };
         let url = format!("{ws_protocol}://{host}/api/v1/ws");
@@ -162,9 +164,10 @@ impl WsService {
             Ok(ws) => ws,
             Err(e) => {
                 log::error!("Failed to create WebSocket: {:?}", e);
-                self.last_error.set(Some("Failed to create WebSocket".into()));
+                self.last_error
+                    .set(Some("Failed to create WebSocket".into()));
                 return;
-            }
+            },
         };
 
         // Set binary type to arraybuffer
@@ -291,41 +294,41 @@ fn handle_message(state: &AppState, text: &str) {
 
                     let is_input = m.direction == "input";
                     state.update_levels(&m.device, is_input, levels);
-                }
+                },
                 WsEvent::RouteChanged(r) => {
                     log::info!("Route changed: {} - {}", r.action, r.route_id);
                     // Could trigger a route refresh here if needed
-                }
+                },
                 WsEvent::NodeStatus(n) => {
                     log::info!("Node {} online: {}", n.node, n.online);
                     // Could update node status in state
-                }
+                },
                 WsEvent::DeviceStatus(d) => {
                     log::info!("Device {} status: {}", d.device, d.state);
                     // Could update device status in state
-                }
+                },
                 WsEvent::DeviceAttached {
                     device_id,
                     device_name,
                     ..
                 } => {
                     log::info!("Device attached: {} ({})", device_name, device_id);
-                }
+                },
                 WsEvent::DeviceDetached { device_id } => {
                     log::info!("Device detached: {}", device_id);
-                }
+                },
                 WsEvent::Pong => {
                     // Keepalive response, nothing to do
-                }
+                },
                 WsEvent::Error { message } => {
                     log::error!("WebSocket server error: {}", message);
                     state.error.set(Some(format!("Server error: {message}")));
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             log::warn!("Failed to parse WebSocket message: {} - {}", e, text);
-        }
+        },
     }
 }
 

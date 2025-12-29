@@ -78,13 +78,13 @@ pub fn RouteControl(
                 match api::update_route(&route_id, &route_def).await {
                     Ok(_) => {
                         app_state.upsert_route(route_def);
-                    }
+                    },
                     Err(e) => {
                         log::error!("Failed to update route: {}", e);
                         app_state
                             .error
                             .set(Some(format!("Failed to update volume: {}", e)));
-                    }
+                    },
                 }
             });
         }
@@ -119,13 +119,13 @@ pub fn RouteControl(
                 match api::update_route(&route_id, &route_def).await {
                     Ok(_) => {
                         app_state.upsert_route(route_def);
-                    }
+                    },
                     Err(e) => {
                         log::error!("Failed to update route: {}", e);
                         app_state
                             .error
                             .set(Some(format!("Failed to update mute: {}", e)));
-                    }
+                    },
                 }
             });
         }

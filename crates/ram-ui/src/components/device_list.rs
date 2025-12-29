@@ -17,12 +17,7 @@ pub fn DeviceList() -> impl IntoView {
         app_state_1
             .input_devices()
             .into_iter()
-            .filter(|d| {
-                matches!(
-                    d.status,
-                    DeviceStatus::Attached | DeviceStatus::Active
-                )
-            })
+            .filter(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
             .collect::<Vec<_>>()
     };
 
@@ -32,12 +27,7 @@ pub fn DeviceList() -> impl IntoView {
         app_state_2
             .input_devices()
             .into_iter()
-            .filter(|d| {
-                matches!(
-                    d.status,
-                    DeviceStatus::Available | DeviceStatus::Detached
-                )
-            })
+            .filter(|d| matches!(d.status, DeviceStatus::Available | DeviceStatus::Detached))
             .collect::<Vec<_>>()
     };
 
@@ -47,12 +37,7 @@ pub fn DeviceList() -> impl IntoView {
         app_state_3
             .output_devices()
             .into_iter()
-            .filter(|d| {
-                matches!(
-                    d.status,
-                    DeviceStatus::Attached | DeviceStatus::Active
-                )
-            })
+            .filter(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
             .collect::<Vec<_>>()
     };
 
@@ -62,12 +47,7 @@ pub fn DeviceList() -> impl IntoView {
         app_state_4
             .output_devices()
             .into_iter()
-            .filter(|d| {
-                matches!(
-                    d.status,
-                    DeviceStatus::Available | DeviceStatus::Detached
-                )
-            })
+            .filter(|d| matches!(d.status, DeviceStatus::Available | DeviceStatus::Detached))
             .collect::<Vec<_>>()
     };
 

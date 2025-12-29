@@ -24,7 +24,10 @@ pub fn DeviceCard(
     let device_id = device.id.clone();
     let device_id_attach = device.id.clone();
     let device_id_detach = device.id.clone();
-    let device_name = device.display_name.clone().unwrap_or_else(|| device.name.clone());
+    let device_name = device
+        .display_name
+        .clone()
+        .unwrap_or_else(|| device.name.clone());
     let channel_count = if is_input {
         device.input_channels
     } else {
@@ -92,17 +95,18 @@ pub fn DeviceCard(
                     Ok(updated_device) => {
                         // Update device in state
                         app_state.devices.update(|devices| {
-                            if let Some(d) = devices.iter_mut().find(|d| d.id == updated_device.id) {
+                            if let Some(d) = devices.iter_mut().find(|d| d.id == updated_device.id)
+                            {
                                 *d = updated_device;
                             }
                         });
-                    }
+                    },
                     Err(e) => {
                         log::error!("Failed to attach device: {}", e);
                         app_state
                             .error
                             .set(Some(format!("Failed to attach device: {}", e)));
-                    }
+                    },
                 }
             });
         }
@@ -131,21 +135,23 @@ pub fn DeviceCard(
                                 d.status = DeviceStatus::Available;
                             }
                         });
-                    }
+                    },
                     Err(e) => {
                         log::error!("Failed to detach device: {}", e);
                         app_state
                             .error
                             .set(Some(format!("Failed to detach device: {}", e)));
-                    }
+                    },
                 }
             });
         }
     };
 
     // Determine which buttons to show
-    let show_attach = device_status == DeviceStatus::Available || device_status == DeviceStatus::Detached;
-    let show_detach = device_status == DeviceStatus::Attached || device_status == DeviceStatus::Active;
+    let show_attach =
+        device_status == DeviceStatus::Available || device_status == DeviceStatus::Detached;
+    let show_detach =
+        device_status == DeviceStatus::Attached || device_status == DeviceStatus::Active;
 
     view! {
         <div class=format!("device-card {}", device_type_class)>
