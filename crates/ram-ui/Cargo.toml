@@ -20,11 +20,23 @@ ram-api = { path = "../ram-api", default-features = false, features = ["client"]
 # Async runtime for WASM
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["HtmlSelectElement", "Event", "EventTarget"] }
+send_wrapper = "0.6"
+web-sys = { version = "0.3", features = [
+    "HtmlSelectElement",
+    "Event",
+    "EventTarget",
+    "Window",
+    "Location",
+    "WebSocket",
+    "BinaryType",
+    "MessageEvent",
+    "ErrorEvent",
+    "CloseEvent",
+] }
 
 # HTTP client for API calls
 gloo-net = "0.6"
-gloo-timers = "0.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
 
 # WebSocket for metering
 futures = "0.3"

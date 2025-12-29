@@ -27,8 +27,10 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.8
+> **Current Version:** 0.1.0-dev.9
 > **Last Updated:** 2025-12-29
+
+### Backend Implementation Status
 
 | Component | Status | Crate | Notes |
 |-----------|--------|-------|-------|
@@ -44,30 +46,51 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **VBAN Protocol** | Complete | ram-vban | Full encode/decode |
 | **VBAN Streaming** | Complete | ram-vban | Sender, receiver, jitter buffer |
 | **mDNS Discovery** | Complete | ram-discovery | Announce and browse |
-| **REST API** | Complete | ram-api | Route CRUD wired to AudioProcessor via RouteController trait |
+| **REST API** | Complete | ram-api | All endpoints implemented and tested |
 | **WebSocket Events** | Complete | ram-api | Event types, metering broadcast at 30Hz |
 | **Configuration** | Complete | ram-core | JSON persistence |
-| **Audio Processing Loop** | Complete | ram-service | cpal streams (note: auto-start to be removed) |
+| **Audio Processing Loop** | Complete | ram-service | cpal streams with RouteController trait |
 | **Subscription Protocol** | Complete | ram-core | Subscribe/unsubscribe messages, manager |
 | **Latency Measurement** | Complete | ram-core | Calculator, callback timer, jitter tracking |
 | **Metering** | Complete | ram-core | Lock-free level meters, peak/RMS, per-channel |
-| **Cross-Node VBAN Auto-Creation** | Complete | ram-service | Auto-subscription on cross-node routes (bidirectional) |
-| **Web UI Cross-Node Support** | Complete | ram-ui | Node selectors, cross-node route creation |
-| **Windows System Tray** | Complete | ram-service | Tray icon with menu (Open UI, Logs, Updates, Exit) |
-| **Per-Device Metering Subscriptions** | Complete | ram-api | WebSocket filtering by device |
+| **Cross-Node VBAN** | Complete | ram-service | Auto-subscription on cross-node routes |
+| **Windows System Tray** | Complete | ram-service | Tray icon with menu |
 | **Device Attachment API** | Complete | ram-api | Explicit attach/detach endpoints |
-| **Device Naming/Aliasing** | Complete | ram-api | User-defined display names via PATCH |
-| **Virtual Device Creation API** | Complete | ram-api | Create/modify/delete via Web UI |
+| **Virtual Device API** | Complete | ram-api | Create/modify/delete endpoints |
 | **Channel Label API** | Complete | ram-api | Per-channel naming CRUD |
-| **Zero Auto-Connect** | Complete | ram-service | Config option `auto_start_devices` (default: false) |
-| **Sync Wave Generator** | Complete | ram-core | Lock-free per-channel test signal generator |
-| **State Persistence** | Complete | ram-core | Device attachments, channel labels, virtual devices |
-| **Unique Tray Icon** | Complete | ram-service | Programmatic 3x3 grid with diamond symbols |
-| **Web UI Device Attachment** | Not Started | ram-ui | Attach/detach workflow |
-| **Web UI Virtual Device Creation** | Not Started | ram-ui | Create virtual ASIO from browser |
-| **Web UI Channel Naming** | Not Started | ram-ui | Per-channel label editor |
+| **Wave Generator API** | Complete | ram-api | Per-channel test signal endpoints |
+| **Zero Auto-Connect** | Complete | ram-service | Config option `auto_start_devices` |
+| **State Persistence** | Complete | ram-core | Routes, attachments, labels, virtual devices |
 
-**Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
+### Web UI Implementation Status (~30% Complete)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Routing Matrix Grid** | Complete | Click to create/delete routes |
+| **Cross-Node Selection** | Complete | Source/dest node selectors |
+| **Device List Display** | Complete | Shows devices with meters |
+| **Route Create/Delete** | Complete | API integration working |
+| **Header/Navigation** | Complete | Node selector, status indicator |
+| **Real-Time Metering** | Infrastructure Only | Signals exist, no WebSocket connection |
+| **Route Volume/Mute** | Not Started | API ready, no UI controls |
+| **Device Attachment UI** | Not Started | API ready, no attach/detach buttons |
+| **Virtual Device Creation** | Not Started | API ready, no creation dialog |
+| **Channel Label Editor** | Not Started | API ready, no label UI |
+| **Generator Controls** | Not Started | API ready, no generator UI |
+| **Settings Page** | Not Started | Empty placeholder only |
+| **Stream Monitor** | Not Started | API ready, no streams page |
+
+### Testing Status
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| **Unit Tests** | 154+ tests | All backend crates fully tested |
+| **API E2E Tests** | Not Started | Spec created, needs implementation |
+| **WebSocket E2E** | Not Started | Spec created, needs implementation |
+| **UI E2E (Playwright)** | Not Started | Spec created, needs implementation |
+| **Cross-Node E2E** | Not Started | Spec created, needs Docker setup |
+
+**Legend:** Complete = Working | Infrastructure Only = Framework exists | Not Started = Planned
 
 ## System Diagram
 

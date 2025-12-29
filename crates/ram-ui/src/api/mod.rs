@@ -3,7 +3,10 @@
 //! Uses shared types from ram-api for type safety.
 
 use gloo_net::http::Request;
-use ram_api::models::{DeviceInfo, NodeInfo, RouteDefinition};
+use ram_api::models::{
+    ChannelInfo, CreateVirtualDeviceRequest, DeviceGeneratorResponse, DeviceInfo, NodeInfo,
+    RouteDefinition, SetGeneratorRequest, StreamInfo, SubscriptionInfo, SubscriptionStatsResponse,
+};
 
 /// API error type.
 #[derive(Debug, Clone)]
@@ -185,6 +188,406 @@ pub async fn health_check() -> ApiResult<HealthResponse> {
     if !response.ok() {
         return Err(ApiError {
             message: response.status_text(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+// ============================================================================
+// Device Management APIs
+// ============================================================================
+
+/// Attaches a device to AudioMatrix for routing.
+pub async fn attach_device(
+    node_id: &str,
+    device_id: &str,
+    display_name: Option<&str>,
+) -> ApiResult<DeviceInfo> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/attach",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let body = serde_json::json!({ "display_name": display_name });
+
+    let response = Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(body.to_string())?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Detaches a device from AudioMatrix.
+pub async fn detach_device(node_id: &str, device_id: &str) -> ApiResult<()> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/detach",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let response = Request::post(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    Ok(())
+}
+
+/// Updates device properties (e.g., display name).
+pub async fn update_device(
+    node_id: &str,
+    device_id: &str,
+    display_name: Option<&str>,
+) -> ApiResult<DeviceInfo> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let body = serde_json::json!({ "display_name": display_name });
+
+    let response = Request::patch(&url)
+        .header("Content-Type", "application/json")
+        .body(body.to_string())?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+// ============================================================================
+// Channel Label APIs
+// ============================================================================
+
+/// Gets channel information for a device.
+pub async fn get_device_channels(node_id: &str, device_id: &str) -> ApiResult<Vec<ChannelInfo>> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/channels",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Updates a single channel label.
+pub async fn update_channel_label(
+    node_id: &str,
+    device_id: &str,
+    channel: u16,
+    label: &str,
+) -> ApiResult<ChannelInfo> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/channels/{}",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id),
+        channel
+    );
+
+    let body = serde_json::json!({ "label": label });
+
+    let response = Request::patch(&url)
+        .header("Content-Type", "application/json")
+        .body(body.to_string())?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+// ============================================================================
+// Virtual Device APIs
+// ============================================================================
+
+/// Lists virtual devices on a node.
+pub async fn list_virtual_devices(node_id: &str) -> ApiResult<Vec<DeviceInfo>> {
+    let url = format!(
+        "{}/nodes/{}/virtual-devices",
+        api_base(),
+        urlencoding::encode(node_id)
+    );
+
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Creates a new virtual ASIO device.
+pub async fn create_virtual_device(
+    node_id: &str,
+    request: &CreateVirtualDeviceRequest,
+) -> ApiResult<DeviceInfo> {
+    let url = format!(
+        "{}/nodes/{}/virtual-devices",
+        api_base(),
+        urlencoding::encode(node_id)
+    );
+
+    let response = Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(request).map_err(|e| ApiError {
+            message: e.to_string(),
+            status: None,
+        })?)?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Deletes a virtual device.
+pub async fn delete_virtual_device(node_id: &str, device_id: &str) -> ApiResult<()> {
+    let url = format!(
+        "{}/nodes/{}/virtual-devices/{}",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let response = Request::delete(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Generator APIs
+// ============================================================================
+
+/// Gets generator status for all channels of a device.
+pub async fn get_device_generator(
+    node_id: &str,
+    device_id: &str,
+) -> ApiResult<DeviceGeneratorResponse> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/generator",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Sets generator for a specific channel.
+pub async fn set_channel_generator(
+    node_id: &str,
+    device_id: &str,
+    channel: u16,
+    request: &SetGeneratorRequest,
+) -> ApiResult<()> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/channels/{}/generator",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id),
+        channel
+    );
+
+    let response = Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(request).map_err(|e| ApiError {
+            message: e.to_string(),
+            status: None,
+        })?)?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    Ok(())
+}
+
+/// Sets generator for all channels of a device.
+pub async fn set_all_generators(
+    node_id: &str,
+    device_id: &str,
+    request: &SetGeneratorRequest,
+) -> ApiResult<()> {
+    let url = format!(
+        "{}/nodes/{}/devices/{}/generator",
+        api_base(),
+        urlencoding::encode(node_id),
+        urlencoding::encode(device_id)
+    );
+
+    let response = Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(request).map_err(|e| ApiError {
+            message: e.to_string(),
+            status: None,
+        })?)?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Stream and Subscription APIs
+// ============================================================================
+
+/// Lists active audio streams.
+pub async fn list_streams() -> ApiResult<Vec<StreamInfo>> {
+    let url = format!("{}/streams", api_base());
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Lists active subscriptions.
+pub async fn list_subscriptions() -> ApiResult<Vec<SubscriptionInfo>> {
+    let url = format!("{}/subscriptions", api_base());
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+/// Gets subscription statistics.
+pub async fn get_subscription_stats() -> ApiResult<SubscriptionStatsResponse> {
+    let url = format!("{}/subscriptions/stats", api_base());
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
+            status: Some(response.status()),
+        });
+    }
+
+    response.json().await.map_err(Into::into)
+}
+
+// ============================================================================
+// Latency API
+// ============================================================================
+
+/// Latency breakdown for a route.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct LatencyInfo {
+    pub route_id: String,
+    pub input_buffer_ms: f32,
+    pub ring_buffer_ms: f32,
+    pub output_buffer_ms: f32,
+    pub network_ms: f32,
+    pub processing_ms: f32,
+    pub total_ms: f32,
+    pub is_local: bool,
+}
+
+/// Gets latency information for a route.
+pub async fn get_route_latency(route_id: &str) -> ApiResult<LatencyInfo> {
+    let url = format!(
+        "{}/routes/{}/latency",
+        api_base(),
+        urlencoding::encode(route_id)
+    );
+
+    let response = Request::get(&url).send().await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: response.text().await.unwrap_or_default(),
             status: Some(response.status()),
         });
     }

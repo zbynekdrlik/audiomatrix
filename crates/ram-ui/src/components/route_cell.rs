@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api;
+use crate::components::RouteControl;
 use crate::state::AppState;
 
 /// A single cell in the routing matrix representing a potential route.
@@ -69,6 +70,9 @@ pub fn RouteCell(
             )
         })
     };
+
+    // Popover state: (visible, x, y)
+    let popover_state = RwSignal::new(None::<(i32, i32)>);
 
     let cell_class = move || {
         let mut classes = vec!["route-cell"];
@@ -138,6 +142,22 @@ pub fn RouteCell(
         }
     };
 
+    // Handle right-click to show popover
+    let on_contextmenu = {
+        move |ev: web_sys::MouseEvent| {
+            ev.prevent_default();
+            // Only show popover if there's an active route
+            if has_route.get() {
+                popover_state.set(Some((ev.client_x(), ev.client_y())));
+            }
+        }
+    };
+
+    // Close popover callback
+    let on_close_popover = Callback::new(move |_| {
+        popover_state.set(None);
+    });
+
     let cell_content = move || {
         if let Some(r) = route.get() {
             if r.muted {
@@ -154,6 +174,7 @@ pub fn RouteCell(
         <div
             class=cell_class
             on:click=on_click
+            on:contextmenu=on_contextmenu
             data-source-node=src_node_view
             data-source-device=src_dev_view
             data-source-channel=source_channel
@@ -163,6 +184,24 @@ pub fn RouteCell(
         >
             {cell_content}
         </div>
+        {move || {
+            if let Some((x, y)) = popover_state.get() {
+                if let Some(r) = route.get() {
+                    Some(view! {
+                        <RouteControl
+                            route=r
+                            x=x
+                            y=y
+                            on_close=on_close_popover
+                        />
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }}
     }
 }
 

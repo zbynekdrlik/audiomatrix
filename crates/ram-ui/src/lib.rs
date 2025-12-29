@@ -45,6 +45,7 @@
 pub mod api;
 pub mod app;
 pub mod components;
+pub mod services;
 pub mod state;
 
 use wasm_bindgen::prelude::*;

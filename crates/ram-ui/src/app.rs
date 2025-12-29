@@ -10,6 +10,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::api;
 use crate::components::{DeviceList, Header, NodeSelector, RoutingMatrix};
+use crate::services::websocket::WsService;
 use crate::state::{AppState, RouteWithId};
 
 /// Root application component.
@@ -21,6 +22,19 @@ pub fn App() -> impl IntoView {
     // Create and provide global app state
     let app_state = AppState::new();
     provide_context(app_state.clone());
+
+    // Create and provide WebSocket service
+    let ws_service = WsService::new();
+    provide_context(ws_service.clone());
+
+    // Connect WebSocket
+    let ws = ws_service.clone();
+    let state_for_ws = app_state.clone();
+    spawn_local(async move {
+        // Small delay to let the app mount
+        gloo_timers::future::TimeoutFuture::new(100).await;
+        ws.connect(state_for_ws);
+    });
 
     // Fetch initial data on mount
     let state = app_state.clone();

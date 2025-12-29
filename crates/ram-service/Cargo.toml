@@ -46,3 +46,6 @@ windows.workspace = true
 reqwest.workspace = true
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+reqwest = { workspace = true }
+ram-api = { path = "../ram-api" }
