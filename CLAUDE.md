@@ -1164,6 +1164,36 @@ You have SSH access to all test machines with credentials in TARGETS.md. You are
    ssh iem@iem "powershell -Command \"Invoke-WebRequest -Uri 'https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe' -OutFile 'C:/temp/audiomatrix-test.exe'\""
    ```
 
+### Windows GUI Session for Tray Icon (Task Scheduler)
+
+**IMPORTANT:** When deploying to Windows machines, use Task Scheduler to run the service under a GUI session so the tray icon is visible. Running via SSH or as a background service won't show the tray icon.
+
+**Create a scheduled task via SSH:**
+```powershell
+# Create scheduled task that runs at logon with GUI access
+schtasks /Create /TN "AudioMatrix" /TR "C:\path\to\audiomatrix.exe -n NODENAME" /SC ONLOGON /RL HIGHEST /F
+
+# Or run immediately under current user's GUI session:
+schtasks /Create /TN "AudioMatrix" /TR "C:\path\to\audiomatrix.exe -n NODENAME" /SC ONCE /ST 00:00 /RL HIGHEST /F
+schtasks /Run /TN "AudioMatrix"
+```
+
+**Alternative: Use PowerShell to start in GUI session:**
+```powershell
+# This starts the process in the interactive desktop session
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(1)
+$action = New-ScheduledTaskAction -Execute "C:\path\to\audiomatrix.exe" -Argument "-n NODENAME"
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Highest
+Register-ScheduledTask -TaskName "AudioMatrix" -Trigger $trigger -Action $action -Principal $principal -Force
+Start-ScheduledTask -TaskName "AudioMatrix"
+```
+
+**Key points:**
+- `LogonType Interactive` ensures the process runs with desktop access
+- `-RunLevel Highest` gives admin privileges if needed for ASIO
+- The tray icon ONLY appears when running in an interactive desktop session
+- SSH-started processes don't have desktop access, hence no tray icon
+
 ### Deep Configuration Tests (Automated)
 
 Run these tests via SSH after deployment:
