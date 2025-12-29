@@ -83,7 +83,7 @@ async fn test_unsubscribe_metering() {
 
     // Drain any pending messages
     let _ = timeout(Duration::from_millis(500), async {
-        while let Some(_) = read.next().await {}
+        while read.next().await.is_some() {}
     })
     .await;
 
