@@ -268,7 +268,7 @@ fn SettingsPage() -> impl IntoView {
                     </div>
                     <div class="setting-row">
                         <span class="setting-label">"Version"</span>
-                        <span class="setting-value">"0.1.0-dev.10"</span>
+                        <span class="setting-value">"0.1.0-dev.11"</span>
                     </div>
                     <div class="setting-row">
                         <span class="setting-label">"Documentation"</span>
