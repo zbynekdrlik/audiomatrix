@@ -22,7 +22,10 @@
 #![allow(clippy::assigning_clones)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::double_ended_iterator_last)]
+// Lint name changed in Rust 1.91+: allow both old and new names for compatibility
 #![allow(clippy::unchecked_duration_subtraction)]
+#![allow(unknown_lints)]
+#![allow(clippy::unchecked_time_subtraction)]
 #![allow(clippy::float_cmp)]
 #![allow(clippy::missing_fields_in_debug)]
 
