@@ -313,7 +313,9 @@ impl SubscriptionManager {
     /// Returns subscriptions that need heartbeats sent.
     #[must_use]
     pub fn subscriptions_needing_heartbeat(&self) -> Vec<SubscriptionId> {
-        let cutoff = Instant::now() - self.config.heartbeat_interval;
+        let cutoff = Instant::now()
+            .checked_sub(self.config.heartbeat_interval)
+            .unwrap_or_else(Instant::now);
 
         self.outgoing
             .read()
