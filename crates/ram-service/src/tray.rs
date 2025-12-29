@@ -249,7 +249,7 @@ impl TrayApp {
         api_port: u16,
         running: Arc<AtomicBool>,
         update_available: Arc<AtomicBool>,
-    ) -> Self {
+    ) -> Result<Self, tray_icon::Error> {
         let version = env!("CARGO_PKG_VERSION");
 
         // Create menu items
@@ -282,10 +282,9 @@ impl TrayApp {
             .with_menu(Box::new(menu))
             .with_tooltip(&tooltip)
             .with_icon(icon)
-            .build()
-            .unwrap();
+            .build()?;
 
-        Self {
+        Ok(Self {
             shutdown,
             api_port,
             running,
@@ -298,7 +297,7 @@ impl TrayApp {
             view_logs_item,
             tray_icon: RefCell::new(Some(tray_icon)),
             was_online: false,
-        }
+        })
     }
 
     fn update_status(&mut self, status: ServiceStatus) {
@@ -630,7 +629,24 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
         });
     });
 
-    let mut app = TrayApp::new(shutdown, api_port, running, update_available);
+    let mut app = match TrayApp::new(
+        shutdown.clone(),
+        api_port,
+        running.clone(),
+        update_available,
+    ) {
+        Ok(app) => app,
+        Err(e) => {
+            warn!("Failed to create tray icon (no GUI session?): {}", e);
+            // Run headlessly - just wait for shutdown
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                if shutdown_flag.load(Ordering::SeqCst) {
+                    return;
+                }
+            }
+        },
+    };
 
     event_loop.run_app(&mut app).expect("Event loop failed");
 
