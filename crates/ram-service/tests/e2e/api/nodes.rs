@@ -6,7 +6,7 @@ use crate::e2e::TestClient;
 
 /// Test that list_nodes returns at least one node.
 #[tokio::test]
-#[ignore] // Requires running server
+#[ignore = "Requires running server"]
 async fn test_list_nodes_returns_local() {
     let client = TestClient::new();
 
@@ -24,7 +24,7 @@ async fn test_list_nodes_returns_local() {
 
 /// Test that get_node returns a node by its actual ID.
 #[tokio::test]
-#[ignore] // Requires running server
+#[ignore = "Requires running server"]
 async fn test_get_node_by_id() {
     let client = TestClient::new();
 
@@ -51,7 +51,7 @@ async fn test_get_node_by_id() {
 
 /// Test that get_node returns 404 for nonexistent node.
 #[tokio::test]
-#[ignore] // Requires running server
+#[ignore = "Requires running server"]
 async fn test_get_nonexistent_node_returns_404() {
     let client = TestClient::new();
 
