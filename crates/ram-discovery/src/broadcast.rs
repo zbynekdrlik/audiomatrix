@@ -205,7 +205,7 @@ impl BroadcastDiscovery {
                 Err(e) => {
                     warn!("Failed to bind broadcast sender socket: {e}");
                     return;
-                }
+                },
             };
 
             if let Err(e) = socket.set_broadcast(true) {
@@ -213,15 +213,10 @@ impl BroadcastDiscovery {
                 return;
             }
 
-            let broadcast_addr = SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-                config.port,
-            );
+            let broadcast_addr =
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), config.port);
 
-            info!(
-                "Broadcast discovery sender started on port {}",
-                config.port
-            );
+            info!("Broadcast discovery sender started on port {}", config.port);
 
             while running.load(Ordering::Acquire) {
                 let data = announcement.read().to_bytes();
@@ -253,7 +248,7 @@ impl BroadcastDiscovery {
                 Err(e) => {
                     warn!("Failed to bind broadcast receiver socket: {e}");
                     return;
-                }
+                },
             };
 
             if let Err(e) = socket.set_read_timeout(Some(Duration::from_millis(500))) {
@@ -306,16 +301,16 @@ impl BroadcastDiscovery {
                                 let _ = sender.send(event.clone());
                             }
                         }
-                    }
+                    },
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         // Timeout, check for stale nodes
-                    }
+                    },
                     Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
                         // Timeout, check for stale nodes
-                    }
+                    },
                     Err(e) => {
                         debug!("Broadcast recv error: {e}");
-                    }
+                    },
                 }
 
                 // Clean up stale nodes

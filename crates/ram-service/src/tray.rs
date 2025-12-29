@@ -17,8 +17,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon, TrayIconBuilder};
 use tracing::{debug, error, info, warn};
+use tray_icon::{Icon, TrayIconBuilder};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Threading::CreateMutexW;
@@ -42,24 +42,21 @@ impl SingleInstanceGuard {
     /// Try to acquire single-instance lock. Returns None if another instance is running.
     fn try_acquire() -> Option<Self> {
         unsafe {
-            let mutex_name: Vec<u16> = "Global\\AudioMatrixTrayMutex\0"
-                .encode_utf16()
-                .collect();
+            let mutex_name: Vec<u16> = "Global\\AudioMatrixTrayMutex\0".encode_utf16().collect();
             let handle = CreateMutexW(None, false, PCWSTR(mutex_name.as_ptr()));
 
             match handle {
                 Ok(h) => {
                     // Check if mutex already existed
                     if let Err(e) = windows::Win32::Foundation::GetLastError() {
-                        if e.code()
-                            == windows::Win32::Foundation::ERROR_ALREADY_EXISTS.to_hresult()
+                        if e.code() == windows::Win32::Foundation::ERROR_ALREADY_EXISTS.to_hresult()
                         {
                             let _ = CloseHandle(h);
                             return None;
                         }
                     }
                     Some(SingleInstanceGuard { _handle: h })
-                }
+                },
                 Err(_) => None,
             }
         }
@@ -103,8 +100,7 @@ struct GitHubRelease {
     tag_name: String,
 }
 
-const GITHUB_API_URL: &str =
-    "https://api.github.com/repos/zbynekdrlik/audiomatrix/releases/latest";
+const GITHUB_API_URL: &str = "https://api.github.com/repos/zbynekdrlik/audiomatrix/releases/latest";
 
 /// Parse version string (e.g., "v0.1.0" or "0.1.0-dev.7") into comparable parts
 fn parse_version(version: &str) -> Option<(u32, u32, u32, Option<u32>)> {
@@ -366,7 +362,10 @@ impl TrayApp {
     fn set_update_available(&mut self, new_version: &str) {
         self.upgrade_item
             .set_text(format!("Upgrade to {new_version}"));
-        show_notification("AudioMatrix", &format!("New version {new_version} available"));
+        show_notification(
+            "AudioMatrix",
+            &format!("New version {new_version} available"),
+        );
     }
 
     fn open_web_ui(&self) {
@@ -385,9 +384,7 @@ impl TrayApp {
                 .join("logs");
 
             if log_dir.exists() {
-                let _ = std::process::Command::new("explorer")
-                    .arg(&log_dir)
-                    .spawn();
+                let _ = std::process::Command::new("explorer").arg(&log_dir).spawn();
                 return;
             }
         }
@@ -444,13 +441,13 @@ impl ApplicationHandler<AppEvent> for TrayApp {
         match event {
             AppEvent::StatusUpdate(status) => {
                 self.update_status(status);
-            }
+            },
             AppEvent::Offline => {
                 self.set_offline();
-            }
+            },
             AppEvent::NewVersionAvailable(version) => {
                 self.set_update_available(&version);
-            }
+            },
         }
         self.handle_menu_event(event_loop);
     }
@@ -485,7 +482,7 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
         None => {
             warn!("Another AudioMatrix tray instance is already running");
             return;
-        }
+        },
     };
 
     info!("Starting system tray");
@@ -565,10 +562,10 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
                             remote_nodes,
                             healthy: true,
                         }));
-                    }
+                    },
                     _ => {
                         let _ = status_proxy.send_event(AppEvent::Offline);
-                    }
+                    },
                 }
 
                 tokio::time::sleep(Duration::from_secs(2)).await;

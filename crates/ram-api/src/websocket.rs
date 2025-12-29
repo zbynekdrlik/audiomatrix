@@ -187,9 +187,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 Ok(event) => {
                     // Filter metering events based on subscriptions
                     let should_send = match &event {
-                        WsEvent::Metering(m) => {
-                            subscriptions_for_send.lock().should_send(&m.node, &m.device)
-                        }
+                        WsEvent::Metering(m) => subscriptions_for_send
+                            .lock()
+                            .should_send(&m.node, &m.device),
                         _ => true, // Non-metering events always sent
                     };
 
@@ -200,10 +200,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             }
                         }
                     }
-                }
+                },
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     warn!("WebSocket client lagged by {n} messages");
-                }
+                },
                 Err(broadcast::error::RecvError::Closed) => break,
             }
         }
@@ -217,16 +217,16 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 if let Ok(cmd) = serde_json::from_str::<WsCommand>(&text) {
                     handle_command(cmd, &subscriptions);
                 }
-            }
+            },
             Ok(Message::Close(_)) => {
                 debug!("Client disconnected");
                 break;
-            }
+            },
             Err(e) => {
                 warn!("WebSocket error: {e}");
                 break;
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -241,15 +241,15 @@ fn handle_command(cmd: WsCommand, subscriptions: &Arc<Mutex<MeteringSubscription
         WsCommand::SubscribeMetering { node, device } => {
             debug!("Subscribe metering: {node}/{device}");
             subscriptions.lock().subscribe(&node, &device);
-        }
+        },
         WsCommand::UnsubscribeMetering { node, device } => {
             debug!("Unsubscribe metering: {node}/{device}");
             subscriptions.lock().unsubscribe(&node, &device);
-        }
+        },
         WsCommand::Ping => {
             debug!("Ping received");
             // Pong is handled automatically by axum
-        }
+        },
     }
 }
 

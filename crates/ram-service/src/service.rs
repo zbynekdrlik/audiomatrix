@@ -288,7 +288,10 @@ impl AudioMatrixService {
                             Ok(event) => match event {
                                 DiscoveryEvent::NodeDiscovered(node)
                                 | DiscoveryEvent::NodeUpdated(node) => {
-                                    info!("Discovered node via mDNS: {} at {:?}", node.name, node.addresses);
+                                    info!(
+                                        "Discovered node via mDNS: {} at {:?}",
+                                        node.name, node.addresses
+                                    );
                                     // Use node name as ID since discovery doesn't provide ID
                                     let id = format!("{}@{}", node.name, node.hostname);
                                     app_state.upsert_remote_node(ram_api::models::NodeInfo {
@@ -337,7 +340,7 @@ impl AudioMatrixService {
             name: self.config.node_name.clone(),
             api_port: self.config.api.port,
             vban_port: self.config.vban.port,
-            input_channels: 0,  // Will be updated when streams start
+            input_channels: 0, // Will be updated when streams start
             output_channels: 0,
             sample_rate: 48000,
             version: env!("CARGO_PKG_VERSION").to_string(),

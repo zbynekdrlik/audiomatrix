@@ -130,8 +130,8 @@ impl ServiceAnnouncer {
     pub fn with_config(config: AnnouncerConfig) -> Result<Self> {
         let daemon = ServiceDaemon::new().map_err(|e| Error::Mdns(e.to_string()))?;
 
-        let hostname = hostname::get()
-            .map_or_else(|_| "unknown".into(), |h| h.to_string_lossy().into_owned());
+        let hostname =
+            hostname::get().map_or_else(|_| "unknown".into(), |h| h.to_string_lossy().into_owned());
         // mDNS requires hostname to end with .local.
         let hostname = if hostname.ends_with(".local.") {
             hostname

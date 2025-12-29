@@ -183,7 +183,10 @@ impl VbanManager {
         let Some(buffer_indices) = buffer_indices else {
             // Stream not registered - this is normal for unsubscribed streams
             // Use warn for debugging - we should be registering streams
-            warn!("Received VBAN stream '{}' but it is not registered!", stream_name);
+            warn!(
+                "Received VBAN stream '{}' but it is not registered!",
+                stream_name
+            );
             return;
         };
 
@@ -287,10 +290,7 @@ impl VbanManager {
                             channel_samples[read..].fill(0.0);
                         }
                     } else {
-                        warn!(
-                            "VBAN sender: buffer {} not found in pool",
-                            buffer_idx
-                        );
+                        warn!("VBAN sender: buffer {} not found in pool", buffer_idx);
                     }
                     samples.extend_from_slice(&channel_samples);
                 }

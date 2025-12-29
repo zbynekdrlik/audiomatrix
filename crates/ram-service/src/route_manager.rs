@@ -28,8 +28,7 @@ use crate::audio_processor::MeteringContexts;
 use crate::vban_manager::VbanManager;
 
 /// Callback for starting an input stream and getting buffer indices.
-pub type StreamStarterFn =
-    Arc<dyn Fn(&str, &[u16]) -> Result<Vec<usize>> + Send + Sync + 'static>;
+pub type StreamStarterFn = Arc<dyn Fn(&str, &[u16]) -> Result<Vec<usize>> + Send + Sync + 'static>;
 
 /// Callback for starting an output stream.
 pub type OutputStreamStarterFn = Arc<dyn Fn(&str) -> Result<()> + Send + Sync + 'static>;
@@ -464,7 +463,13 @@ impl RouteController for RouteManager {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async {
                 vban_manager
-                    .start_sender(subscription_id, stream_name, destination, source_buffers, channels)
+                    .start_sender(
+                        subscription_id,
+                        stream_name,
+                        destination,
+                        source_buffers,
+                        channels,
+                    )
                     .await
                     .map_err(|e| RouteError::Internal(e.to_string()))
             })
@@ -510,7 +515,11 @@ impl RouteController for RouteManager {
         }
     }
 
-    fn allocate_receive_buffers(&self, dest_device: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+    fn allocate_receive_buffers(
+        &self,
+        dest_device: &str,
+        channels: &[u16],
+    ) -> RouteResult<Vec<usize>> {
         let mut buffer_indices = Vec::with_capacity(channels.len());
 
         for ch in channels {
@@ -521,14 +530,14 @@ impl RouteController for RouteManager {
                         "Allocated receive buffer {} for {}:{} (VBAN incoming)",
                         idx, dest_device, ch
                     );
-                }
+                },
                 None => {
                     // Free any buffers we already allocated
                     for &idx in &buffer_indices {
                         self.buffer_pool.free(idx);
                     }
                     return Err(RouteError::NoBufferAvailable);
-                }
+                },
             }
         }
 
@@ -582,7 +591,7 @@ impl RouteController for RouteManager {
             Ok(()) => {
                 info!("Output stream ensured for device: {}", device_id);
                 Ok(())
-            }
+            },
             Err(e) => {
                 // If already running, that's fine
                 let err_str = e.to_string();
@@ -595,7 +604,7 @@ impl RouteController for RouteManager {
                         device_id, e
                     )))
                 }
-            }
+            },
         }
     }
 
@@ -668,7 +677,11 @@ mod tests {
         }
         // Now process pending frees with current generation (should be 5)
         let current_gen = manager.routing_table.generation();
-        assert!(current_gen >= 5, "Generation should be >= 5, got {}", current_gen);
+        assert!(
+            current_gen >= 5,
+            "Generation should be >= 5, got {}",
+            current_gen
+        );
         manager.buffer_pool.process_pending_frees(current_gen);
 
         // Buffer should now be freed

@@ -150,7 +150,11 @@ pub trait RouteController: Send + Sync {
     /// # Returns
     ///
     /// Buffer indices for the allocated buffers.
-    fn allocate_receive_buffers(&self, dest_device: &str, channels: &[u16]) -> RouteResult<Vec<usize>>;
+    fn allocate_receive_buffers(
+        &self,
+        dest_device: &str,
+        channels: &[u16],
+    ) -> RouteResult<Vec<usize>>;
 
     /// Ensures an output stream is running for the given device.
     ///
@@ -254,7 +258,11 @@ mod tests {
             Ok(())
         }
 
-        fn ensure_input_stream(&self, _device_id: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+        fn ensure_input_stream(
+            &self,
+            _device_id: &str,
+            channels: &[u16],
+        ) -> RouteResult<Vec<usize>> {
             // Return mock buffer indices (channel number as index)
             Ok(channels.iter().map(|&ch| ch as usize).collect())
         }
@@ -267,7 +275,11 @@ mod tests {
             // Mock: do nothing
         }
 
-        fn allocate_receive_buffers(&self, _dest_device: &str, channels: &[u16]) -> RouteResult<Vec<usize>> {
+        fn allocate_receive_buffers(
+            &self,
+            _dest_device: &str,
+            channels: &[u16],
+        ) -> RouteResult<Vec<usize>> {
             // Return mock buffer indices
             Ok(channels.iter().map(|&ch| ch as usize).collect())
         }

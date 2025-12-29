@@ -125,13 +125,13 @@ pub fn RouteCell(
                     match api::create_route(&route).await {
                         Ok(_) => {
                             app_state.upsert_route(route);
-                        }
+                        },
                         Err(e) => {
                             log::error!("Failed to create route: {}", e);
                             app_state
                                 .error
                                 .set(Some(format!("Failed to create route: {}", e)));
-                        }
+                        },
                     }
                 });
             }

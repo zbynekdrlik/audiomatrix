@@ -58,12 +58,20 @@ pub fn RoutingMatrix() -> impl IntoView {
         let inputs = input_devices.get();
         let outputs = output_devices.get();
 
-        if selected_input.get().is_none() || !inputs.iter().any(|d| Some(&d.id) == selected_input.get().as_ref()) {
+        if selected_input.get().is_none()
+            || !inputs
+                .iter()
+                .any(|d| Some(&d.id) == selected_input.get().as_ref())
+        {
             if let Some(first) = inputs.first() {
                 selected_input.set(Some(first.id.clone()));
             }
         }
-        if selected_output.get().is_none() || !outputs.iter().any(|d| Some(&d.id) == selected_output.get().as_ref()) {
+        if selected_output.get().is_none()
+            || !outputs
+                .iter()
+                .any(|d| Some(&d.id) == selected_output.get().as_ref())
+        {
             if let Some(first) = outputs.first() {
                 selected_output.set(Some(first.id.clone()));
             }
@@ -155,7 +163,12 @@ pub fn RoutingMatrix() -> impl IntoView {
             app_state_src_handler.source_devices.set(Vec::new());
         } else {
             // Selected remote node - fetch its devices
-            if let Some(node) = app_state_src_handler.nodes.get().into_iter().find(|n| n.id == value) {
+            if let Some(node) = app_state_src_handler
+                .nodes
+                .get()
+                .into_iter()
+                .find(|n| n.id == value)
+            {
                 app_state_src_handler.source_node.set(Some(node.clone()));
                 let state = app_state_src_handler.clone();
                 let node_id = urlencoding::encode(&node.id).to_string();
@@ -163,11 +176,13 @@ pub fn RoutingMatrix() -> impl IntoView {
                     match api::get_devices(&node_id).await {
                         Ok(devices) => {
                             state.source_devices.set(devices);
-                        }
+                        },
                         Err(e) => {
                             log::error!("Failed to fetch source devices: {}", e);
-                            state.error.set(Some(format!("Failed to load devices: {}", e)));
-                        }
+                            state
+                                .error
+                                .set(Some(format!("Failed to load devices: {}", e)));
+                        },
                     }
                 });
             }
@@ -183,7 +198,12 @@ pub fn RoutingMatrix() -> impl IntoView {
             app_state_dst_handler.dest_devices.set(Vec::new());
         } else {
             // Selected remote node - fetch its devices
-            if let Some(node) = app_state_dst_handler.nodes.get().into_iter().find(|n| n.id == value) {
+            if let Some(node) = app_state_dst_handler
+                .nodes
+                .get()
+                .into_iter()
+                .find(|n| n.id == value)
+            {
                 app_state_dst_handler.dest_node.set(Some(node.clone()));
                 let state = app_state_dst_handler.clone();
                 let node_id = urlencoding::encode(&node.id).to_string();
@@ -191,11 +211,13 @@ pub fn RoutingMatrix() -> impl IntoView {
                     match api::get_devices(&node_id).await {
                         Ok(devices) => {
                             state.dest_devices.set(devices);
-                        }
+                        },
                         Err(e) => {
                             log::error!("Failed to fetch dest devices: {}", e);
-                            state.error.set(Some(format!("Failed to load devices: {}", e)));
-                        }
+                            state
+                                .error
+                                .set(Some(format!("Failed to load devices: {}", e)));
+                        },
                     }
                 });
             }

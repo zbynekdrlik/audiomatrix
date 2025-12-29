@@ -20,6 +20,8 @@ pub mod models;
 #[cfg(feature = "server")]
 pub mod auth;
 #[cfg(feature = "server")]
+mod cross_node;
+#[cfg(feature = "server")]
 pub mod error;
 #[cfg(feature = "server")]
 pub mod handlers;
@@ -33,8 +35,6 @@ pub mod static_files;
 pub mod subscription_client;
 #[cfg(feature = "server")]
 pub mod websocket;
-#[cfg(feature = "server")]
-mod cross_node;
 
 #[cfg(feature = "server")]
 pub use auth::{Auth, AuthContext, AuthManager, Permission, SecurityConfig, SecurityMode};

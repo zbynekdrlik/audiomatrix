@@ -20,9 +20,9 @@ use tracing::{debug, error, info};
 use ram_core::callbacks::{
     create_input_callback, create_output_callback, InputCallbackContext, OutputCallbackContext,
 };
-use ram_core::metering::MeterLevels;
 use ram_core::device::DeviceDirection;
 use ram_core::latency::LatencyCalculator;
+use ram_core::metering::MeterLevels;
 use ram_core::ring_buffer_pool::RingBufferPool;
 use ram_core::route_controller::RouteController;
 use ram_core::routing_snapshot::{DestinationSnapshot, RoutingSnapshot};
@@ -648,7 +648,10 @@ impl AudioProcessor {
         }
 
         // Stream not running, start it
-        info!("Input stream not running, starting stream for '{}'", device_id);
+        info!(
+            "Input stream not running, starting stream for '{}'",
+            device_id
+        );
         self.start_input_stream(device_id)?;
 
         // Get the buffer indices from the newly started stream
@@ -657,10 +660,7 @@ impl AudioProcessor {
             .get_input_buffer_indices(device_id)
             .ok_or_else(|| anyhow!("Failed to get buffer indices after starting stream"))?;
 
-        info!(
-            "Stream started, buffer indices: {:?}",
-            indices
-        );
+        info!("Stream started, buffer indices: {:?}", indices);
 
         let requested: Vec<usize> = channels
             .iter()
@@ -676,10 +676,7 @@ impl AudioProcessor {
             ));
         }
 
-        info!(
-            "Returning buffer indices for new stream: {:?}",
-            requested
-        );
+        info!("Returning buffer indices for new stream: {:?}", requested);
         Ok(requested)
     }
 
@@ -959,7 +956,9 @@ mod tests {
 
         // Bump generation and process pending frees to actually free the buffer
         for _ in 0..3 {
-            processor.routing_table().update_with(|current| current.clone());
+            processor
+                .routing_table()
+                .update_with(|current| current.clone());
         }
         let current_gen = processor.routing_table().generation();
         processor.buffer_pool().process_pending_frees(current_gen);

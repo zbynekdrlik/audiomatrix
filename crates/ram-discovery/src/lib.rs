@@ -38,7 +38,10 @@ pub mod browse;
 pub mod error;
 
 pub use announce::{AnnouncerConfig, AnnouncerStats, ServiceAnnouncer, ServiceMetadata};
-pub use broadcast::{BroadcastAnnouncement, BroadcastConfig, BroadcastDiscovery, BroadcastEvent, DiscoveredNode, BROADCAST_PORT};
+pub use broadcast::{
+    BroadcastAnnouncement, BroadcastConfig, BroadcastDiscovery, BroadcastEvent, DiscoveredNode,
+    BROADCAST_PORT,
+};
 pub use browse::{BrowserConfig, DiscoveryEvent, NodeFilter, NodeInfo, ServiceBrowser};
 pub use error::{Error, Result};
 

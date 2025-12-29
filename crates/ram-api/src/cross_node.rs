@@ -64,10 +64,10 @@ pub fn initiate_subscription(
                         response.error.unwrap_or_else(|| "unknown".to_string())
                     );
                 }
-            }
+            },
             Err(e) => {
                 tracing::error!("Failed to initiate subscription: {}", e);
-            }
+            },
         }
     });
 }
@@ -79,7 +79,8 @@ fn register_vban_stream(
     stream_name: &str,
 ) {
     // Allocate receive buffers for incoming VBAN audio
-    match controller.allocate_receive_buffers(&route.destination_device, &[route.destination_channel])
+    match controller
+        .allocate_receive_buffers(&route.destination_device, &[route.destination_channel])
     {
         Ok(buffer_indices) => {
             tracing::info!(
@@ -105,14 +106,14 @@ fn register_vban_stream(
                     e
                 );
             }
-        }
+        },
         Err(e) => {
             tracing::error!(
                 "Failed to allocate receive buffers for VBAN stream '{}': {}",
                 stream_name,
                 e
             );
-        }
+        },
     }
 }
 
@@ -185,10 +186,10 @@ pub fn forward_route_to_destination(
                         body
                     );
                 }
-            }
+            },
             Err(e) => {
                 tracing::error!("Failed to forward route to {}: {}", dest_node.name, e);
-            }
+            },
         }
     });
 }
@@ -208,13 +209,13 @@ fn detect_local_ip_for_target(target_ip: Option<&String>) -> String {
                                 .local_addr()
                                 .map(|addr| addr.ip().to_string())
                                 .unwrap_or_else(|_| "0.0.0.0".to_string())
-                        }
+                        },
                         Err(_) => "0.0.0.0".to_string(),
                     }
-                }
+                },
                 Err(_) => "0.0.0.0".to_string(),
             }
-        }
+        },
         None => "0.0.0.0".to_string(),
     }
 }

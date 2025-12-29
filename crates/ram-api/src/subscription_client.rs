@@ -102,7 +102,10 @@ impl SubscriptionClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "no body".to_string());
-            return Err(format!("Subscription request failed: {} - {}", status, body));
+            return Err(format!(
+                "Subscription request failed: {} - {}",
+                status, body
+            ));
         }
 
         let sub_response: SubscriptionResponse = response

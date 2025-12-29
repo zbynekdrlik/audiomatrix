@@ -328,14 +328,13 @@ pub async fn create_subscription(
                 request.source_device,
                 request.source_channels
             );
-            let source_buffers = match controller.ensure_input_stream(
-                &request.source_device,
-                &request.source_channels,
-            ) {
+            let source_buffers = match controller
+                .ensure_input_stream(&request.source_device, &request.source_channels)
+            {
                 Ok(buffers) => {
                     tracing::info!("Got buffer indices: {:?}", buffers);
                     buffers
-                }
+                },
                 Err(e) => {
                     tracing::error!("Failed to start input stream: {}", e);
                     return Ok(Json(SubscriptionResponse {
@@ -345,7 +344,7 @@ pub async fn create_subscription(
                         sample_rate: None,
                         error: Some(format!("Failed to start input stream: {e}")),
                     }));
-                }
+                },
             };
 
             // Start the VBAN sender
