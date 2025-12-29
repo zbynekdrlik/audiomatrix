@@ -5,22 +5,25 @@
 A Dante-like audio routing system built in Rust, providing unified control over local and networked audio devices with ~2.7ms local latency and ~4ms network latency.
 
 **Core Principles:**
+- **Zero Auto-Connect**: User explicitly attaches devices; no automatic streaming
 - **Unified Matrix**: All devices (local and remote) in one seamless routing matrix
 - **Network Transparency**: Cross-computer routing identical to local routing
-- **Dynamic Devices**: Create/resize virtual ASIO devices on demand
+- **Dynamic Devices**: Create/resize virtual ASIO devices on demand via Web UI
 - **Ultra-Low Latency**: Lock-free audio paths, real-time priorities
 - **Destination-Owned**: Receiver-centric subscriptions (like Dante)
+- **Channel-First**: Every routing operation works at channel level with user labels
 
 ## Architecture Documents
 
 | Document | Description |
 |----------|-------------|
-| [devices.md](docs/architecture/devices.md) | Device model, virtual ASIO lifecycle |
+| [devices.md](docs/architecture/devices.md) | Device model, attachment lifecycle, virtual ASIO |
 | [routing.md](docs/architecture/routing.md) | Matrix controller, connections, controls |
 | [network.md](docs/architecture/network.md) | VBAN protocol, mDNS, cross-computer |
 | [threading.md](docs/architecture/threading.md) | Thread model, lock-free design, latency |
 | [state.md](docs/architecture/state.md) | Persistence, subscriptions, configuration |
-| [api.md](docs/architecture/api.md) | REST API, WebSocket, mDNS service |
+| [api.md](docs/architecture/api.md) | REST API, WebSocket, device/channel endpoints |
+| [ui-ux.md](docs/architecture/ui-ux.md) | Web UI design, routing matrix, channel naming |
 
 ## Implementation Status
 
@@ -44,7 +47,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **REST API** | Complete | ram-api | Route CRUD wired to AudioProcessor via RouteController trait |
 | **WebSocket Events** | Complete | ram-api | Event types, metering broadcast at 30Hz |
 | **Configuration** | Complete | ram-core | JSON persistence |
-| **Audio Processing Loop** | Complete | ram-service | cpal streams, auto-start default devices |
+| **Audio Processing Loop** | Complete | ram-service | cpal streams (note: auto-start to be removed) |
 | **Subscription Protocol** | Complete | ram-core | Subscribe/unsubscribe messages, manager |
 | **Latency Measurement** | Complete | ram-core | Calculator, callback timer, jitter tracking |
 | **Metering** | Complete | ram-core | Lock-free level meters, peak/RMS, per-channel |
@@ -52,6 +55,14 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Web UI Cross-Node Support** | Complete | ram-ui | Node selectors, cross-node route creation |
 | **Windows System Tray** | Complete | ram-service | Tray icon with menu (Open UI, Logs, Updates, Exit) |
 | **Per-Device Metering Subscriptions** | Complete | ram-api | WebSocket filtering by device |
+| **Device Attachment API** | Not Started | ram-api | Explicit attach/detach endpoints |
+| **Device Naming/Aliasing** | Not Started | ram-api | User-defined display names |
+| **Virtual Device Creation API** | Not Started | ram-api | Create/modify/delete via Web UI |
+| **Channel Label API** | Not Started | ram-api | Per-channel naming CRUD |
+| **Zero Auto-Connect** | Not Started | ram-service | Disable auto-start of devices |
+| **Web UI Device Attachment** | Not Started | ram-ui | Attach/detach workflow |
+| **Web UI Virtual Device Creation** | Not Started | ram-ui | Create virtual ASIO from browser |
+| **Web UI Channel Naming** | Not Started | ram-ui | Per-channel label editor |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 
