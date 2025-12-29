@@ -25,6 +25,7 @@ use windows::Win32::System::Threading::CreateMutexW;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::WindowId;
 use winrt_notification::{Sound, Toast};
 
@@ -503,7 +504,10 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
         });
     });
 
-    let event_loop = match EventLoop::<AppEvent>::with_user_event().build() {
+    let event_loop = match EventLoop::<AppEvent>::with_user_event()
+        .with_any_thread(true) // Required for running on non-main thread
+        .build()
+    {
         Ok(el) => el,
         Err(e) => {
             warn!("Failed to create event loop (no GUI session?): {}", e);
