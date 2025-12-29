@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 use tray_icon::{Icon, TrayIconBuilder};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
@@ -48,12 +48,10 @@ impl SingleInstanceGuard {
             match handle {
                 Ok(h) => {
                     // Check if mutex already existed
-                    if let Err(e) = windows::Win32::Foundation::GetLastError() {
-                        if e.code() == windows::Win32::Foundation::ERROR_ALREADY_EXISTS.to_hresult()
-                        {
-                            let _ = CloseHandle(h);
-                            return None;
-                        }
+                    let last_error = windows::Win32::Foundation::GetLastError();
+                    if last_error == windows::Win32::Foundation::ERROR_ALREADY_EXISTS {
+                        let _ = CloseHandle(h);
+                        return None;
                     }
                     Some(SingleInstanceGuard { _handle: h })
                 },
@@ -518,42 +516,40 @@ pub fn run_tray(shutdown: ShutdownSignal, api_port: u16) {
                     Ok(resp) if resp.status().is_success() => {
                         // Get route count
                         let routes_url = format!("http://127.0.0.1:{}/api/v1/routes", status_port);
-                        let routes: usize = client
-                            .get(&routes_url)
-                            .send()
-                            .await
-                            .ok()
-                            .and_then(|r| r.json::<Vec<serde_json::Value>>().ok())
-                            .map(|v| v.len())
-                            .unwrap_or(0);
+                        let routes: usize = match client.get(&routes_url).send().await {
+                            Ok(r) => r
+                                .json::<Vec<serde_json::Value>>()
+                                .await
+                                .map(|v| v.len())
+                                .unwrap_or(0),
+                            Err(_) => 0,
+                        };
 
                         // Get stream count
                         let streams_url =
                             format!("http://127.0.0.1:{}/api/v1/streams/count", status_port);
-                        let (input_streams, output_streams) = client
-                            .get(&streams_url)
-                            .send()
-                            .await
-                            .ok()
-                            .and_then(|r| r.json::<serde_json::Value>().ok())
-                            .map(|v| {
-                                (
-                                    v.get("input").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
-                                    v.get("output").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
-                                )
-                            })
-                            .unwrap_or((0, 0));
+                        let (input_streams, output_streams) =
+                            match client.get(&streams_url).send().await {
+                                Ok(r) => match r.json::<serde_json::Value>().await {
+                                    Ok(v) => (
+                                        v.get("input").and_then(|v| v.as_u64()).unwrap_or(0)
+                                            as usize,
+                                        v.get("output").and_then(|v| v.as_u64()).unwrap_or(0)
+                                            as usize,
+                                    ),
+                                    Err(_) => (0, 0),
+                                },
+                                Err(_) => (0, 0),
+                            };
 
                         // Get node count
                         let nodes_url = format!("http://127.0.0.1:{}/api/v1/nodes", status_port);
-                        let remote_nodes: usize = client
-                            .get(&nodes_url)
-                            .send()
-                            .await
-                            .ok()
-                            .and_then(|r| r.json::<Vec<serde_json::Value>>().ok())
-                            .map(|v| v.len().saturating_sub(1)) // Exclude local node
-                            .unwrap_or(0);
+                        let remote_nodes: usize = match client.get(&nodes_url).send().await {
+                            Ok(r) => r.json::<Vec<serde_json::Value>>().await
+                                .map(|v| v.len().saturating_sub(1)) // Exclude local node
+                                .unwrap_or(0),
+                            Err(_) => 0,
+                        };
 
                         let _ = status_proxy.send_event(AppEvent::StatusUpdate(ServiceStatus {
                             routes,
