@@ -12,6 +12,7 @@
 //! ```
 
 mod api;
+mod websocket;
 
 use reqwest::Client;
 use std::time::Duration;

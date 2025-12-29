@@ -69,6 +69,11 @@ flume = "0.11"
 futures-util = "0.3"
 rand = "0.9"
 base64 = "0.22"
+urlencoding = "2.1"
+
+# WebSocket client (for testing)
+tokio-tungstenite = "0.26"
+bytes = "1.9"
 
 # System tray (Windows-only in service)
 tray-icon = "0.21"

@@ -3,12 +3,14 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
+use crate::services::websocket::WsService;
 use crate::state::AppState;
 
 /// Application header with navigation.
 #[component]
 pub fn Header() -> impl IntoView {
     let app_state = expect_context::<AppState>();
+    let ws_service = expect_context::<WsService>();
 
     let node_name = move || {
         app_state
@@ -22,6 +24,22 @@ pub fn Header() -> impl IntoView {
             "connection-status status-connected"
         } else {
             "connection-status status-disconnected"
+        }
+    };
+
+    let ws_class = move || {
+        if ws_service.connected.get() {
+            "ws-status status-connected"
+        } else {
+            "ws-status status-disconnected"
+        }
+    };
+
+    let ws_title = move || {
+        if ws_service.connected.get() {
+            "WebSocket: Connected"
+        } else {
+            "WebSocket: Disconnected"
         }
     };
 
@@ -42,6 +60,9 @@ pub fn Header() -> impl IntoView {
             <div class="header-status">
                 <span class=connection_class>
                     {node_name}
+                </span>
+                <span class=ws_class title=ws_title>
+                    "WS"
                 </span>
             </div>
         </header>

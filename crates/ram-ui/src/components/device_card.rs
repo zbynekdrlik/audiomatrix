@@ -6,6 +6,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use super::Meter;
 use crate::api;
+use crate::services::websocket::WsService;
 use crate::state::{AppState, ChannelLevel};
 
 /// Card displaying a single audio device with meters.
@@ -52,6 +53,28 @@ pub fn DeviceCard(
                 .unwrap_or_else(|| vec![ChannelLevel::default(); channel_count as usize])
         })
     };
+
+    // Subscribe to metering when device is attached/active
+    {
+        let ws_service = expect_context::<WsService>();
+        let device_id_sub = device_id.clone();
+        let node_id = app_state
+            .current_node
+            .get()
+            .map(|n| n.id)
+            .unwrap_or_else(|| "LOCAL".to_string());
+
+        // Only subscribe if device is attached or active
+        if matches!(device_status, DeviceStatus::Attached | DeviceStatus::Active) {
+            // Subscribe to metering for this device
+            log::debug!(
+                "Subscribing to metering for device {} on node {}",
+                device_id_sub,
+                node_id
+            );
+            ws_service.subscribe_metering(&node_id, &device_id_sub);
+        }
+    }
 
     let device_type_class = if is_input {
         "device-input"

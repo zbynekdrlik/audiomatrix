@@ -49,3 +49,7 @@ reqwest.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 reqwest = { workspace = true }
 ram-api = { path = "../ram-api" }
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+urlencoding = { workspace = true }
+bytes = { workspace = true }

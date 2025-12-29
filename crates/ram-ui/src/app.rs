@@ -155,13 +155,129 @@ fn RoutesPage() -> impl IntoView {
     }
 }
 
-/// Settings page.
+/// Settings page - display-only node configuration.
 #[component]
 fn SettingsPage() -> impl IntoView {
+    let app_state = expect_context::<AppState>();
+
+    // Get node info
+    let node_name = move || {
+        app_state
+            .current_node
+            .get()
+            .map(|n| n.name)
+            .unwrap_or_else(|| "Unknown".to_string())
+    };
+
+    let node_id = move || {
+        app_state
+            .current_node
+            .get()
+            .map(|n| n.id)
+            .unwrap_or_else(|| "Unknown".to_string())
+    };
+
+    let node_addresses = move || {
+        app_state
+            .current_node
+            .get()
+            .map(|n| n.addresses.join(", "))
+            .unwrap_or_else(|| "Unknown".to_string())
+    };
+
+    let api_port = move || {
+        app_state
+            .current_node
+            .get()
+            .map(|n| n.api_port.to_string())
+            .unwrap_or_else(|| "8080".to_string())
+    };
+
+    let vban_port = move || {
+        app_state
+            .current_node
+            .get()
+            .map(|n| n.vban_port.to_string())
+            .unwrap_or_else(|| "6980".to_string())
+    };
+
+    let node_count = move || app_state.nodes.get().len();
+    let device_count = move || app_state.devices.get().len();
+    let route_count = move || app_state.routes.get().len();
+
     view! {
         <div class="page settings-page">
             <h1>"Settings"</h1>
-            <p>"Settings coming soon..."</p>
+
+            <section class="settings-section">
+                <h2>"Node Information"</h2>
+                <div class="settings-grid">
+                    <div class="setting-row">
+                        <span class="setting-label">"Node Name"</span>
+                        <span class="setting-value">{node_name}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"Node ID"</span>
+                        <span class="setting-value">{node_id}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"IP Addresses"</span>
+                        <span class="setting-value">{node_addresses}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>"Network Configuration"</h2>
+                <div class="settings-grid">
+                    <div class="setting-row">
+                        <span class="setting-label">"API Port"</span>
+                        <span class="setting-value">{api_port}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"VBAN Port"</span>
+                        <span class="setting-value">{vban_port}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>"System Status"</h2>
+                <div class="settings-grid">
+                    <div class="setting-row">
+                        <span class="setting-label">"Discovered Nodes"</span>
+                        <span class="setting-value">{node_count}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"Audio Devices"</span>
+                        <span class="setting-value">{device_count}</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"Active Routes"</span>
+                        <span class="setting-value">{route_count}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h2>"About"</h2>
+                <div class="settings-grid">
+                    <div class="setting-row">
+                        <span class="setting-label">"Application"</span>
+                        <span class="setting-value">"AudioMatrix"</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"Version"</span>
+                        <span class="setting-value">"0.1.0-dev.10"</span>
+                    </div>
+                    <div class="setting-row">
+                        <span class="setting-label">"Documentation"</span>
+                        <a href="https://github.com/zbynekdrlik/audiomatrix" target="_blank" class="setting-link">
+                            "GitHub Repository"
+                        </a>
+                    </div>
+                </div>
+            </section>
         </div>
     }
 }
