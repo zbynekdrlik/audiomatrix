@@ -18,6 +18,8 @@ mod audio_processor;
 mod config;
 mod route_manager;
 mod service;
+#[cfg(windows)]
+mod tray;
 mod vban_manager;
 
 use config::ServiceConfig;
@@ -186,16 +188,28 @@ async fn main() -> Result<()> {
     info!("Node: {}", config.node_name);
 
     // Create and run service
-    let mut service = AudioMatrixService::new(config);
+    let mut service = AudioMatrixService::new(config.clone());
 
     // Set up Ctrl+C handler
     let shutdown = service.shutdown_signal();
+    let ctrl_c_shutdown = shutdown.clone();
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {
             info!("Received Ctrl+C, initiating shutdown...");
-            shutdown.shutdown();
+            ctrl_c_shutdown.shutdown();
         }
     });
+
+    // Start system tray on Windows
+    #[cfg(windows)]
+    let _tray_handle = {
+        let tray_shutdown = shutdown.clone();
+        let api_port = config.api.port;
+
+        std::thread::spawn(move || {
+            tray::run_tray(tray_shutdown, api_port);
+        })
+    };
 
     // Run service
     service.run().await?;

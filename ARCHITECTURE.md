@@ -24,7 +24,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.7
+> **Current Version:** 0.1.0-dev.8
 > **Last Updated:** 2025-12-29
 
 | Component | Status | Crate | Notes |
@@ -50,6 +50,8 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Metering** | Complete | ram-core | Lock-free level meters, peak/RMS, per-channel |
 | **Cross-Node VBAN Auto-Creation** | Complete | ram-service | Auto-subscription on cross-node routes (bidirectional) |
 | **Web UI Cross-Node Support** | Complete | ram-ui | Node selectors, cross-node route creation |
+| **Windows System Tray** | Complete | ram-service | Tray icon with menu (Open UI, Logs, Updates, Exit) |
+| **Per-Device Metering Subscriptions** | Complete | ram-api | WebSocket filtering by device |
 
 **Legend:** Complete = Working | Partial = Structure exists | Not Started = Planned
 
@@ -112,7 +114,8 @@ audiomatrix/
 │       ├── service.rs          # Service lifecycle
 │       ├── audio_processor.rs  # Audio coordinator
 │       ├── route_manager.rs    # Cross-node route & buffer management
-│       └── vban_manager.rs     # VBAN sender/receiver lifecycle
+│       ├── vban_manager.rs     # VBAN sender/receiver lifecycle
+│       └── tray.rs             # Windows system tray (Windows-only)
 └── docs/
     └── architecture/       # Detailed architecture docs
 ```
@@ -151,25 +154,43 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 
 ## Next Steps
 
-Priority order for remaining work:
-
-1. **Windows System Tray**: Implement tray icon with menu for service control
-2. **Split state.rs**: File exceeds 1000 lines (currently 1027) - extract subscription/stream logic
-3. **Ableton-IEM Update**: Deploy 0.1.0-dev.7 to complete 3-node network
-4. **Per-Device Metering Subscriptions**: Optional WebSocket filtering by device
+*All planned features have been implemented.*
 
 ## Known Technical Debt
 
-- `ram-api/state.rs` exceeds 1000 lines (1027) - needs refactoring
-- Windows system tray integration not yet implemented
 - VbanManager dead code: `is_running()` and `sender_count()` methods unused
-- Per-device metering subscriptions not implemented (broadcasts all meters)
 
 ## Known Bugs
 
 *No known bugs at this time.*
 
 ## Recently Completed
+
+- **Windows System Tray** (2025-12-29): System tray icon with menu for Windows
+  - Version display in tooltip and menu header
+  - Open Web UI menu item (opens browser to localhost:port)
+  - View Logs menu item (opens log directory)
+  - Check for Updates menu item (opens GitHub releases)
+  - Exit menu item with graceful shutdown
+  - Uses `tray-icon` and `muda` crates (Windows-only dependencies)
+  - Tray runs in dedicated thread alongside service
+
+- **Per-Device Metering Subscriptions** (2025-12-29): WebSocket metering filtering
+  - Clients can subscribe/unsubscribe to specific devices
+  - MeteringSubscriptions struct tracks per-client subscriptions
+  - Backwards compatible: clients without subscriptions receive all meters
+  - Commands: `subscribe_metering`, `unsubscribe_metering`
+
+- **state.rs Refactoring** (2025-12-29): Reduced from 1027 to 839 lines
+  - Extracted cross-node routing logic to `cross_node.rs` module
+  - Functions: `initiate_subscription()`, `forward_route_to_destination()`
+  - Helper: `detect_local_ip_for_target()`, `register_vban_stream()`
+
+- **3-Node Network Deployment** (2025-12-29): Complete 3-point network operational
+  - develbox (Linux) running 0.1.0-dev.7
+  - stagebox1 (Windows) running 0.1.0-dev.7
+  - Ableton-IEM (Windows) deployed and verified
+  - All nodes discover each other, cross-node routes working
 
 - **Bidirectional Cross-Node Routing** (2025-12-29): Full support for local→remote routes
   - When route destination is remote, forwards route to destination node

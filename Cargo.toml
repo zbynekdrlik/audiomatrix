@@ -14,7 +14,7 @@ members = [
 exclude = []
 
 [workspace.package]
-version = "0.1.0-dev.7"
+version = "0.1.0-dev.8"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT OR Apache-2.0"
@@ -69,6 +69,14 @@ flume = "0.11"
 futures-util = "0.3"
 rand = "0.9"
 base64 = "0.22"
+
+# System tray (Windows-only in service)
+tray-icon = "0.21"
+muda = "0.17"
+image = { version = "0.25", default-features = false, features = ["png", "ico"] }
+winit = "0.30"
+winrt-notification = "0.5"
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading"] }
 
 # Testing
 proptest = "1.5"

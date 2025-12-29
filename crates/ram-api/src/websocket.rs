@@ -1,9 +1,13 @@
 //! WebSocket handler for real-time events.
 
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use futures_util::{SinkExt, StreamExt};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
@@ -120,11 +124,46 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
+/// Per-client subscription state for metering filtering.
+#[derive(Debug, Default)]
+struct MeteringSubscriptions {
+    /// Subscribed device keys (format: "node/device").
+    /// If empty, all meters are sent (backwards compatibility).
+    devices: HashSet<String>,
+    /// Whether any explicit subscription has been made.
+    /// If false, send all meters for backwards compatibility.
+    explicit: bool,
+}
+
+impl MeteringSubscriptions {
+    fn subscribe(&mut self, node: &str, device: &str) {
+        self.devices.insert(format!("{}/{}", node, device));
+        self.explicit = true;
+    }
+
+    fn unsubscribe(&mut self, node: &str, device: &str) {
+        self.devices.remove(&format!("{}/{}", node, device));
+    }
+
+    fn should_send(&self, node: &str, device: &str) -> bool {
+        // If no explicit subscriptions, send all (backwards compatibility)
+        if !self.explicit {
+            return true;
+        }
+        // Otherwise, only send if subscribed
+        self.devices.contains(&format!("{}/{}", node, device))
+    }
+}
+
 /// Handle WebSocket connection.
 async fn handle_socket(socket: WebSocket, state: AppState) {
     debug!("WebSocket client connected");
 
     let (mut sender, mut receiver) = socket.split();
+
+    // Per-client metering subscriptions
+    let subscriptions = Arc::new(Mutex::new(MeteringSubscriptions::default()));
+    let subscriptions_for_send = Arc::clone(&subscriptions);
 
     // Subscribe to broadcast events
     let mut event_rx = state.subscribe_events();
@@ -146,15 +185,25 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         loop {
             match event_rx.recv().await {
                 Ok(event) => {
-                    if let Ok(json) = serde_json::to_string(&event) {
-                        if sender.send(Message::Text(json)).await.is_err() {
-                            break;
+                    // Filter metering events based on subscriptions
+                    let should_send = match &event {
+                        WsEvent::Metering(m) => {
+                            subscriptions_for_send.lock().should_send(&m.node, &m.device)
+                        }
+                        _ => true, // Non-metering events always sent
+                    };
+
+                    if should_send {
+                        if let Ok(json) = serde_json::to_string(&event) {
+                            if sender.send(Message::Text(json)).await.is_err() {
+                                break;
+                            }
                         }
                     }
-                },
+                }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
                     warn!("WebSocket client lagged by {n} messages");
-                },
+                }
                 Err(broadcast::error::RecvError::Closed) => break,
             }
         }
@@ -166,18 +215,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             Ok(Message::Text(text)) => {
                 debug!("Received: {text}");
                 if let Ok(cmd) = serde_json::from_str::<WsCommand>(&text) {
-                    handle_command(cmd);
+                    handle_command(cmd, &subscriptions);
                 }
-            },
+            }
             Ok(Message::Close(_)) => {
                 debug!("Client disconnected");
                 break;
-            },
+            }
             Err(e) => {
                 warn!("WebSocket error: {e}");
                 break;
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -187,23 +236,20 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 }
 
 /// Handle a WebSocket command from client.
-fn handle_command(cmd: WsCommand) {
+fn handle_command(cmd: WsCommand, subscriptions: &Arc<Mutex<MeteringSubscriptions>>) {
     match cmd {
         WsCommand::SubscribeMetering { node, device } => {
             debug!("Subscribe metering: {node}/{device}");
-            // Note: Metering broadcast is implemented in service.rs and sends all meters
-            // to all clients at 30 Hz. Per-device filtering is a future optimization.
-            // For now, clients receive all meter updates and can filter locally.
-        },
+            subscriptions.lock().subscribe(&node, &device);
+        }
         WsCommand::UnsubscribeMetering { node, device } => {
             debug!("Unsubscribe metering: {node}/{device}");
-            // Note: Currently all meters are broadcast to all clients.
-            // Per-device subscription filtering is a future optimization.
-        },
+            subscriptions.lock().unsubscribe(&node, &device);
+        }
         WsCommand::Ping => {
             debug!("Ping received");
             // Pong is handled automatically by axum
-        },
+        }
     }
 }
 
@@ -308,5 +354,39 @@ mod tests {
         let cmd: WsCommand = serde_json::from_str(json).unwrap();
 
         assert!(matches!(cmd, WsCommand::Ping));
+    }
+
+    #[test]
+    fn metering_subscriptions_default_sends_all() {
+        let subs = MeteringSubscriptions::default();
+        // Before any explicit subscription, should send all
+        assert!(subs.should_send("any-node", "any-device"));
+    }
+
+    #[test]
+    fn metering_subscriptions_filters_after_subscribe() {
+        let mut subs = MeteringSubscriptions::default();
+        subs.subscribe("node-1", "device-a");
+
+        // Should send subscribed device
+        assert!(subs.should_send("node-1", "device-a"));
+        // Should NOT send unsubscribed device
+        assert!(!subs.should_send("node-1", "device-b"));
+        assert!(!subs.should_send("node-2", "device-a"));
+    }
+
+    #[test]
+    fn metering_subscriptions_unsubscribe() {
+        let mut subs = MeteringSubscriptions::default();
+        subs.subscribe("node-1", "device-a");
+        subs.subscribe("node-1", "device-b");
+
+        assert!(subs.should_send("node-1", "device-a"));
+        assert!(subs.should_send("node-1", "device-b"));
+
+        subs.unsubscribe("node-1", "device-a");
+
+        assert!(!subs.should_send("node-1", "device-a"));
+        assert!(subs.should_send("node-1", "device-b"));
     }
 }

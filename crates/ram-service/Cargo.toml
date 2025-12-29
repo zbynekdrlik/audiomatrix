@@ -35,4 +35,14 @@ hostname.workspace = true
 crossbeam-channel.workspace = true
 cpal.workspace = true
 
+# Windows system tray
+[target.'cfg(windows)'.dependencies]
+tray-icon.workspace = true
+muda.workspace = true
+image.workspace = true
+winit.workspace = true
+winrt-notification.workspace = true
+windows.workspace = true
+reqwest.workspace = true
+
 [dev-dependencies]
