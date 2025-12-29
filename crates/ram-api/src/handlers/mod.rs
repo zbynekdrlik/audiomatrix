@@ -117,7 +117,7 @@ pub async fn attach_device(
         Err(e) => Ok(Json(AttachDeviceResponse {
             success: false,
             device: None,
-            error: Some(e.to_string()),
+            error: Some(e),
         })),
     }
 }
@@ -150,7 +150,7 @@ pub async fn detach_device(
         Err(e) => Ok(Json(AttachDeviceResponse {
             success: false,
             device: None,
-            error: Some(e.to_string()),
+            error: Some(e),
         })),
     }
 }
@@ -171,7 +171,7 @@ pub async fn update_device(
     state
         .update_device(&device_id, req.display_name)
         .map(Json)
-        .map_err(|e| crate::Error::BadRequest(e.to_string()))
+        .map_err(crate::Error::BadRequest)
 }
 
 /// Get channels for a device.
@@ -208,7 +208,7 @@ pub async fn update_channel_label(
     state
         .set_channel_label(&device_id, channel, req.label)
         .map(Json)
-        .map_err(|e| crate::Error::BadRequest(e.to_string()))
+        .map_err(crate::Error::BadRequest)
 }
 
 /// Update multiple channel labels at once.
@@ -227,7 +227,7 @@ pub async fn bulk_update_channel_labels(
     state
         .set_channel_labels(&device_id, req.labels)
         .map(Json)
-        .map_err(|e| crate::Error::BadRequest(e.to_string()))
+        .map_err(crate::Error::BadRequest)
 }
 
 // --- Virtual Device Handlers ---
