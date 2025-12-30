@@ -1038,7 +1038,7 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 # Get-Content ~/.ssh/id_rsa.pub | ssh user@hostname "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
-**CRITICAL:** Always use SSH keys for target machine access. Do NOT rely on sshpass with passwords in commands as this causes repeated failures and wastes time.
+**Use sshpass for SSH access.** Credentials are in TARGETS.md.
 
 | Machine | Hostname | IP | OS | User | Role |
 |---------|----------|----|----|------|------|
@@ -1080,7 +1080,7 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │ stagebox1   │◄───►│  develbox   │◄───►│    iem      │
 │  (Windows)  │     │   (Linux)   │     │  (Windows)  │
-│  PRIMARY    │     │   DEV BOX   │     │ PRODUCTION  │
+│  PRIMARY    │     │   DEV BOX   │     │  MANDATORY  │
 └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
@@ -1169,48 +1169,45 @@ You have SSH access to all test machines with credentials in TARGETS.md. You are
    sshpass -p "iem" ssh iem@10.77.9.231 "powershell -Command \"Get-Process audiomatrix* | Select-Object Name,Id\""
    ```
 
-**CRITICAL FOR ALL WINDOWS MACHINES:**
-- For tray icon visibility: The logged-in desktop user must run AudioMatrix from their session
-- SSH-started processes run in session 0 (Services) = no tray icon visible
-- Scheduled tasks only show tray icon if run as the same user logged into desktop
-- The service WILL still work via SSH - just no tray icon (API, metering, routing all functional)
-- If tray icon is required: User must manually run or set up auto-start for their desktop session
+### Windows Tray Icon Setup (WORKING SOLUTION - DO NOT CHANGE)
 
-**To verify service is running regardless of tray icon:**
+**Problem**: SSH user ≠ Desktop user. Task must run as DESKTOP user for tray icon.
+
+**Solution**: Use `/RU "CONSOLE_USER"` to run task as the logged-in desktop user.
+
+**Step 1: Download to Public folder:**
 ```bash
-sshpass -p "PASSWORD" ssh user@host "tasklist /FI \"IMAGENAME eq audiomatrix.exe\""
+sshpass -p "PASSWORD" ssh user@HOST "powershell -Command \"Invoke-WebRequest -Uri 'https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe' -OutFile 'C:\Users\Public\audiomatrix.exe'\""
+```
+
+**Step 2: Check who is logged into desktop:**
+```bash
+sshpass -p "PASSWORD" ssh user@HOST "query user"
+# Look for USERNAME in "console" session - this is the DESKTOP USER
+```
+
+**Step 3: Create task as CONSOLE USER (not SSH user!):**
+```bash
+# Replace CONSOLE_USER with username from step 2
+sshpass -p "PASSWORD" ssh user@HOST "schtasks /Create /TN AudioMatrixConsole /TR \"C:\Users\Public\audiomatrix.exe -n NODENAME\" /SC ONCE /ST 00:00 /RU \"CONSOLE_USER\" /RL HIGHEST /IT /F"
+```
+
+**Step 4: Run immediately - TRAY ICON APPEARS:**
+```bash
+sshpass -p "PASSWORD" ssh user@HOST "schtasks /Run /TN AudioMatrixConsole"
+```
+
+**Step 5: Verify running in Console session:**
+```bash
+sshpass -p "PASSWORD" ssh user@HOST "tasklist /FI \"IMAGENAME eq audiomatrix.exe\""
+# Must show "Console" and session "1" (not "Services" session "0")
 curl http://HOST:8080/api/v1/health
 ```
 
-### Windows GUI Session for Tray Icon (Task Scheduler)
-
-**IMPORTANT:** When deploying to Windows machines, use Task Scheduler to run the service under a GUI session so the tray icon is visible. Running via SSH or as a background service won't show the tray icon.
-
-**Create a scheduled task via SSH:**
-```powershell
-# Create scheduled task that runs at logon with GUI access
-schtasks /Create /TN "AudioMatrix" /TR "C:\path\to\audiomatrix.exe -n NODENAME" /SC ONLOGON /RL HIGHEST /F
-
-# Or run immediately under current user's GUI session:
-schtasks /Create /TN "AudioMatrix" /TR "C:\path\to\audiomatrix.exe -n NODENAME" /SC ONCE /ST 00:00 /RL HIGHEST /F
-schtasks /Run /TN "AudioMatrix"
-```
-
-**Alternative: Use PowerShell to start in GUI session:**
-```powershell
-# This starts the process in the interactive desktop session
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(1)
-$action = New-ScheduledTaskAction -Execute "C:\path\to\audiomatrix.exe" -Argument "-n NODENAME"
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Highest
-Register-ScheduledTask -TaskName "AudioMatrix" -Trigger $trigger -Action $action -Principal $principal -Force
-Start-ScheduledTask -TaskName "AudioMatrix"
-```
-
-**Key points:**
-- `LogonType Interactive` ensures the process runs with desktop access
-- `-RunLevel Highest` gives admin privileges if needed for ASIO
-- The tray icon ONLY appears when running in an interactive desktop session
-- SSH-started processes don't have desktop access, hence no tray icon
+**THE KEY:** `/RU "CONSOLE_USER"` makes the task run as the desktop user, not the SSH user.
+- SSH user connects remotely (Session 0 = no GUI)
+- Console user is logged into desktop (Session 1 = has GUI)
+- Task runs as console user → process gets GUI access → tray icon works
 
 ### Deep Configuration Tests (Automated)
 
