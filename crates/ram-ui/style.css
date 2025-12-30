@@ -190,6 +190,31 @@ body {
     font-size: var(--font-md);
 }
 
+/* Device page node selector */
+.device-node-selector {
+    background: var(--bg-secondary);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-bottom: var(--spacing-lg);
+}
+
+.device-node-selector label {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.device-node-selector select {
+    min-width: 250px;
+    padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.device-node-selector .node-hint {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    margin-left: var(--spacing-sm);
+}
+
 /* Routing Matrix Container */
 .routing-matrix-container {
     display: flex;
@@ -393,14 +418,17 @@ body {
     gap: 2px;
     height: 60px;
     margin: var(--spacing-sm) 0;
+    overflow: hidden;
+    max-width: 100%;
 }
 
 .channel-meter {
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex: 1;
-    min-width: 8px;
+    flex: 1 1 0;
+    min-width: 6px;
+    max-width: 16px;
 }
 
 .channel-label {
@@ -455,6 +483,82 @@ body {
 
 .device-btn.detach-btn:hover {
     background: var(--accent-warning);
+    color: white;
+}
+
+/* Device config buttons */
+.device-config-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-xs);
+}
+
+.device-btn.config-btn {
+    flex: 1;
+    background: var(--bg-tertiary);
+    border-color: var(--border-light);
+    font-size: var(--font-xs);
+    color: var(--text-secondary);
+}
+
+.device-btn.config-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Device rename form */
+.device-rename-form {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex: 1;
+}
+
+.device-rename-input {
+    flex: 1;
+    padding: var(--spacing-xs);
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+}
+
+.device-rename-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
+.rename-save-btn,
+.rename-cancel-btn {
+    padding: var(--spacing-xs);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--font-sm);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rename-save-btn {
+    background: var(--accent-success);
+    color: white;
+}
+
+.rename-save-btn:hover {
+    filter: brightness(1.1);
+}
+
+.rename-cancel-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.rename-cancel-btn:hover {
+    background: var(--accent-danger);
     color: white;
 }
 

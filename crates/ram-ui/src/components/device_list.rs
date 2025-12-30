@@ -2,8 +2,11 @@
 
 use leptos::prelude::*;
 use ram_api::models::DeviceStatus;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
 
 use super::{DeviceCard, VirtualDeviceDialog};
+use crate::api;
 use crate::state::AppState;
 
 /// List of all audio devices grouped by type and attachment status.
@@ -14,14 +17,63 @@ pub fn DeviceList() -> impl IntoView {
     // Dialog state
     let show_virtual_dialog = RwSignal::new(false);
 
+    // Selected node for device management (can be different from current_node for multi-node management)
+    let selected_node_id = RwSignal::new(String::new());
+
+    // Initialize selected node from current_node
+    {
+        let state = app_state.clone();
+        Effect::new(move || {
+            if selected_node_id.get().is_empty() {
+                if let Some(node) = state.current_node.get() {
+                    selected_node_id.set(node.id.clone());
+                }
+            }
+        });
+    }
+
     // Get current node for virtual device creation
-    let app_state_node = app_state.clone();
     let selected_node = move || {
-        app_state_node
-            .current_node
-            .get()
-            .map(|n| n.id)
-            .unwrap_or_else(|| "local".to_string())
+        let id = selected_node_id.get();
+        if id.is_empty() {
+            app_state
+                .current_node
+                .get()
+                .map(|n| n.id)
+                .unwrap_or_else(|| "local".to_string())
+        } else {
+            id
+        }
+    };
+
+    // Fetch devices when selected node changes
+    {
+        let state = app_state.clone();
+        Effect::new(move || {
+            let node_id = selected_node_id.get();
+            if !node_id.is_empty() {
+                let state = state.clone();
+                let node_id_encoded = urlencoding::encode(&node_id).to_string();
+                spawn_local(async move {
+                    match api::get_devices(&node_id_encoded).await {
+                        Ok(devices) => {
+                            state.devices.set(devices);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to fetch devices for node {}: {}", node_id_encoded, e);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    // Node change handler
+    let on_node_change = move |ev: web_sys::Event| {
+        let target = ev.target().unwrap();
+        let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
+        let new_node_id = select.value();
+        selected_node_id.set(new_node_id);
     };
 
     // Attached input devices
@@ -73,15 +125,42 @@ pub fn DeviceList() -> impl IntoView {
     // Clone selected_node for the dialog
     let selected_node_for_dialog = selected_node.clone();
 
+    // Get nodes list for selector
+    let nodes_for_select = {
+        let state = app_state.clone();
+        move || state.nodes.get()
+    };
+
+    // Callback to refresh devices
+    let refresh_devices = {
+        let state = app_state.clone();
+        move || {
+            let node_id = selected_node_id.get();
+            if !node_id.is_empty() {
+                let state = state.clone();
+                let node_id_encoded = urlencoding::encode(&node_id).to_string();
+                spawn_local(async move {
+                    if let Ok(devices) = api::get_devices(&node_id_encoded).await {
+                        state.devices.set(devices);
+                    }
+                });
+            }
+        }
+    };
+
     view! {
         // Virtual Device Dialog
         {move || {
             if show_virtual_dialog.get() {
                 let node = selected_node_for_dialog();
+                let refresh = refresh_devices.clone();
                 Some(view! {
                     <VirtualDeviceDialog
                         node_id=node
-                        on_close=Callback::new(move |()| show_virtual_dialog.set(false))
+                        on_close=Callback::new(move |()| {
+                            show_virtual_dialog.set(false);
+                            refresh();
+                        })
                     />
                 })
             } else {
@@ -90,6 +169,31 @@ pub fn DeviceList() -> impl IntoView {
         }}
 
         <div class="device-list">
+            // Node Selector - manage devices on ANY node
+            <div class="node-selector device-node-selector">
+                <label>"Manage Node: "</label>
+                <select on:change=on_node_change>
+                    <For
+                        each=nodes_for_select
+                        key=|node| node.id.clone()
+                        children=move |node| {
+                            let node_id = node.id.clone();
+                            let node_name = node.name.clone();
+                            let is_selected = {
+                                let selected = selected_node_id.get();
+                                selected == node_id || (selected.is_empty() && app_state.current_node.get().map(|n| n.id == node_id).unwrap_or(false))
+                            };
+                            view! {
+                                <option value={node_id.clone()} selected=is_selected>
+                                    {node_name}
+                                </option>
+                            }
+                        }
+                    />
+                </select>
+                <span class="node-hint">" (Select node to manage its devices)"</span>
+            </div>
+
             // Create Virtual Device Button
             <div class="device-actions">
                 <button

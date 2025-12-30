@@ -2,9 +2,10 @@
 
 use leptos::prelude::*;
 use ram_api::models::{DeviceInfo, DeviceStatus};
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
-use super::Meter;
+use super::{ChannelLabelEditor, Meter};
 use crate::api;
 use crate::services::websocket::WsService;
 use crate::state::{AppState, ChannelLevel};
@@ -189,10 +190,123 @@ pub fn DeviceCard(
     let show_detach =
         device_status == DeviceStatus::Attached || device_status == DeviceStatus::Active;
 
+    // Channel label editor state
+    let show_label_editor = RwSignal::new(false);
+
+    // Device rename state
+    let is_renaming = RwSignal::new(false);
+    let rename_value = RwSignal::new(device_name.clone());
+    let current_display_name = RwSignal::new(device_name.clone());
+
+    // Save rename
+    let on_save_rename = {
+        let device_id = device.id.clone();
+        let app_state = app_state.clone();
+        move |_| {
+            let new_name = rename_value.get();
+            let device_id = device_id.clone();
+            let app_state = app_state.clone();
+
+            let node_id = app_state
+                .current_node
+                .get()
+                .map(|n| n.id)
+                .unwrap_or_else(|| "LOCAL".to_string());
+
+            spawn_local(async move {
+                match api::update_device(&node_id, &device_id, Some(&new_name)).await {
+                    Ok(updated) => {
+                        let display = updated
+                            .display_name
+                            .clone()
+                            .unwrap_or_else(|| updated.name.clone());
+                        current_display_name.set(display);
+                        // Update device in state
+                        app_state.devices.update(|devices| {
+                            if let Some(d) = devices.iter_mut().find(|d| d.id == updated.id) {
+                                *d = updated;
+                            }
+                        });
+                        is_renaming.set(false);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to rename device: {}", e);
+                        app_state
+                            .error
+                            .set(Some(format!("Failed to rename: {}", e)));
+                    }
+                }
+            });
+        }
+    };
+
+    // Cancel rename
+    let on_cancel_rename = move |_| {
+        rename_value.set(current_display_name.get());
+        is_renaming.set(false);
+    };
+
+    // Input change
+    let on_rename_input = move |ev: web_sys::Event| {
+        let target = ev.target().unwrap();
+        let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
+        rename_value.set(input.value());
+    };
+
+    // IDs for label editor
+    let device_id_for_editor = device.id.clone();
+    let device_name_for_editor = current_display_name.clone();
+    let node_id_for_editor = app_state
+        .current_node
+        .get()
+        .map(|n| n.id)
+        .unwrap_or_else(|| "LOCAL".to_string());
+
     view! {
+        // Channel Label Editor Dialog
+        {move || {
+            if show_label_editor.get() {
+                let node_id = node_id_for_editor.clone();
+                let device_id = device_id_for_editor.clone();
+                let device_name = device_name_for_editor.get();
+                Some(view! {
+                    <ChannelLabelEditor
+                        node_id=node_id
+                        device_id=device_id
+                        device_name=device_name
+                        on_close=Callback::new(move |()| show_label_editor.set(false))
+                    />
+                })
+            } else {
+                None
+            }
+        }}
+
         <div class=format!("device-card {}", device_type_class)>
             <div class="device-header">
-                <span class="device-name">{device_name}</span>
+                {move || {
+                    if is_renaming.get() {
+                        view! {
+                            <div class="device-rename-form">
+                                <input
+                                    type="text"
+                                    class="device-rename-input"
+                                    prop:value=move || rename_value.get()
+                                    on:input=on_rename_input.clone()
+                                    maxlength="31"
+                                />
+                                <button class="rename-save-btn" on:click=on_save_rename.clone()>"✓"</button>
+                                <button class="rename-cancel-btn" on:click=on_cancel_rename>"✕"</button>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <span class="device-name" title="Click to rename" on:dblclick=move |_| is_renaming.set(true)>
+                                {move || current_display_name.get()}
+                            </span>
+                        }.into_any()
+                    }
+                }}
                 <span class=format!("device-status {}", status_class)>{status_text}</span>
             </div>
 
@@ -246,6 +360,22 @@ pub fn DeviceCard(
                             "Detach"
                         </button>
                     })}
+                </div>
+                <div class="device-config-actions">
+                    <button
+                        class="device-btn config-btn"
+                        title="Rename device"
+                        on:click=move |_| is_renaming.set(true)
+                    >
+                        "Rename"
+                    </button>
+                    <button
+                        class="device-btn config-btn"
+                        title="Edit channel labels"
+                        on:click=move |_| show_label_editor.set(true)
+                    >
+                        "Labels"
+                    </button>
                 </div>
             })}
         </div>
