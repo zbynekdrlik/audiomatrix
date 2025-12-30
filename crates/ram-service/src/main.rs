@@ -52,6 +52,7 @@ use tracing_subscriber::FmtSubscriber;
 
 mod audio_processor;
 mod config;
+mod device_state;
 mod route_manager;
 mod service;
 #[cfg(windows)]

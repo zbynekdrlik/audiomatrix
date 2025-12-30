@@ -26,6 +26,7 @@ use ram_discovery::{
 
 use crate::audio_processor::AudioProcessor;
 use crate::config::ServiceConfig;
+use crate::device_state::DeviceStateManager;
 use crate::vban_manager::{VbanManager, VbanManagerConfig};
 
 /// Service shutdown signal.
@@ -87,6 +88,8 @@ pub struct AudioMatrixService {
     audio_processor: Arc<AudioProcessor>,
     /// VBAN manager for cross-node audio.
     vban_manager: Arc<VbanManager>,
+    /// Device state persistence manager.
+    device_state_manager: Arc<DeviceStateManager>,
     /// Service announcer for mDNS.
     announcer: Option<ServiceAnnouncer>,
     /// Service browser for discovery.
@@ -117,6 +120,10 @@ impl AudioMatrixService {
     pub fn new(config: ServiceConfig) -> Self {
         let device_manager = Arc::new(DeviceManager::with_defaults());
         let audio_processor = Arc::new(AudioProcessor::with_defaults());
+
+        // Create device state manager for persistence
+        let data_dir = Self::get_data_dir();
+        let device_state_manager = Arc::new(DeviceStateManager::new(data_dir));
 
         // Get the route controller from AudioProcessor for API integration
         let route_controller = audio_processor.route_controller();
@@ -157,6 +164,7 @@ impl AudioMatrixService {
             device_manager,
             audio_processor,
             vban_manager,
+            device_state_manager,
             announcer: None,
             browser: None,
             broadcast_discovery: None,
@@ -169,6 +177,27 @@ impl AudioMatrixService {
             metering_task: None,
             device_command_task: None,
         }
+    }
+
+    /// Gets the data directory for storing persistent state.
+    fn get_data_dir() -> std::path::PathBuf {
+        #[cfg(windows)]
+        {
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                return std::path::PathBuf::from(local_app_data).join("AudioMatrix");
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            if let Ok(home) = std::env::var("HOME") {
+                return std::path::PathBuf::from(home)
+                    .join(".local")
+                    .join("share")
+                    .join("audiomatrix");
+            }
+        }
+        // Fallback to current directory
+        std::path::PathBuf::from(".")
     }
 
     /// Creates a service with default configuration.
@@ -237,28 +266,56 @@ impl AudioMatrixService {
                 ),
             };
 
-            // Convert attachment state to API device status
-            let status = match device.attachment_state {
-                ram_core::AttachmentState::Available => ram_api::models::DeviceStatus::Available,
-                ram_core::AttachmentState::Attached => ram_api::models::DeviceStatus::Attached,
-                ram_core::AttachmentState::Active => ram_api::models::DeviceStatus::Active,
-                ram_core::AttachmentState::Detached => ram_api::models::DeviceStatus::Detached,
-                ram_core::AttachmentState::Error => ram_api::models::DeviceStatus::Error,
+            // Check for persisted state
+            let persisted = self.device_state_manager.get_device_state(&device.id);
+
+            // Apply persisted attached status, or use device's current status
+            let status = if let Some(ref ps) = persisted {
+                if ps.attached {
+                    ram_api::models::DeviceStatus::Attached
+                } else {
+                    ram_api::models::DeviceStatus::Available
+                }
+            } else {
+                match device.attachment_state {
+                    ram_core::AttachmentState::Available => ram_api::models::DeviceStatus::Available,
+                    ram_core::AttachmentState::Attached => ram_api::models::DeviceStatus::Attached,
+                    ram_core::AttachmentState::Active => ram_api::models::DeviceStatus::Active,
+                    ram_core::AttachmentState::Detached => ram_api::models::DeviceStatus::Detached,
+                    ram_core::AttachmentState::Error => ram_api::models::DeviceStatus::Error,
+                }
             };
 
+            // Apply persisted display name
+            let display_name = persisted
+                .as_ref()
+                .and_then(|ps| ps.display_name.clone())
+                .or_else(|| device.display_name.clone());
+
+            // Apply persisted sample rate/buffer size
+            let effective_sample_rate = persisted
+                .as_ref()
+                .and_then(|ps| ps.sample_rate)
+                .unwrap_or(sample_rate);
+            let effective_buffer_size = persisted
+                .as_ref()
+                .and_then(|ps| ps.buffer_size)
+                .unwrap_or(self.config.audio.default_buffer_size);
+
             debug!(
-                "Registering device: {} ({:?}) - {} in / {} out",
-                device.name, device_type, input_channels, output_channels
+                "Registering device: {} ({:?}) - {} in / {} out, attached={}",
+                device.name, device_type, input_channels, output_channels,
+                matches!(status, ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active)
             );
             self.app_state.register_device(ram_api::models::DeviceInfo {
                 id: device.id.clone(),
                 name: device.name.clone(),
-                display_name: device.display_name.clone(),
+                display_name,
                 device_type,
                 input_channels,
                 output_channels,
-                sample_rate,
-                buffer_size: self.config.audio.default_buffer_size,
+                sample_rate: effective_sample_rate,
+                buffer_size: effective_buffer_size,
                 is_virtual: device.is_virtual,
                 status,
                 backend: Some(device.host.clone()),
@@ -268,6 +325,13 @@ impl AudioMatrixService {
             "Registered {} devices in API state",
             self.app_state.all_devices().len()
         );
+
+        // Apply persisted channel labels
+        for (device_id, labels) in self.device_state_manager.get_all_channel_labels() {
+            for (channel, label) in labels {
+                let _ = self.app_state.set_channel_label(&device_id, channel, label);
+            }
+        }
 
         // Start service discovery
         if self.config.discovery.enabled {
@@ -288,6 +352,9 @@ impl AudioMatrixService {
         } else {
             info!("Zero auto-connect: No devices started automatically. Use Web UI to attach devices.");
         }
+
+        // Restore persisted attached devices (start their streams)
+        self.restore_attached_devices();
 
         // Start metering broadcast
         self.start_metering_broadcast();
@@ -515,6 +582,66 @@ impl AudioMatrixService {
         );
     }
 
+    /// Restores previously attached devices from persisted state.
+    fn restore_attached_devices(&self) {
+        let attached_devices = self.device_state_manager.get_attached_devices();
+
+        if attached_devices.is_empty() {
+            info!("No previously attached devices to restore");
+            return;
+        }
+
+        info!(
+            "Restoring {} previously attached devices",
+            attached_devices.len()
+        );
+
+        for device_id in attached_devices {
+            // Get device info to determine type
+            if let Some(device) = self.app_state.get_device(&device_id) {
+                info!("Restoring device: {} ({})", device.name, device_id);
+
+                // Start input stream for devices with input capability
+                if matches!(
+                    device.device_type,
+                    DeviceType::Input | DeviceType::Duplex
+                ) {
+                    match self.audio_processor.start_input_stream(&device_id) {
+                        Ok(()) => info!("Input stream restored for: {}", device_id),
+                        Err(e) => warn!("Failed to restore input stream for {}: {e}", device_id),
+                    }
+                }
+
+                // Start output stream for devices with output capability
+                if matches!(
+                    device.device_type,
+                    DeviceType::Output | DeviceType::Duplex
+                ) {
+                    match self.audio_processor.start_output_stream(&device_id) {
+                        Ok(()) => info!("Output stream restored for: {}", device_id),
+                        Err(e) => warn!("Failed to restore output stream for {}: {e}", device_id),
+                    }
+                }
+            } else {
+                warn!(
+                    "Previously attached device no longer exists: {}",
+                    device_id
+                );
+                // Remove from persisted state since device is gone
+                if let Err(e) = self.device_state_manager.set_device_attached(&device_id, false) {
+                    warn!("Failed to update persisted state: {e}");
+                }
+            }
+        }
+
+        let input_count = self.audio_processor.active_input_stream_count();
+        let output_count = self.audio_processor.active_output_stream_count();
+        info!(
+            "After restore: {} input streams, {} output streams active",
+            input_count, output_count
+        );
+    }
+
     /// Starts the metering broadcast task.
     ///
     /// This task periodically reads meter levels from all active streams
@@ -579,9 +706,11 @@ impl AudioMatrixService {
     ///
     /// This task listens for device attach/detach commands and
     /// starts/stops audio streams accordingly for metering support.
+    /// Also persists device state on attach/detach.
     fn start_device_command_handler(&mut self) {
         let mut rx = self.app_state.subscribe_device_commands();
         let audio_processor = Arc::clone(&self.audio_processor);
+        let device_state_manager = Arc::clone(&self.device_state_manager);
         let running = self.running.clone();
 
         let task = tokio::spawn(async move {
@@ -593,6 +722,11 @@ impl AudioMatrixService {
                                 match command {
                                     DeviceCommand::StartStreams { device_id, device_type } => {
                                         info!("Starting streams for device: {} (type: {:?})", device_id, device_type);
+
+                                        // Persist attached state
+                                        if let Err(e) = device_state_manager.set_device_attached(&device_id, true) {
+                                            warn!("Failed to persist device attached state: {e}");
+                                        }
 
                                         // Start input stream for devices with input capability
                                         if matches!(device_type, DeviceType::Input | DeviceType::Duplex) {
@@ -612,6 +746,12 @@ impl AudioMatrixService {
                                     }
                                     DeviceCommand::StopStreams { device_id } => {
                                         info!("Stopping streams for device: {device_id}");
+
+                                        // Persist detached state
+                                        if let Err(e) = device_state_manager.set_device_attached(&device_id, false) {
+                                            warn!("Failed to persist device detached state: {e}");
+                                        }
+
                                         audio_processor.stop_device_streams(&device_id);
                                     }
                                 }

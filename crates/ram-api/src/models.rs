@@ -116,12 +116,20 @@ pub struct AttachDeviceResponse {
     pub error: Option<String>,
 }
 
-/// Request to update a device (rename, etc.).
+/// Request to update a device (rename, configure sample rate/buffer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateDeviceRequest {
     /// New display name (None to keep current, empty string to clear).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    /// New sample rate (None to keep current).
+    /// Only 44100, 48000, 96000 Hz are supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<u32>,
+    /// New buffer size (None to keep current).
+    /// Must be power of 2: 32, 64, 128, 256, 512, 1024, 2048.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buffer_size: Option<u32>,
 }
 
 /// Channel information for API responses.

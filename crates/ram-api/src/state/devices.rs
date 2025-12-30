@@ -62,12 +62,41 @@ pub fn detach_device(
     Ok(device.clone())
 }
 
+/// Supported sample rates.
+const SUPPORTED_SAMPLE_RATES: &[u32] = &[44100, 48000, 96000];
+
+/// Supported buffer sizes (power of 2).
+const SUPPORTED_BUFFER_SIZES: &[u32] = &[32, 64, 128, 256, 512, 1024, 2048];
+
 /// Updates device settings.
+#[allow(clippy::too_many_arguments)]
 pub fn update_device(
     devices: &RwLock<HashMap<String, DeviceInfo>>,
     id: &str,
     display_name: Option<String>,
+    sample_rate: Option<u32>,
+    buffer_size: Option<u32>,
 ) -> Result<DeviceInfo, String> {
+    // Validate sample rate if provided
+    if let Some(rate) = sample_rate {
+        if !SUPPORTED_SAMPLE_RATES.contains(&rate) {
+            return Err(format!(
+                "Unsupported sample rate: {}. Supported: {:?}",
+                rate, SUPPORTED_SAMPLE_RATES
+            ));
+        }
+    }
+
+    // Validate buffer size if provided
+    if let Some(size) = buffer_size {
+        if !SUPPORTED_BUFFER_SIZES.contains(&size) {
+            return Err(format!(
+                "Unsupported buffer size: {}. Supported: {:?}",
+                size, SUPPORTED_BUFFER_SIZES
+            ));
+        }
+    }
+
     let mut devices = devices.write();
     let device = devices
         .get_mut(id)
@@ -75,6 +104,14 @@ pub fn update_device(
 
     if let Some(name) = display_name {
         device.display_name = if name.is_empty() { None } else { Some(name) };
+    }
+
+    if let Some(rate) = sample_rate {
+        device.sample_rate = rate;
+    }
+
+    if let Some(size) = buffer_size {
+        device.buffer_size = size;
     }
 
     Ok(device.clone())

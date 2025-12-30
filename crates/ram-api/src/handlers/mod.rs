@@ -263,7 +263,7 @@ pub async fn update_device(
     }
 
     state
-        .update_device(&device_id, req.display_name)
+        .update_device(&device_id, req.display_name, req.sample_rate, req.buffer_size)
         .map(Json)
         .map_err(crate::Error::BadRequest)
 }

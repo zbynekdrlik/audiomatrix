@@ -4,6 +4,7 @@
 
 mod channel_label_editor;
 mod device_card;
+mod device_config_dialog;
 mod device_list;
 mod generator_control;
 mod header;
@@ -16,6 +17,7 @@ mod virtual_device_dialog;
 
 pub use channel_label_editor::ChannelLabelEditor;
 pub use device_card::DeviceCard;
+pub use device_config_dialog::DeviceConfigDialog;
 pub use device_list::DeviceList;
 pub use generator_control::GeneratorControl;
 pub use header::Header;

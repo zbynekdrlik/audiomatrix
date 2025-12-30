@@ -5,7 +5,7 @@ use ram_api::models::{DeviceInfo, DeviceStatus, DeviceType};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
-use super::{ChannelLabelEditor, Meter};
+use super::{ChannelLabelEditor, DeviceConfigDialog, Meter};
 use crate::api;
 use crate::services::websocket::WsService;
 use crate::state::{AppState, ChannelLevel};
@@ -31,6 +31,7 @@ pub fn DeviceCard(
     let input_channels = device.input_channels;
     let output_channels = device.output_channels;
     let sample_rate = device.sample_rate;
+    let buffer_size = device.buffer_size;
     let device_status = device.status;
     let device_type = device.device_type;
     let device_backend = device.backend.clone().unwrap_or_default();
@@ -199,6 +200,9 @@ pub fn DeviceCard(
     // Channel label editor state
     let show_label_editor = RwSignal::new(false);
 
+    // Device config dialog state
+    let show_config_dialog = RwSignal::new(false);
+
     // Device rename state
     let is_renaming = RwSignal::new(false);
     let rename_value = RwSignal::new(device_name.clone());
@@ -220,7 +224,7 @@ pub fn DeviceCard(
                 .unwrap_or_else(|| "LOCAL".to_string());
 
             spawn_local(async move {
-                match api::update_device(&node_id, &device_id, Some(&new_name)).await {
+                match api::update_device(&node_id, &device_id, Some(&new_name), None, None).await {
                     Ok(updated) => {
                         let display = updated
                             .display_name
@@ -268,6 +272,11 @@ pub fn DeviceCard(
         .map(|n| n.id)
         .unwrap_or_else(|| "LOCAL".to_string());
 
+    // IDs for config dialog
+    let device_id_for_config = device.id.clone();
+    let device_name_for_config = current_display_name.clone();
+    let node_id_for_config = node_id_for_editor.clone();
+
     // Format channel info string
     let channel_info = if input_channels > 0 && output_channels > 0 {
         format!("{} in / {} out", input_channels, output_channels)
@@ -296,6 +305,27 @@ pub fn DeviceCard(
                         device_id=device_id
                         device_name=device_name
                         on_close=Callback::new(move |()| show_label_editor.set(false))
+                    />
+                })
+            } else {
+                None
+            }
+        }}
+
+        // Device Config Dialog
+        {move || {
+            if show_config_dialog.get() {
+                let node_id = node_id_for_config.clone();
+                let device_id = device_id_for_config.clone();
+                let device_name = device_name_for_config.get();
+                Some(view! {
+                    <DeviceConfigDialog
+                        node_id=node_id
+                        device_id=device_id
+                        device_name=device_name
+                        current_sample_rate=sample_rate
+                        current_buffer_size=buffer_size
+                        on_close=Callback::new(move |()| show_config_dialog.set(false))
                     />
                 })
             } else {
@@ -451,6 +481,13 @@ pub fn DeviceCard(
                         on:click=move |_| show_label_editor.set(true)
                     >
                         "Labels"
+                    </button>
+                    <button
+                        class="device-btn config-btn"
+                        title="Configure sample rate and buffer"
+                        on:click=move |_| show_config_dialog.set(true)
+                    >
+                        "Configure"
                     </button>
                 </div>
             })}

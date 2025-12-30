@@ -252,11 +252,13 @@ pub async fn detach_device(node_id: &str, device_id: &str) -> ApiResult<()> {
     Ok(())
 }
 
-/// Updates device properties (e.g., display name).
+/// Updates device properties (display name, sample rate, buffer size).
 pub async fn update_device(
     node_id: &str,
     device_id: &str,
     display_name: Option<&str>,
+    sample_rate: Option<u32>,
+    buffer_size: Option<u32>,
 ) -> ApiResult<DeviceInfo> {
     let url = format!(
         "{}/nodes/{}/devices/{}",
@@ -265,7 +267,11 @@ pub async fn update_device(
         urlencoding::encode(device_id)
     );
 
-    let body = serde_json::json!({ "display_name": display_name });
+    let body = serde_json::json!({
+        "display_name": display_name,
+        "sample_rate": sample_rate,
+        "buffer_size": buffer_size
+    });
 
     let response = Request::patch(&url)
         .header("Content-Type", "application/json")

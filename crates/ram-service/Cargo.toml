@@ -34,6 +34,7 @@ serde_json.workspace = true
 hostname.workspace = true
 crossbeam-channel.workspace = true
 cpal.workspace = true
+uuid.workspace = true
 
 # Windows system tray
 [target.'cfg(windows)'.dependencies]
@@ -53,3 +54,4 @@ tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
 urlencoding = { workspace = true }
 bytes = { workspace = true }
+tempfile = "3.14"
