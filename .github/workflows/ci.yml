@@ -349,10 +349,65 @@ jobs:
           fi
           echo "All Rust files are within size limits"
 
+  # E2E Tests (Playwright)
+  e2e:
+    name: E2E Tests
+    needs: build-ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install ALSA dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Build AudioMatrix
+        run: cargo build --release -p ram-service
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Start AudioMatrix server
+        run: |
+          ./target/release/audiomatrix -n ci-test &
+          sleep 3
+          curl -s http://localhost:8080/api/v1/health || echo "Server may need more time"
+          sleep 2
+
+      - name: Run E2E smoke tests
+        working-directory: tests/e2e
+        run: npx playwright test specs/smoke.spec.ts --reporter=list
+        env:
+          BASE_URL: http://localhost:8080
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: tests/e2e/test-results/
+          retention-days: 7
+
   # All checks must pass
   ci-complete:
     name: CI Complete
-    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size]
+    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size, e2e]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -368,7 +423,8 @@ jobs:
              [ "${{ needs.coverage.result }}" != "success" ] || \
              [ "${{ needs.audit.result }}" != "success" ] || \
              [ "${{ needs.docs.result }}" != "success" ] || \
-             [ "${{ needs.file-size.result }}" != "success" ]; then
+             [ "${{ needs.file-size.result }}" != "success" ] || \
+             [ "${{ needs.e2e.result }}" != "success" ]; then
             echo "::error::One or more required checks failed"
             exit 1
           fi
