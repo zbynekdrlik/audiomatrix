@@ -61,8 +61,12 @@ pub struct MeteringUpdate {
     pub node: String,
     /// Device identifier.
     pub device: String,
+    /// Direction: "input" or "output".
+    pub direction: String,
     /// Channel levels (dBFS).
     pub levels: Vec<f32>,
+    /// Peak hold levels (dBFS).
+    pub peaks: Vec<f32>,
 }
 
 /// Route update data.
@@ -278,12 +282,16 @@ mod tests {
         let event = WsEvent::Metering(MeteringUpdate {
             node: "host1".into(),
             device: "Device A".into(),
+            direction: "input".into(),
             levels: vec![-12.0, -15.0],
+            peaks: vec![-6.0, -9.0],
         });
 
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("\"type\":\"metering\""));
         assert!(json.contains("\"node\":\"host1\""));
+        assert!(json.contains("\"direction\":\"input\""));
+        assert!(json.contains("\"peaks\""));
     }
 
     #[test]

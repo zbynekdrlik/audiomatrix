@@ -514,28 +514,34 @@ impl AudioMatrixService {
 
                 // Collect input meters
                 for (device_id, levels) in metering_contexts.all_input_meters() {
-                    let db_levels: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
+                    let db_levels: Vec<f32> = levels.iter().map(|l| l.rms_db).collect();
+                    let db_peaks: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
 
                     // Only broadcast if there are non-silent levels
                     if db_levels.iter().any(|&l| l > -120.0) {
                         app_state.broadcast_event(WsEvent::Metering(MeteringUpdate {
                             node: node_name.clone(),
                             device: device_id,
+                            direction: "input".to_string(),
                             levels: db_levels,
+                            peaks: db_peaks,
                         }));
                     }
                 }
 
                 // Collect output meters
                 for (device_id, levels) in metering_contexts.all_output_meters() {
-                    let db_levels: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
+                    let db_levels: Vec<f32> = levels.iter().map(|l| l.rms_db).collect();
+                    let db_peaks: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
 
                     // Only broadcast if there are non-silent levels
                     if db_levels.iter().any(|&l| l > -120.0) {
                         app_state.broadcast_event(WsEvent::Metering(MeteringUpdate {
                             node: node_name.clone(),
                             device: device_id,
+                            direction: "output".to_string(),
                             levels: db_levels,
+                            peaks: db_peaks,
                         }));
                     }
                 }

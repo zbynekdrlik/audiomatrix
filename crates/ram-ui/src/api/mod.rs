@@ -4,8 +4,9 @@
 
 use gloo_net::http::Request;
 use ram_api::models::{
-    ChannelInfo, CreateVirtualDeviceRequest, DeviceGeneratorResponse, DeviceInfo, NodeInfo,
-    RouteDefinition, SetGeneratorRequest, StreamInfo, SubscriptionInfo, SubscriptionStatsResponse,
+    AttachDeviceResponse, ChannelInfo, CreateVirtualDeviceRequest, DeviceGeneratorResponse,
+    DeviceInfo, NodeInfo, RouteDefinition, SetGeneratorRequest, StreamInfo, SubscriptionInfo,
+    SubscriptionStatsResponse, VirtualDeviceResponse,
 };
 
 /// API error type.
@@ -204,7 +205,7 @@ pub async fn attach_device(
     node_id: &str,
     device_id: &str,
     display_name: Option<&str>,
-) -> ApiResult<DeviceInfo> {
+) -> ApiResult<AttachDeviceResponse> {
     let url = format!(
         "{}/nodes/{}/devices/{}/attach",
         api_base(),
@@ -368,7 +369,7 @@ pub async fn list_virtual_devices(node_id: &str) -> ApiResult<Vec<DeviceInfo>> {
 pub async fn create_virtual_device(
     node_id: &str,
     request: &CreateVirtualDeviceRequest,
-) -> ApiResult<DeviceInfo> {
+) -> ApiResult<VirtualDeviceResponse> {
     let url = format!(
         "{}/nodes/{}/virtual-devices",
         api_base(),

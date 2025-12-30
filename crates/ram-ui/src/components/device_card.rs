@@ -115,14 +115,27 @@ pub fn DeviceCard(
 
             spawn_local(async move {
                 match api::attach_device(&node_id, &device_id, None).await {
-                    Ok(updated_device) => {
-                        // Update device in state
-                        app_state.devices.update(|devices| {
-                            if let Some(d) = devices.iter_mut().find(|d| d.id == updated_device.id)
-                            {
-                                *d = updated_device;
+                    Ok(response) => {
+                        if response.success {
+                            if let Some(updated_device) = response.device {
+                                // Update device in state
+                                app_state.devices.update(|devices| {
+                                    if let Some(d) =
+                                        devices.iter_mut().find(|d| d.id == updated_device.id)
+                                    {
+                                        *d = updated_device;
+                                    }
+                                });
                             }
-                        });
+                        } else {
+                            let err_msg = response
+                                .error
+                                .unwrap_or_else(|| "Unknown error".to_string());
+                            log::error!("Failed to attach device: {}", err_msg);
+                            app_state
+                                .error
+                                .set(Some(format!("Failed to attach device: {}", err_msg)));
+                        }
                     },
                     Err(e) => {
                         log::error!("Failed to attach device: {}", e);

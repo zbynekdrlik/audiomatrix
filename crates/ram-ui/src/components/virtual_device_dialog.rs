@@ -121,12 +121,20 @@ pub fn VirtualDeviceDialog(
 
             spawn_local(async move {
                 match api::create_virtual_device(&node_id, &request).await {
-                    Ok(_device) => {
-                        // Refresh devices
-                        if let Ok(devices) = api::get_devices(&node_id).await {
-                            app_state.devices.set(devices);
+                    Ok(response) => {
+                        if response.success {
+                            // Refresh devices
+                            if let Ok(devices) = api::get_devices(&node_id).await {
+                                app_state.devices.set(devices);
+                            }
+                            on_close.run(());
+                        } else {
+                            let err_msg = response
+                                .error
+                                .unwrap_or_else(|| "Unknown error".to_string());
+                            error.set(Some(format!("Failed to create device: {}", err_msg)));
+                            creating.set(false);
                         }
-                        on_close.run(());
                     },
                     Err(e) => {
                         error.set(Some(format!("Failed to create device: {}", e)));
