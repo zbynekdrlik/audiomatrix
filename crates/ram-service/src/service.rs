@@ -502,7 +502,8 @@ impl AudioMatrixService {
         let metering_contexts = Arc::clone(self.audio_processor.metering_contexts());
         let app_state = self.app_state.clone();
         let running = self.running.clone();
-        let node_name = self.config.node_name.clone();
+        // Use full node ID (name@hostname) to match what the UI expects for subscriptions
+        let node_id = app_state.local_node().id;
 
         // Use spawn_blocking for the metering loop
         let task = tokio::task::spawn_blocking(move || {
@@ -520,7 +521,7 @@ impl AudioMatrixService {
                     // Only broadcast if there are non-silent levels
                     if db_levels.iter().any(|&l| l > -120.0) {
                         app_state.broadcast_event(WsEvent::Metering(MeteringUpdate {
-                            node: node_name.clone(),
+                            node: node_id.clone(),
                             device: device_id,
                             direction: "input".to_string(),
                             levels: db_levels,
@@ -537,7 +538,7 @@ impl AudioMatrixService {
                     // Only broadcast if there are non-silent levels
                     if db_levels.iter().any(|&l| l > -120.0) {
                         app_state.broadcast_event(WsEvent::Metering(MeteringUpdate {
-                            node: node_name.clone(),
+                            node: node_id.clone(),
                             device: device_id,
                             direction: "output".to_string(),
                             levels: db_levels,
