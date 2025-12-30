@@ -27,8 +27,8 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.9
-> **Last Updated:** 2025-12-29
+> **Current Version:** 0.1.0-dev.15
+> **Last Updated:** 2025-12-30
 
 ### Backend Implementation Status
 
@@ -62,7 +62,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Zero Auto-Connect** | Complete | ram-service | Config option `auto_start_devices` |
 | **State Persistence** | Complete | ram-core | Routes, attachments, labels, virtual devices |
 
-### Web UI Implementation Status (~30% Complete)
+### Web UI Implementation Status (~75% Complete)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -70,13 +70,14 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Cross-Node Selection** | Complete | Source/dest node selectors |
 | **Device List Display** | Complete | Shows devices with meters |
 | **Route Create/Delete** | Complete | API integration working |
-| **Header/Navigation** | Complete | Node selector, status indicator |
-| **Real-Time Metering** | Infrastructure Only | Signals exist, no WebSocket connection |
-| **Route Volume/Mute** | Not Started | API ready, no UI controls |
-| **Device Attachment UI** | Not Started | API ready, no attach/detach buttons |
-| **Virtual Device Creation** | Not Started | API ready, no creation dialog |
-| **Channel Label Editor** | Not Started | API ready, no label UI |
-| **Generator Controls** | Not Started | API ready, no generator UI |
+| **Header/Navigation** | Complete | Node selector, WebSocket status indicator |
+| **WebSocket Connection** | Complete | Auto-connect, reconnect, event handling |
+| **Real-Time Metering** | Complete | WebSocket subscription per attached device |
+| **Route Volume/Mute** | Complete | RouteControl component with slider/toggle |
+| **Device Attachment UI** | Complete | Attach/detach buttons, status display |
+| **Virtual Device Creation** | Complete | Dialog with name, channels, sample rate |
+| **Channel Label Editor** | Complete | Per-channel naming component |
+| **Generator Controls** | Complete | Waveform selection, frequency, amplitude |
 | **Settings Page** | Not Started | Empty placeholder only |
 | **Stream Monitor** | Not Started | API ready, no streams page |
 
@@ -197,12 +198,31 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 ## Known Technical Debt
 
 - VbanManager dead code: `is_running()` and `sender_count()` methods unused
+- Settings page not implemented (placeholder only)
+- Stream monitor page not implemented
 
 ## Known Bugs
 
 *No known bugs at this time.*
 
 ## Recently Completed
+
+- **WebSocket Schema Alignment** (2025-12-30): Fixed frontend/backend message format mismatch
+  - Fixed serde tagging: `#[serde(tag = "type", content = "data")]` for WsEvent
+  - Fixed serde tagging: `#[serde(tag = "command", content = "data")]` for WsCommand
+  - Fixed metering node ID: now uses full `{name}@{hostname}` format
+  - Verified: node_status, device_attached, metering subscription all working
+
+- **Web UI Device Management** (2025-12-30): Complete device attachment workflow
+  - Device cards with Attach/Detach buttons
+  - Virtual device creation dialog
+  - Proper API response type handling (VirtualDeviceResponse, AttachDeviceResponse)
+  - WebSocket event handling for device_attached/device_detached
+
+- **3-Node Network Deployment** (2025-12-30): All targets running v0.1.0-dev.15
+  - stagebox1.lan (Windows) with tray icon
+  - iem/Ableton-IEM (Windows) with tray icon under console user
+  - develbox (Linux) with local binary
 
 - **File Size Refactoring** (2025-12-29): All files now under 1000 lines per CLAUDE.md guidelines
   - `state.rs` (1275 lines) → `state/mod.rs` (957) + `devices.rs` (303) + `generators.rs` (108)
