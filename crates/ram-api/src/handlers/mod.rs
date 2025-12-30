@@ -61,8 +61,7 @@ pub async fn list_devices(
     State(state): State<AppState>,
     Path(node_id): Path<String>,
 ) -> Result<Json<Vec<DeviceInfo>>> {
-    let local_id = state.local_node().id;
-    if node_id == local_id || node_id == "local" {
+    if state.is_local_node(&node_id) {
         Ok(Json(state.all_devices()))
     } else {
         // Proxy to remote node
@@ -94,8 +93,7 @@ pub async fn get_device(
     State(state): State<AppState>,
     Path((node_id, device_id)): Path<(String, String)>,
 ) -> Result<Json<DeviceInfo>> {
-    let local_id = state.local_node().id;
-    if node_id == local_id || node_id == "local" {
+    if state.is_local_node(&node_id) {
         state
             .get_device(&device_id)
             .map(Json)
@@ -129,8 +127,7 @@ pub async fn attach_device(
     Path((node_id, device_id)): Path<(String, String)>,
     Json(req): Json<AttachDeviceRequest>,
 ) -> Result<Json<AttachDeviceResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         // Proxy to remote node
         if let Some(node) = state.get_remote_node(&node_id) {
             if let Some(addr) = node.addresses.first() {
@@ -195,8 +192,7 @@ pub async fn detach_device(
     State(state): State<AppState>,
     Path((node_id, device_id)): Path<(String, String)>,
 ) -> Result<Json<AttachDeviceResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         // Proxy to remote node
         if let Some(node) = state.get_remote_node(&node_id) {
             if let Some(addr) = node.addresses.first() {
@@ -260,8 +256,7 @@ pub async fn update_device(
     Path((node_id, device_id)): Path<(String, String)>,
     Json(req): Json<UpdateDeviceRequest>,
 ) -> Result<Json<DeviceInfo>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::NotFound(format!(
             "device: {node_id}/{device_id}"
         )));
@@ -278,8 +273,7 @@ pub async fn get_device_channels(
     State(state): State<AppState>,
     Path((node_id, device_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<ChannelInfo>>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::NotFound(format!(
             "device: {node_id}/{device_id}"
         )));
@@ -297,8 +291,7 @@ pub async fn update_channel_label(
     Path((node_id, device_id, channel)): Path<(String, String, u16)>,
     Json(req): Json<UpdateChannelLabelRequest>,
 ) -> Result<Json<ChannelInfo>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::NotFound(format!(
             "device: {node_id}/{device_id}"
         )));
@@ -316,8 +309,7 @@ pub async fn bulk_update_channel_labels(
     Path((node_id, device_id)): Path<(String, String)>,
     Json(req): Json<BulkChannelLabelsRequest>,
 ) -> Result<Json<Vec<ChannelInfo>>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::NotFound(format!(
             "device: {node_id}/{device_id}"
         )));
@@ -336,8 +328,7 @@ pub async fn list_virtual_devices(
     State(state): State<AppState>,
     Path(node_id): Path<String>,
 ) -> Result<Json<Vec<DeviceInfo>>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::NotFound(format!("node: {node_id}")));
     }
     Ok(Json(state.list_virtual_devices()))
@@ -349,8 +340,7 @@ pub async fn create_virtual_device(
     Path(node_id): Path<String>,
     Json(req): Json<CreateVirtualDeviceRequest>,
 ) -> Result<Json<VirtualDeviceResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         // Proxy to remote node
         if let Some(node) = state.get_remote_node(&node_id) {
             if let Some(addr) = node.addresses.first() {
@@ -442,8 +432,7 @@ pub async fn update_virtual_device(
     Path((node_id, device_id)): Path<(String, String)>,
     Json(req): Json<UpdateVirtualDeviceRequest>,
 ) -> Result<Json<VirtualDeviceResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         // Proxy to remote node
         if let Some(node) = state.get_remote_node(&node_id) {
             if let Some(addr) = node.addresses.first() {
@@ -521,8 +510,7 @@ pub async fn delete_virtual_device(
     State(state): State<AppState>,
     Path((node_id, device_id)): Path<(String, String)>,
 ) -> Result<Json<VirtualDeviceResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         // Proxy to remote node
         if let Some(node) = state.get_remote_node(&node_id) {
             if let Some(addr) = node.addresses.first() {
@@ -582,8 +570,7 @@ pub async fn get_device_generator(
     State(state): State<AppState>,
     Path((node_id, device_id)): Path<(String, String)>,
 ) -> Result<Json<DeviceGeneratorResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::BadRequest(format!(
             "Generator control only available on local node, not: {node_id}"
         )));
@@ -602,8 +589,7 @@ pub async fn set_channel_generator(
     Path((node_id, device_id, channel)): Path<(String, String, u16)>,
     Json(req): Json<SetGeneratorRequest>,
 ) -> Result<Json<GeneratorStatus>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::BadRequest(format!(
             "Generator control only available on local node, not: {node_id}"
         )));
@@ -633,8 +619,7 @@ pub async fn set_all_generators(
     Path((node_id, device_id)): Path<(String, String)>,
     Json(req): Json<SetAllGeneratorsRequest>,
 ) -> Result<Json<DeviceGeneratorResponse>> {
-    let local_id = state.local_node().id;
-    if node_id != local_id && node_id != "local" {
+    if !state.is_local_node(&node_id) {
         return Err(crate::Error::BadRequest(format!(
             "Generator control only available on local node, not: {node_id}"
         )));

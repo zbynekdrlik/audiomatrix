@@ -569,9 +569,13 @@ impl AppState {
     }
 
     /// Checks if a node identifier refers to the local node.
-    fn is_local_node(&self, node_id: &str) -> bool {
+    ///
+    /// Accepts "LOCAL", "local", the node's ID, or the node's name (case-insensitive for "local").
+    #[must_use]
+    pub fn is_local_node(&self, node_id: &str) -> bool {
         let local = self.local_node();
-        node_id == "LOCAL" || node_id == local.id || node_id == local.name
+        let node_id_lower = node_id.to_lowercase();
+        node_id_lower == "local" || node_id == local.id || node_id == local.name
     }
 
     /// Checks if a route crosses node boundaries.
