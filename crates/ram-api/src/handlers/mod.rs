@@ -131,10 +131,41 @@ pub async fn attach_device(
 ) -> Result<Json<AttachDeviceResponse>> {
     let local_id = state.local_node().id;
     if node_id != local_id && node_id != "local" {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/devices/{}/attach",
+                    addr,
+                    node.api_port,
+                    urlencoding::encode(&device_id)
+                );
+                let client = reqwest::Client::new();
+                match client.post(&url).json(&req).send().await {
+                    Ok(resp) => match resp.json::<AttachDeviceResponse>().await {
+                        Ok(result) => return Ok(Json(result)),
+                        Err(e) => {
+                            return Ok(Json(AttachDeviceResponse {
+                                success: false,
+                                device: None,
+                                error: Some(format!("Failed to parse response: {e}")),
+                            }));
+                        },
+                    },
+                    Err(e) => {
+                        return Ok(Json(AttachDeviceResponse {
+                            success: false,
+                            device: None,
+                            error: Some(format!("Failed to connect to remote node: {e}")),
+                        }));
+                    },
+                }
+            }
+        }
         return Ok(Json(AttachDeviceResponse {
             success: false,
             device: None,
-            error: Some(format!("Cannot attach device on remote node: {node_id}")),
+            error: Some(format!("Remote node not found: {node_id}")),
         }));
     }
 
@@ -166,10 +197,41 @@ pub async fn detach_device(
 ) -> Result<Json<AttachDeviceResponse>> {
     let local_id = state.local_node().id;
     if node_id != local_id && node_id != "local" {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/devices/{}/detach",
+                    addr,
+                    node.api_port,
+                    urlencoding::encode(&device_id)
+                );
+                let client = reqwest::Client::new();
+                match client.post(&url).send().await {
+                    Ok(resp) => match resp.json::<AttachDeviceResponse>().await {
+                        Ok(result) => return Ok(Json(result)),
+                        Err(e) => {
+                            return Ok(Json(AttachDeviceResponse {
+                                success: false,
+                                device: None,
+                                error: Some(format!("Failed to parse response: {e}")),
+                            }));
+                        },
+                    },
+                    Err(e) => {
+                        return Ok(Json(AttachDeviceResponse {
+                            success: false,
+                            device: None,
+                            error: Some(format!("Failed to connect to remote node: {e}")),
+                        }));
+                    },
+                }
+            }
+        }
         return Ok(Json(AttachDeviceResponse {
             success: false,
             device: None,
-            error: Some(format!("Cannot detach device on remote node: {node_id}")),
+            error: Some(format!("Remote node not found: {node_id}")),
         }));
     }
 
@@ -289,12 +351,39 @@ pub async fn create_virtual_device(
 ) -> Result<Json<VirtualDeviceResponse>> {
     let local_id = state.local_node().id;
     if node_id != local_id && node_id != "local" {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/virtual-devices",
+                    addr, node.api_port
+                );
+                let client = reqwest::Client::new();
+                match client.post(&url).json(&req).send().await {
+                    Ok(resp) => match resp.json::<VirtualDeviceResponse>().await {
+                        Ok(result) => return Ok(Json(result)),
+                        Err(e) => {
+                            return Ok(Json(VirtualDeviceResponse {
+                                success: false,
+                                device: None,
+                                error: Some(format!("Failed to parse response: {e}")),
+                            }));
+                        },
+                    },
+                    Err(e) => {
+                        return Ok(Json(VirtualDeviceResponse {
+                            success: false,
+                            device: None,
+                            error: Some(format!("Failed to connect to remote node: {e}")),
+                        }));
+                    },
+                }
+            }
+        }
         return Ok(Json(VirtualDeviceResponse {
             success: false,
             device: None,
-            error: Some(format!(
-                "Cannot create virtual device on remote node: {node_id}"
-            )),
+            error: Some(format!("Remote node not found: {node_id}")),
         }));
     }
 
@@ -355,12 +444,41 @@ pub async fn update_virtual_device(
 ) -> Result<Json<VirtualDeviceResponse>> {
     let local_id = state.local_node().id;
     if node_id != local_id && node_id != "local" {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/virtual-devices/{}",
+                    addr,
+                    node.api_port,
+                    urlencoding::encode(&device_id)
+                );
+                let client = reqwest::Client::new();
+                match client.put(&url).json(&req).send().await {
+                    Ok(resp) => match resp.json::<VirtualDeviceResponse>().await {
+                        Ok(result) => return Ok(Json(result)),
+                        Err(e) => {
+                            return Ok(Json(VirtualDeviceResponse {
+                                success: false,
+                                device: None,
+                                error: Some(format!("Failed to parse response: {e}")),
+                            }));
+                        },
+                    },
+                    Err(e) => {
+                        return Ok(Json(VirtualDeviceResponse {
+                            success: false,
+                            device: None,
+                            error: Some(format!("Failed to connect to remote node: {e}")),
+                        }));
+                    },
+                }
+            }
+        }
         return Ok(Json(VirtualDeviceResponse {
             success: false,
             device: None,
-            error: Some(format!(
-                "Cannot update virtual device on remote node: {node_id}"
-            )),
+            error: Some(format!("Remote node not found: {node_id}")),
         }));
     }
 
@@ -405,12 +523,41 @@ pub async fn delete_virtual_device(
 ) -> Result<Json<VirtualDeviceResponse>> {
     let local_id = state.local_node().id;
     if node_id != local_id && node_id != "local" {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/virtual-devices/{}",
+                    addr,
+                    node.api_port,
+                    urlencoding::encode(&device_id)
+                );
+                let client = reqwest::Client::new();
+                match client.delete(&url).send().await {
+                    Ok(resp) => match resp.json::<VirtualDeviceResponse>().await {
+                        Ok(result) => return Ok(Json(result)),
+                        Err(e) => {
+                            return Ok(Json(VirtualDeviceResponse {
+                                success: false,
+                                device: None,
+                                error: Some(format!("Failed to parse response: {e}")),
+                            }));
+                        },
+                    },
+                    Err(e) => {
+                        return Ok(Json(VirtualDeviceResponse {
+                            success: false,
+                            device: None,
+                            error: Some(format!("Failed to connect to remote node: {e}")),
+                        }));
+                    },
+                }
+            }
+        }
         return Ok(Json(VirtualDeviceResponse {
             success: false,
             device: None,
-            error: Some(format!(
-                "Cannot delete virtual device on remote node: {node_id}"
-            )),
+            error: Some(format!("Remote node not found: {node_id}")),
         }));
     }
 

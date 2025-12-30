@@ -7,27 +7,32 @@ test.describe('Device Management', () => {
     await waitForWebSocket();
   });
 
-  test('displays available input devices', async ({ page }) => {
-    // Check for Available Input Devices section
-    const inputSection = page.locator('h2:has-text("Available Input")').locator('..');
+  test('displays available devices', async ({ page }) => {
+    // Check for Available Devices section (unified view - not split by input/output)
+    const devicesSection = page.locator('h2:has-text("Available Devices")').locator('..');
 
     // Should have at least one device card or "no devices" message
     // Device cards have Attach/Detach buttons, "ch" indicator, and Hz sample rate
-    const hasDevices = await inputSection.locator('button:has-text("Attach"), button:has-text("Detach")').count() > 0;
-    const hasMessage = await inputSection.locator('text=/No available input/i').count() > 0;
+    const hasDevices = await devicesSection.locator('button:has-text("Attach"), button:has-text("Detach")').count() > 0;
+    const hasMessage = await devicesSection.locator('text=/No available/i').count() > 0;
 
     expect(hasDevices || hasMessage).toBeTruthy();
   });
 
-  test('displays available output devices', async ({ page }) => {
-    // Check for Available Output Devices section
-    const outputSection = page.locator('h2:has-text("Available Output")').locator('..');
+  test('device cards show IN/OUT type badges', async ({ page }) => {
+    // With unified device model, each device card should show IN, OUT, or I/O badge
+    const devicesSection = page.locator('h2:has-text("Available Devices")').locator('..');
 
-    // Should have at least one device card or "no devices" message
-    const hasDevices = await outputSection.locator('button:has-text("Attach"), button:has-text("Detach")').count() > 0;
-    const hasMessage = await outputSection.locator('text=/No available output/i').count() > 0;
+    // Skip if no devices
+    const deviceCount = await devicesSection.locator('button:has-text("Attach")').count();
+    if (deviceCount === 0) {
+      test.skip();
+      return;
+    }
 
-    expect(hasDevices || hasMessage).toBeTruthy();
+    // Check that device cards have type badges (IN, OUT, or I/O)
+    const hasBadges = await page.locator('text=/^IN$|^OUT$|^I\\/O$/').count() > 0;
+    expect(hasBadges).toBeTruthy();
   });
 
   test('device card shows device info', async ({ page }) => {
