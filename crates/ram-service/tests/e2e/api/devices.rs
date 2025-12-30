@@ -282,3 +282,279 @@ async fn test_update_device_display_name() {
         );
     }
 }
+
+/// Test updating device sample rate.
+#[tokio::test]
+#[ignore = "Requires running server with audio devices"]
+async fn test_update_device_sample_rate() {
+    let client = TestClient::new();
+
+    // Get devices
+    let response = client
+        .get("/nodes/LOCAL/devices")
+        .await
+        .expect("Failed to list devices");
+
+    let devices: Vec<DeviceInfo> = response.json().await.expect("Failed to parse devices");
+
+    // Find any device
+    if let Some(device) = devices.first() {
+        let device_id = urlencoding::encode(&device.id);
+        let original_rate = device.sample_rate;
+
+        // Try to set to 48000 (a commonly supported rate)
+        let new_rate = if original_rate == 48000 { 44100 } else { 48000 };
+
+        let update_request = serde_json::json!({
+            "sample_rate": new_rate
+        });
+
+        // PATCH request
+        let response = client
+            .client
+            .patch(client.api_url(&format!("/nodes/LOCAL/devices/{device_id}")))
+            .json(&update_request)
+            .send()
+            .await
+            .expect("Failed to update device");
+
+        assert!(
+            response.status().is_success(),
+            "Update device sample rate failed with status: {}",
+            response.status()
+        );
+
+        let updated: DeviceInfo = response.json().await.expect("Failed to parse response");
+        assert_eq!(
+            updated.sample_rate, new_rate,
+            "Sample rate should be updated"
+        );
+
+        // Restore original rate
+        let restore_request = serde_json::json!({
+            "sample_rate": original_rate
+        });
+        let _ = client
+            .client
+            .patch(client.api_url(&format!("/nodes/LOCAL/devices/{device_id}")))
+            .json(&restore_request)
+            .send()
+            .await;
+    }
+}
+
+/// Test updating device buffer size.
+#[tokio::test]
+#[ignore = "Requires running server with audio devices"]
+async fn test_update_device_buffer_size() {
+    let client = TestClient::new();
+
+    // Get devices
+    let response = client
+        .get("/nodes/LOCAL/devices")
+        .await
+        .expect("Failed to list devices");
+
+    let devices: Vec<DeviceInfo> = response.json().await.expect("Failed to parse devices");
+
+    // Find any device
+    if let Some(device) = devices.first() {
+        let device_id = urlencoding::encode(&device.id);
+        let original_size = device.buffer_size;
+
+        // Try to set to 256 (a commonly supported size)
+        let new_size = if original_size == 256 { 512 } else { 256 };
+
+        let update_request = serde_json::json!({
+            "buffer_size": new_size
+        });
+
+        // PATCH request
+        let response = client
+            .client
+            .patch(client.api_url(&format!("/nodes/LOCAL/devices/{device_id}")))
+            .json(&update_request)
+            .send()
+            .await
+            .expect("Failed to update device");
+
+        assert!(
+            response.status().is_success(),
+            "Update device buffer size failed with status: {}",
+            response.status()
+        );
+
+        let updated: DeviceInfo = response.json().await.expect("Failed to parse response");
+        assert_eq!(
+            updated.buffer_size, new_size,
+            "Buffer size should be updated"
+        );
+
+        // Restore original size
+        let restore_request = serde_json::json!({
+            "buffer_size": original_size
+        });
+        let _ = client
+            .client
+            .patch(client.api_url(&format!("/nodes/LOCAL/devices/{device_id}")))
+            .json(&restore_request)
+            .send()
+            .await;
+    }
+}
+
+/// Test updating device with invalid sample rate fails.
+#[tokio::test]
+#[ignore = "Requires running server"]
+async fn test_update_device_invalid_sample_rate() {
+    let client = TestClient::new();
+
+    // Get devices
+    let response = client
+        .get("/nodes/LOCAL/devices")
+        .await
+        .expect("Failed to list devices");
+
+    let devices: Vec<DeviceInfo> = response.json().await.expect("Failed to parse devices");
+
+    // Find any device
+    if let Some(device) = devices.first() {
+        let device_id = urlencoding::encode(&device.id);
+
+        // Try to set an unsupported sample rate
+        let update_request = serde_json::json!({
+            "sample_rate": 12345  // Invalid rate
+        });
+
+        // PATCH request
+        let response = client
+            .client
+            .patch(client.api_url(&format!("/nodes/LOCAL/devices/{device_id}")))
+            .json(&update_request)
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(
+            response.status().as_u16(),
+            400,
+            "Invalid sample rate should return 400 Bad Request"
+        );
+    }
+}
+
+/// Test updating device with invalid buffer size fails.
+#[tokio::test]
+#[ignore = "Requires running server"]
+async fn test_update_device_invalid_buffer_size() {
+    let client = TestClient::new();
+
+    // Get devices
+    let response = client
+        .get("/nodes/LOCAL/devices")
+        .await
+        .expect("Failed to list devices");
+
+    let devices: Vec<DeviceInfo> = response.json().await.expect("Failed to parse devices");
+
+    // Find any device
+    if let Some(device) = devices.first() {
+        let device_id = urlencoding::encode(&device.id);
+
+        // Try to set an unsupported buffer size
+        let update_request = serde_json::json!({
+            "buffer_size": 100  // Not a power of 2, invalid
+        });
+
+        // PATCH request
+        let response = client
+            .client
+            .patch(client.api_url(&format!("/nodes/LOCAL/devices/{device_id}")))
+            .json(&update_request)
+            .send()
+            .await
+            .expect("Failed to send request");
+
+        assert_eq!(
+            response.status().as_u16(),
+            400,
+            "Invalid buffer size should return 400 Bad Request"
+        );
+    }
+}
+
+/// Test updating channel label.
+#[tokio::test]
+#[ignore = "Requires running server"]
+async fn test_update_channel_label() {
+    let client = TestClient::new();
+
+    // Get devices
+    let response = client
+        .get("/nodes/LOCAL/devices")
+        .await
+        .expect("Failed to list devices");
+
+    let devices: Vec<DeviceInfo> = response.json().await.expect("Failed to parse devices");
+
+    // Find a device with channels
+    if let Some(device) = devices
+        .iter()
+        .find(|d| d.input_channels > 0 || d.output_channels > 0)
+    {
+        let device_id = urlencoding::encode(&device.id);
+        let channel = 1;
+        let new_label = "Test Channel Label";
+
+        let update_request = serde_json::json!({
+            "label": new_label
+        });
+
+        // PATCH request for channel label
+        let response = client
+            .client
+            .patch(client.api_url(&format!(
+                "/nodes/LOCAL/devices/{device_id}/channels/{channel}"
+            )))
+            .json(&update_request)
+            .send()
+            .await
+            .expect("Failed to update channel label");
+
+        assert!(
+            response.status().is_success(),
+            "Update channel label failed with status: {}",
+            response.status()
+        );
+
+        // Verify the label was set
+        let response = client
+            .get(&format!("/nodes/LOCAL/devices/{device_id}/channels"))
+            .await
+            .expect("Failed to get channels");
+
+        let channels: Vec<ram_api::models::ChannelInfo> =
+            response.json().await.expect("Failed to parse channels");
+
+        if let Some(ch) = channels.iter().find(|c| c.number == channel) {
+            assert_eq!(
+                ch.label.as_deref(),
+                Some(new_label),
+                "Channel label should be updated"
+            );
+        }
+
+        // Clear the label
+        let clear_request = serde_json::json!({
+            "label": ""
+        });
+        let _ = client
+            .client
+            .patch(client.api_url(&format!(
+                "/nodes/LOCAL/devices/{device_id}/channels/{channel}"
+            )))
+            .json(&clear_request)
+            .send()
+            .await;
+    }
+}
