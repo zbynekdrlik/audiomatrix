@@ -11,9 +11,10 @@ test.describe('Device Management', () => {
     // Check for Available Input Devices section
     const inputSection = page.locator('h2:has-text("Available Input")').locator('..');
 
-    // Should have at least one device or "no devices" message
-    const hasDevices = await inputSection.locator('.device-card').count() > 0;
-    const hasMessage = await inputSection.locator(':text("No input devices")').count() > 0;
+    // Should have at least one device card or "no devices" message
+    // Device cards have Attach/Detach buttons, "ch" indicator, and Hz sample rate
+    const hasDevices = await inputSection.locator('button:has-text("Attach"), button:has-text("Detach")').count() > 0;
+    const hasMessage = await inputSection.locator('text=/No available input/i').count() > 0;
 
     expect(hasDevices || hasMessage).toBeTruthy();
   });
@@ -22,9 +23,9 @@ test.describe('Device Management', () => {
     // Check for Available Output Devices section
     const outputSection = page.locator('h2:has-text("Available Output")').locator('..');
 
-    // Should have at least one device or "no devices" message
-    const hasDevices = await outputSection.locator('.device-card').count() > 0;
-    const hasMessage = await outputSection.locator(':text("No output devices")').count() > 0;
+    // Should have at least one device card or "no devices" message
+    const hasDevices = await outputSection.locator('button:has-text("Attach"), button:has-text("Detach")').count() > 0;
+    const hasMessage = await outputSection.locator('text=/No available output/i').count() > 0;
 
     expect(hasDevices || hasMessage).toBeTruthy();
   });
