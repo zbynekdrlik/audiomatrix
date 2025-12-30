@@ -10,7 +10,7 @@ use anyhow::Result;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use ram_api::{
     models::DeviceType,
@@ -246,6 +246,10 @@ impl AudioMatrixService {
                 ram_core::AttachmentState::Error => ram_api::models::DeviceStatus::Error,
             };
 
+            debug!(
+                "Registering device: {} ({:?}) - {} in / {} out",
+                device.name, device_type, input_channels, output_channels
+            );
             self.app_state.register_device(ram_api::models::DeviceInfo {
                 id: device.id.clone(),
                 name: device.name.clone(),
@@ -260,6 +264,10 @@ impl AudioMatrixService {
                 backend: Some(device.host.clone()),
             });
         }
+        info!(
+            "Registered {} devices in API state",
+            self.app_state.all_devices().len()
+        );
 
         // Start service discovery
         if self.config.discovery.enabled {
