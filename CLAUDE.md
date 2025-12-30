@@ -1040,22 +1040,21 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 
 **CRITICAL:** Always use SSH keys for target machine access. Do NOT rely on sshpass with passwords in commands as this causes repeated failures and wastes time.
 
-| Machine | Hostname | OS | Role | Restrictions |
-|---------|----------|----|----- |--------------|
-| **stagebox1** | stagebox1.lan | Windows | **PRIMARY Windows testing** | **NONE** - full testing allowed |
-| **develbox** | develbox (10.77.9.21) | Linux | Development + Linux testing | None |
-| **iem** | iem (10.77.9.231) | Windows | Production reference only | **STRICT** - see below |
+| Machine | Hostname | IP | OS | User | Role |
+|---------|----------|----|----|------|------|
+| **stagebox1** | stagebox1.lan | 10.77.9.237 | Windows | newlevel | PRIMARY Windows testing |
+| **develbox** | develbox | 10.77.9.21 | Linux | newlevel | Development + Linux testing |
+| **iem** | iem | 10.77.9.231 | Windows | iem | Windows test target |
+
+**ALL THREE MACHINES ARE MANDATORY DEPLOYMENT TARGETS. NEVER SKIP ANY.**
 
 ### stagebox1.lan - PRIMARY WINDOWS TEST MACHINE
-
-**This is the FIRST machine to test Windows builds on.** No restrictions apply.
 
 - Full software installation allowed
 - Service installation allowed
 - Driver testing allowed
 - ASIO device testing allowed
 - Network routing testing allowed
-- **Always test here BEFORE considering IEM**
 
 ### develbox - Linux Development Machine
 
@@ -1063,6 +1062,15 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 - Linux binary testing
 - API/UI development and testing
 - Network routing endpoint
+
+### iem - WINDOWS TEST TARGET (MANDATORY)
+
+**THIS IS A MANDATORY DEPLOYMENT TARGET. ALWAYS DEPLOY AND RUN HERE.**
+
+- Full software installation allowed
+- Must run with TRAY ICON visible (interactive desktop session)
+- Use scheduled task to ensure GUI access
+- Credentials: user=`iem`, password=`iem`
 
 ### 3-Point Network Test Checklist
 
@@ -1114,23 +1122,6 @@ This enables fully automated testing of ALL features before merge.
 - NEVER run `cargo build` on target machines
 - Target machines are for TESTING PRE-BUILT BINARIES ONLY
 
-### IEM PC - PRODUCTION MACHINE (STRICT RULES)
-
-The `iem` PC (10.77.9.231) is a **PRODUCTION** machine running live audio infrastructure.
-
-**ABSOLUTELY FORBIDDEN on IEM PC:**
-- Installing ANY software (compilers, tools, dependencies)
-- Running build commands (cargo, cmake, msbuild, etc.)
-- Modifying system configuration
-- Installing services or drivers
-- Any action that could disrupt production audio
-
-**ONLY ALLOWED on IEM PC:**
-- Download and run pre-built binaries from GitHub releases/artifacts
-- Test audio device enumeration (passive read-only operations)
-- Verify ASIO device detection
-- Run tests that don't modify system state
-
 ### Testing Workflow - STRICT SELF-TESTING RULE
 
 **CRITICAL: Claude MUST perform all testing autonomously.**
@@ -1141,28 +1132,55 @@ You have SSH access to all test machines with credentials in TARGETS.md. You are
 - Verify functionality yourself before reporting completion
 - NEVER ask the user to test - that is YOUR job
 
-**Testing is NOT complete until YOU have verified it works on stagebox1.lan.**
+**Testing is NOT complete until YOU have verified it works on ALL THREE MACHINES: stagebox1.lan, develbox, AND iem.**
 
-### Automated Testing Steps - ALL 3 MACHINES
+### Automated Testing Steps - ALL 3 MACHINES (MANDATORY)
 
-**Deploy to ALL test machines after every CI build:**
+**Deploy to ALL test machines after EVERY CI build. NEVER SKIP ANY MACHINE.**
 
 1. **Wait for CI**: Monitor until dev release is available
-2. **Deploy to stagebox1.lan** (Windows - PRIMARY):
+
+2. **Deploy to stagebox1.lan** (Windows):
    ```bash
-   ssh newlevel@stagebox1.lan "powershell -Command \"irm https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/install-dev.ps1 | iex\""
+   # Stop existing process
+   sshpass -p "newlevel" ssh newlevel@stagebox1.lan "powershell -Command \"Get-Process audiomatrix* -ErrorAction SilentlyContinue | Stop-Process -Force\""
+   # Download and start with tray icon
+   sshpass -p "newlevel" ssh newlevel@stagebox1.lan "powershell -Command \"irm https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/install-dev.ps1 | iex\""
+   # Start via scheduled task for tray icon visibility
+   sshpass -p "newlevel" ssh newlevel@stagebox1.lan "schtasks /Create /TN AudioMatrix /TR 'C:\\Users\\newlevel\\AppData\\Local\\AudioMatrix\\audiomatrix.exe -n stagebox1' /SC ONCE /ST 00:00 /RL HIGHEST /F && schtasks /Run /TN AudioMatrix"
    ```
+
 3. **Deploy to develbox** (Linux):
    ```bash
    curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-linux-x64
    chmod +x audiomatrix-dev-linux-x64
    # Restart service with new binary
    ```
-4. **Deploy to iem** (Windows - PRODUCTION, read-only testing):
+
+4. **Deploy to iem** (Windows - MANDATORY WITH TRAY ICON):
    ```bash
-   # Only download, do NOT install as service
-   ssh iem@iem "powershell -Command \"Invoke-WebRequest -Uri 'https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe' -OutFile 'C:/temp/audiomatrix-test.exe'\""
+   # Stop existing process
+   sshpass -p "iem" ssh iem@10.77.9.231 "powershell -Command \"Get-Process audiomatrix* -ErrorAction SilentlyContinue | Stop-Process -Force\""
+   # Download binary
+   sshpass -p "iem" ssh iem@10.77.9.231 "powershell -Command \"New-Item -ItemType Directory -Force -Path 'C:\\Users\\iem\\AppData\\Local\\AudioMatrix'; Invoke-WebRequest -Uri 'https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe' -OutFile 'C:\\Users\\iem\\AppData\\Local\\AudioMatrix\\audiomatrix.exe'\""
+   # Start via scheduled task for tray icon visibility (REQUIRED!)
+   sshpass -p "iem" ssh iem@10.77.9.231 "schtasks /Create /TN AudioMatrix /TR 'C:\\Users\\iem\\AppData\\Local\\AudioMatrix\\audiomatrix.exe -n iem' /SC ONCE /ST 00:00 /RL HIGHEST /F && schtasks /Run /TN AudioMatrix"
+   # Verify running with tray icon
+   sshpass -p "iem" ssh iem@10.77.9.231 "powershell -Command \"Get-Process audiomatrix* | Select-Object Name,Id\""
    ```
+
+**CRITICAL FOR ALL WINDOWS MACHINES:**
+- For tray icon visibility: The logged-in desktop user must run AudioMatrix from their session
+- SSH-started processes run in session 0 (Services) = no tray icon visible
+- Scheduled tasks only show tray icon if run as the same user logged into desktop
+- The service WILL still work via SSH - just no tray icon (API, metering, routing all functional)
+- If tray icon is required: User must manually run or set up auto-start for their desktop session
+
+**To verify service is running regardless of tray icon:**
+```bash
+sshpass -p "PASSWORD" ssh user@host "tasklist /FI \"IMAGENAME eq audiomatrix.exe\""
+curl http://HOST:8080/api/v1/health
+```
 
 ### Windows GUI Session for Tray Icon (Task Scheduler)
 
