@@ -8,13 +8,29 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
-/// Device direction (input or output).
+/// Device direction (input, output, or duplex).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DeviceDirection {
     /// Audio input device (microphone, line in, etc.)
     Input,
     /// Audio output device (speakers, headphones, etc.)
     Output,
+    /// Full-duplex device with both input and output (typical for ASIO devices).
+    Duplex,
+}
+
+impl DeviceDirection {
+    /// Returns true if this direction supports input.
+    #[must_use]
+    pub const fn has_input(self) -> bool {
+        matches!(self, Self::Input | Self::Duplex)
+    }
+
+    /// Returns true if this direction supports output.
+    #[must_use]
+    pub const fn has_output(self) -> bool {
+        matches!(self, Self::Output | Self::Duplex)
+    }
 }
 
 impl std::fmt::Display for DeviceDirection {
@@ -22,6 +38,7 @@ impl std::fmt::Display for DeviceDirection {
         match self {
             Self::Input => write!(f, "input"),
             Self::Output => write!(f, "output"),
+            Self::Duplex => write!(f, "duplex"),
         }
     }
 }
@@ -321,7 +338,7 @@ pub struct DeviceInfo {
     /// User-defined display name (alias).
     /// If None, display `name` instead.
     pub display_name: Option<String>,
-    /// Device direction (input/output).
+    /// Device direction (input/output/duplex).
     pub direction: DeviceDirection,
     /// Host API name (ALSA, WASAPI, `CoreAudio`, etc.)
     pub host: String,
@@ -331,8 +348,12 @@ pub struct DeviceInfo {
     pub is_virtual: bool,
     /// User-controlled attachment state (zero auto-connect).
     pub attachment_state: AttachmentState,
-    /// Supported configurations.
+    /// Supported configurations (legacy - use input_configs/output_configs for duplex).
     pub configs: Vec<DeviceConfig>,
+    /// Input-specific configurations (for duplex devices).
+    pub input_configs: Vec<DeviceConfig>,
+    /// Output-specific configurations (for duplex devices).
+    pub output_configs: Vec<DeviceConfig>,
     /// Timestamp when device was last seen.
     pub last_seen: Instant,
 }
@@ -354,7 +375,7 @@ impl DeviceInfo {
             .any(|c| channels >= c.channels_min && channels <= c.channels_max)
     }
 
-    /// Returns the maximum supported channel count.
+    /// Returns the maximum supported channel count (legacy).
     #[must_use]
     pub fn max_channels(&self) -> u16 {
         self.configs
@@ -362,6 +383,38 @@ impl DeviceInfo {
             .map(|c| c.channels_max)
             .max()
             .unwrap_or(2)
+    }
+
+    /// Returns the maximum input channel count.
+    #[must_use]
+    pub fn max_input_channels(&self) -> u16 {
+        if !self.input_configs.is_empty() {
+            self.input_configs
+                .iter()
+                .map(|c| c.channels_max)
+                .max()
+                .unwrap_or(0)
+        } else if self.direction == DeviceDirection::Input {
+            self.max_channels()
+        } else {
+            0
+        }
+    }
+
+    /// Returns the maximum output channel count.
+    #[must_use]
+    pub fn max_output_channels(&self) -> u16 {
+        if !self.output_configs.is_empty() {
+            self.output_configs
+                .iter()
+                .map(|c| c.channels_max)
+                .max()
+                .unwrap_or(0)
+        } else if self.direction == DeviceDirection::Output {
+            self.max_channels()
+        } else {
+            0
+        }
     }
 
     /// Returns the display name (alias if set, otherwise system name).
@@ -482,6 +535,8 @@ mod tests {
             is_virtual: false,
             attachment_state: AttachmentState::Available,
             configs: vec![DeviceConfig::default_config()],
+            input_configs: vec![],
+            output_configs: vec![DeviceConfig::default_config()],
             last_seen: Instant::now(),
         };
 
@@ -502,6 +557,8 @@ mod tests {
             is_virtual: false,
             attachment_state: AttachmentState::Available,
             configs: vec![DeviceConfig::default_config()],
+            input_configs: vec![],
+            output_configs: vec![DeviceConfig::default_config()],
             last_seen: Instant::now(),
         };
 

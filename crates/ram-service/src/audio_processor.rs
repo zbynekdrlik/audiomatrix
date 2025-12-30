@@ -745,6 +745,22 @@ impl AudioProcessor {
         }
     }
 
+    /// Stops all streams (input and output) for the specified device.
+    ///
+    /// This is used when a device is detached to clean up all associated streams.
+    /// Errors are logged but not propagated since a device may only have one stream type.
+    pub fn stop_device_streams(&self, device_id: &str) {
+        // Try to stop input stream (may not exist)
+        if self.stop_input_stream(device_id).is_ok() {
+            info!("Stopped input stream for detached device: {device_id}");
+        }
+
+        // Try to stop output stream (may not exist)
+        if self.stop_output_stream(device_id).is_ok() {
+            info!("Stopped output stream for detached device: {device_id}");
+        }
+    }
+
     /// Returns the number of active input streams.
     #[must_use]
     pub fn active_input_stream_count(&self) -> usize {
@@ -813,13 +829,21 @@ impl AudioProcessor {
                 .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
                 .find(|d| d.name().ok().as_deref() == Some(device_name))
                 .ok_or_else(|| anyhow!("Output device not found: {device_name}"))?,
+            DeviceDirection::Duplex => {
+                // For duplex devices, we find in either input or output list
+                // (they should be the same physical device)
+                host.output_devices()
+                    .map_err(|e| anyhow!("Failed to enumerate devices: {e}"))?
+                    .find(|d| d.name().ok().as_deref() == Some(device_name))
+                    .ok_or_else(|| anyhow!("Duplex device not found: {device_name}"))?
+            },
         };
 
         let config = match direction {
             DeviceDirection::Input => device
                 .default_input_config()
                 .map_err(|e| anyhow!("Failed to get input config: {e}"))?,
-            DeviceDirection::Output => device
+            DeviceDirection::Output | DeviceDirection::Duplex => device
                 .default_output_config()
                 .map_err(|e| anyhow!("Failed to get output config: {e}"))?,
         };

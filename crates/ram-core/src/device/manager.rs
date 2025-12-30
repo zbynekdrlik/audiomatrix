@@ -91,9 +91,18 @@ impl DeviceManager {
     ///
     /// On Windows, this enumerates devices from ALL available hosts (WASAPI, ASIO, etc.)
     /// On Linux/macOS, this enumerates from the default host (ALSA, `CoreAudio`).
+    ///
+    /// Devices with the same name on the same host that have both input and output
+    /// capabilities are merged into a single duplex device.
     pub fn refresh(&self) {
         let now = Instant::now();
         let mut current_ids = std::collections::HashSet::new();
+
+        // Temporary storage for device merging: (host, name) -> (input_info, output_info)
+        let mut pending_devices: HashMap<
+            (String, String),
+            (Option<DeviceInfo>, Option<DeviceInfo>),
+        > = HashMap::new();
 
         // Get all available audio hosts
         let hosts = cpal::available_hosts();
@@ -136,8 +145,9 @@ impl DeviceManager {
                             host_name,
                             now,
                         ) {
-                            current_ids.insert(info.id.clone());
-                            self.update_device(info);
+                            let key = (host_name.to_string(), info.name.clone());
+                            let entry = pending_devices.entry(key).or_insert((None, None));
+                            entry.0 = Some(info);
                         }
                     }
                     tracing::info!("Host '{}' has {} input device(s)", host_name, count);
@@ -168,8 +178,9 @@ impl DeviceManager {
                             host_name,
                             now,
                         ) {
-                            current_ids.insert(info.id.clone());
-                            self.update_device(info);
+                            let key = (host_name.to_string(), info.name.clone());
+                            let entry = pending_devices.entry(key).or_insert((None, None));
+                            entry.1 = Some(info);
                         }
                     }
                     tracing::info!("Host '{}' has {} output device(s)", host_name, count);
@@ -182,13 +193,57 @@ impl DeviceManager {
                     );
                 },
             }
-
-            tracing::info!(
-                "Enumerated from host '{}': {} total devices so far",
-                host_name,
-                current_ids.len()
-            );
         }
+
+        // Process pending devices and merge where appropriate
+        for ((host_name, device_name), (input_info, output_info)) in pending_devices {
+            match (input_info, output_info) {
+                (Some(input), Some(output)) => {
+                    // Both input and output - create duplex device
+                    let duplex_id = format!("{host_name}:duplex:{device_name}");
+                    let merged = DeviceInfo {
+                        id: duplex_id.clone(),
+                        name: device_name,
+                        display_name: None,
+                        direction: DeviceDirection::Duplex,
+                        host: host_name,
+                        is_default: input.is_default || output.is_default,
+                        is_virtual: false,
+                        attachment_state: AttachmentState::Available,
+                        configs: vec![], // Not used for duplex
+                        input_configs: input.input_configs,
+                        output_configs: output.output_configs,
+                        last_seen: now,
+                    };
+                    tracing::debug!(
+                        "Merged input+output into duplex device: {} ({} in / {} out channels)",
+                        merged.id,
+                        merged.max_input_channels(),
+                        merged.max_output_channels()
+                    );
+                    current_ids.insert(duplex_id);
+                    self.update_device(merged);
+                },
+                (Some(input), None) => {
+                    // Input only
+                    current_ids.insert(input.id.clone());
+                    self.update_device(input);
+                },
+                (None, Some(output)) => {
+                    // Output only
+                    current_ids.insert(output.id.clone());
+                    self.update_device(output);
+                },
+                (None, None) => {
+                    // Should not happen
+                },
+            }
+        }
+
+        tracing::info!(
+            "Device refresh complete: {} devices total",
+            current_ids.len()
+        );
 
         // Detect removed devices
         self.detect_removed_devices(&current_ids);
@@ -226,6 +281,13 @@ impl DeviceManager {
 
         let configs = Self::get_device_configs(device, direction);
 
+        // Populate direction-specific configs
+        let (input_configs, output_configs) = match direction {
+            DeviceDirection::Input => (configs.clone(), vec![]),
+            DeviceDirection::Output => (vec![], configs.clone()),
+            DeviceDirection::Duplex => (configs.clone(), configs.clone()),
+        };
+
         Some(DeviceInfo {
             id,
             name,
@@ -236,6 +298,8 @@ impl DeviceManager {
             is_virtual: false, // Physical device from cpal
             attachment_state: AttachmentState::Available, // Zero auto-connect
             configs,
+            input_configs,
+            output_configs,
             last_seen: now,
         })
     }
@@ -246,9 +310,11 @@ impl DeviceManager {
                 Ok(configs) => Box::new(configs),
                 Err(_) => return vec![DeviceConfig::default_config()],
             },
-            DeviceDirection::Output => match device.supported_output_configs() {
-                Ok(configs) => Box::new(configs),
-                Err(_) => return vec![DeviceConfig::default_config()],
+            DeviceDirection::Output | DeviceDirection::Duplex => {
+                match device.supported_output_configs() {
+                    Ok(configs) => Box::new(configs),
+                    Err(_) => return vec![DeviceConfig::default_config()],
+                }
             },
         };
 

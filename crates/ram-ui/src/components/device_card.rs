@@ -33,6 +33,7 @@ pub fn DeviceCard(
     let sample_rate = device.sample_rate;
     let device_status = device.status;
     let device_type = device.device_type;
+    let device_backend = device.backend.clone().unwrap_or_default();
 
     // Get input levels for this device
     let input_levels = {
@@ -304,7 +305,14 @@ pub fn DeviceCard(
 
         <div class="device-card">
             <div class="device-header">
-                <span class="device-type-badge">{type_indicator}</span>
+                <div class="device-badges">
+                    <span class="device-type-badge">{type_indicator}</span>
+                    {if !device_backend.is_empty() {
+                        Some(view! { <span class="device-backend-badge">{device_backend.clone()}</span> })
+                    } else {
+                        None
+                    }}
+                </div>
                 {move || {
                     if is_renaming.get() {
                         view! {

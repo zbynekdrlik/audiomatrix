@@ -71,7 +71,7 @@ pub use error::{Error, Result};
 #[cfg(feature = "server")]
 pub use router::create_router;
 #[cfg(feature = "server")]
-pub use state::AppState;
+pub use state::{AppState, DeviceCommand};
 
 /// Default API port.
 pub const DEFAULT_PORT: u16 = 8080;

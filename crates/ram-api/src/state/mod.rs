@@ -23,6 +23,26 @@ use crate::models::{
 use crate::subscription_client::SubscriptionClient;
 use crate::websocket::{SubscriptionNeededEvent, WsEvent};
 
+/// Commands for device stream management.
+///
+/// These commands are sent from the API layer to the service layer
+/// to trigger stream start/stop operations for metering.
+#[derive(Debug, Clone)]
+pub enum DeviceCommand {
+    /// Start streams for a device (for metering).
+    StartStreams {
+        /// Device ID to start streams for.
+        device_id: String,
+        /// Device type (input, output, duplex).
+        device_type: DeviceType,
+    },
+    /// Stop streams for a device.
+    StopStreams {
+        /// Device ID to stop streams for.
+        device_id: String,
+    },
+}
+
 /// Shared application state.
 #[derive(Clone)]
 pub struct AppState {
@@ -46,6 +66,8 @@ pub(crate) struct AppStateInner {
     pub generators: RwLock<HashMap<String, Arc<ram_core::WaveGeneratorConfig>>>,
     /// WebSocket event broadcaster.
     pub ws_broadcaster: broadcast::Sender<WsEvent>,
+    /// Device command broadcaster for stream control.
+    pub device_commands: broadcast::Sender<DeviceCommand>,
     /// Route controller for audio processor integration.
     /// None if running without audio processor (e.g., tests).
     pub route_controller: Option<Arc<dyn RouteController>>,
@@ -88,6 +110,7 @@ impl AppState {
         };
 
         let (ws_broadcaster, _) = broadcast::channel(256);
+        let (device_commands, _) = broadcast::channel(64);
         let subscription_client = SubscriptionClient::new(vban_port);
 
         Self {
@@ -99,6 +122,7 @@ impl AppState {
                 routes: RwLock::new(HashMap::new()),
                 generators: RwLock::new(HashMap::new()),
                 ws_broadcaster,
+                device_commands,
                 route_controller,
                 subscription_client,
             }),
@@ -132,6 +156,18 @@ impl AppState {
     pub fn broadcast_event(&self, event: WsEvent) {
         // Ignore send errors (no subscribers)
         let _ = self.inner.ws_broadcaster.send(event);
+    }
+
+    /// Subscribes to device commands for stream control.
+    #[must_use]
+    pub fn subscribe_device_commands(&self) -> broadcast::Receiver<DeviceCommand> {
+        self.inner.device_commands.subscribe()
+    }
+
+    /// Sends a device command.
+    fn send_device_command(&self, command: DeviceCommand) {
+        // Ignore send errors (no subscribers)
+        let _ = self.inner.device_commands.send(command);
     }
 
     // --- Node Management ---
@@ -236,17 +272,37 @@ impl AppState {
     }
 
     /// Attaches a device for routing.
+    ///
+    /// This also sends a command to start streams for the device,
+    /// enabling metering even when no routes are connected.
     pub fn attach_device(
         &self,
         id: &str,
         display_name: Option<String>,
     ) -> Result<DeviceInfo, String> {
-        devices::attach_device(&self.inner.devices, id, display_name)
+        let result = devices::attach_device(&self.inner.devices, id, display_name)?;
+
+        // Send command to start streams for metering
+        self.send_device_command(DeviceCommand::StartStreams {
+            device_id: result.id.clone(),
+            device_type: result.device_type,
+        });
+
+        Ok(result)
     }
 
     /// Detaches a device from routing.
+    ///
+    /// This also sends a command to stop streams for the device.
     pub fn detach_device(&self, id: &str) -> Result<DeviceInfo, String> {
-        devices::detach_device(&self.inner.devices, id)
+        let result = devices::detach_device(&self.inner.devices, id)?;
+
+        // Send command to stop streams
+        self.send_device_command(DeviceCommand::StopStreams {
+            device_id: result.id.clone(),
+        });
+
+        Ok(result)
     }
 
     /// Updates device settings.

@@ -13,9 +13,10 @@ use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
 use ram_api::{
+    models::DeviceType,
     router::create_router_with_state,
     websocket::{MeteringUpdate, WsEvent},
-    AppState,
+    AppState, DeviceCommand,
 };
 use ram_core::device::DeviceManager;
 use ram_discovery::{
@@ -106,6 +107,8 @@ pub struct AudioMatrixService {
     broadcast_task: Option<JoinHandle<()>>,
     /// Metering broadcast task.
     metering_task: Option<JoinHandle<()>>,
+    /// Device command handler task.
+    device_command_task: Option<JoinHandle<()>>,
 }
 
 impl AudioMatrixService {
@@ -164,6 +167,7 @@ impl AudioMatrixService {
             discovery_task: None,
             broadcast_task: None,
             metering_task: None,
+            device_command_task: None,
         }
     }
 
@@ -217,12 +221,17 @@ impl AudioMatrixService {
             // Determine input/output channel counts based on device direction
             let (input_channels, output_channels, device_type) = match device.direction {
                 ram_core::DeviceDirection::Input => {
-                    (device.max_channels(), 0, ram_api::models::DeviceType::Input)
+                    (device.max_input_channels(), 0, ram_api::models::DeviceType::Input)
                 },
                 ram_core::DeviceDirection::Output => (
                     0,
-                    device.max_channels(),
+                    device.max_output_channels(),
                     ram_api::models::DeviceType::Output,
+                ),
+                ram_core::DeviceDirection::Duplex => (
+                    device.max_input_channels(),
+                    device.max_output_channels(),
+                    ram_api::models::DeviceType::Duplex,
                 ),
             };
 
@@ -272,6 +281,9 @@ impl AudioMatrixService {
 
         // Start metering broadcast
         self.start_metering_broadcast();
+
+        // Start device command handler for attach/detach stream control
+        self.start_device_command_handler();
 
         // Start VBAN receiver for cross-node audio
         if let Err(e) = self.vban_manager.start_receiver().await {
@@ -551,6 +563,69 @@ impl AudioMatrixService {
 
         self.metering_task = Some(task);
         info!("Metering broadcast started (30 Hz)");
+    }
+
+    /// Starts the device command handler task.
+    ///
+    /// This task listens for device attach/detach commands and
+    /// starts/stops audio streams accordingly for metering support.
+    fn start_device_command_handler(&mut self) {
+        let mut rx = self.app_state.subscribe_device_commands();
+        let audio_processor = Arc::clone(&self.audio_processor);
+        let running = self.running.clone();
+
+        let task = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    result = rx.recv() => {
+                        match result {
+                            Ok(command) => {
+                                match command {
+                                    DeviceCommand::StartStreams { device_id, device_type } => {
+                                        info!("Starting streams for device: {} (type: {:?})", device_id, device_type);
+
+                                        // Start input stream for devices with input capability
+                                        if matches!(device_type, DeviceType::Input | DeviceType::Duplex) {
+                                            match audio_processor.start_input_stream(&device_id) {
+                                                Ok(()) => info!("Input stream started for: {device_id}"),
+                                                Err(e) => warn!("Failed to start input stream for {device_id}: {e}"),
+                                            }
+                                        }
+
+                                        // Start output stream for devices with output capability
+                                        if matches!(device_type, DeviceType::Output | DeviceType::Duplex) {
+                                            match audio_processor.start_output_stream(&device_id) {
+                                                Ok(()) => info!("Output stream started for: {device_id}"),
+                                                Err(e) => warn!("Failed to start output stream for {device_id}: {e}"),
+                                            }
+                                        }
+                                    }
+                                    DeviceCommand::StopStreams { device_id } => {
+                                        info!("Stopping streams for device: {device_id}");
+                                        audio_processor.stop_device_streams(&device_id);
+                                    }
+                                }
+                            }
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                warn!("Device command handler lagged by {n} messages");
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                info!("Device command channel closed");
+                                break;
+                            }
+                        }
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                        if !running.load(Ordering::SeqCst) {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        self.device_command_task = Some(task);
+        info!("Device command handler started");
     }
 
     /// Runs the service until shutdown.
