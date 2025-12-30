@@ -4,6 +4,7 @@ mod subscriptions;
 
 use axum::extract::{Path, State};
 use axum::Json;
+use urlencoding;
 
 use crate::models::{
     AttachDeviceRequest, AttachDeviceResponse, BulkChannelLabelsRequest, ChannelInfo,
@@ -64,6 +65,26 @@ pub async fn list_devices(
     if node_id == local_id || node_id == "local" {
         Ok(Json(state.all_devices()))
     } else {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/devices",
+                    addr, node.api_port
+                );
+                match reqwest::get(&url).await {
+                    Ok(resp) => match resp.json::<Vec<DeviceInfo>>().await {
+                        Ok(devices) => return Ok(Json(devices)),
+                        Err(e) => {
+                            tracing::warn!("Failed to parse devices from {}: {}", node_id, e);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!("Failed to fetch devices from {}: {}", node_id, e);
+                    }
+                }
+            }
+        }
         Ok(Json(vec![]))
     }
 }
@@ -80,6 +101,22 @@ pub async fn get_device(
             .map(Json)
             .ok_or_else(|| crate::Error::NotFound(format!("device: {device_id}")))
     } else {
+        // Proxy to remote node
+        if let Some(node) = state.get_remote_node(&node_id) {
+            if let Some(addr) = node.addresses.first() {
+                let url = format!(
+                    "http://{}:{}/api/v1/nodes/local/devices/{}",
+                    addr,
+                    node.api_port,
+                    urlencoding::encode(&device_id)
+                );
+                if let Ok(resp) = reqwest::get(&url).await {
+                    if let Ok(device) = resp.json::<DeviceInfo>().await {
+                        return Ok(Json(device));
+                    }
+                }
+            }
+        }
         Err(crate::Error::NotFound(format!(
             "device: {node_id}/{device_id}"
         )))
