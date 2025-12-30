@@ -220,9 +220,11 @@ impl AudioMatrixService {
 
             // Determine input/output channel counts based on device direction
             let (input_channels, output_channels, device_type) = match device.direction {
-                ram_core::DeviceDirection::Input => {
-                    (device.max_input_channels(), 0, ram_api::models::DeviceType::Input)
-                },
+                ram_core::DeviceDirection::Input => (
+                    device.max_input_channels(),
+                    0,
+                    ram_api::models::DeviceType::Input,
+                ),
                 ram_core::DeviceDirection::Output => (
                     0,
                     device.max_output_channels(),
