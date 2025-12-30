@@ -2,7 +2,9 @@
 
 use leptos::prelude::*;
 use leptos_router::components::A;
+use wasm_bindgen_futures::spawn_local;
 
+use crate::api;
 use crate::services::websocket::WsService;
 use crate::state::AppState;
 
@@ -11,6 +13,16 @@ use crate::state::AppState;
 pub fn Header() -> impl IntoView {
     let app_state = expect_context::<AppState>();
     let ws_service = expect_context::<WsService>();
+
+    // Fetch version from health API
+    let version = RwSignal::new("...".to_string());
+    let version_signal = version;
+    spawn_local(async move {
+        match api::health_check().await {
+            Ok(health) => version_signal.set(format!("v{}", health.version)),
+            Err(_) => version_signal.set("v?".to_string()),
+        }
+    });
 
     let node_name = move || {
         app_state
@@ -47,7 +59,7 @@ pub fn Header() -> impl IntoView {
         <header class="app-header">
             <div class="header-brand">
                 <h1 class="header-title">"AudioMatrix"</h1>
-                <span class="header-version">"v0.1.0-dev"</span>
+                <span class="header-version">{move || version.get()}</span>
             </div>
 
             <nav class="header-nav">
