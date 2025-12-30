@@ -62,11 +62,17 @@ pub fn DeviceList() -> impl IntoView {
                         Ok(devices) => {
                             log::info!("Got {} devices from node {}", devices.len(), node_id_clone);
                             state.devices.set(devices);
-                        }
+                        },
                         Err(e) => {
-                            log::error!("Failed to fetch devices for node {}: {}", node_id_clone, e);
-                            state.error.set(Some(format!("Failed to fetch devices: {}", e)));
-                        }
+                            log::error!(
+                                "Failed to fetch devices for node {}: {}",
+                                node_id_clone,
+                                e
+                            );
+                            state
+                                .error
+                                .set(Some(format!("Failed to fetch devices: {}", e)));
+                        },
                     }
                 });
             }

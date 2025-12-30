@@ -221,7 +221,10 @@ pub fn DeviceCard(
             spawn_local(async move {
                 match api::update_device(&node_id, &device_id, Some(&new_name)).await {
                     Ok(updated) => {
-                        let display = updated.display_name.clone().unwrap_or_else(|| updated.name.clone());
+                        let display = updated
+                            .display_name
+                            .clone()
+                            .unwrap_or_else(|| updated.name.clone());
                         current_display_name.set(display);
                         // Update device in state
                         app_state.devices.update(|devices| {
@@ -230,13 +233,13 @@ pub fn DeviceCard(
                             }
                         });
                         is_renaming.set(false);
-                    }
+                    },
                     Err(e) => {
                         log::error!("Failed to rename device: {}", e);
                         app_state
                             .error
                             .set(Some(format!("Failed to rename: {}", e)));
-                    }
+                    },
                 }
             });
         }

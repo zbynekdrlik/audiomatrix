@@ -77,11 +77,11 @@ pub async fn list_devices(
                         Ok(devices) => return Ok(Json(devices)),
                         Err(e) => {
                             tracing::warn!("Failed to parse devices from {}: {}", node_id, e);
-                        }
+                        },
                     },
                     Err(e) => {
                         tracing::warn!("Failed to fetch devices from {}: {}", node_id, e);
-                    }
+                    },
                 }
             }
         }
