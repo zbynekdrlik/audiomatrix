@@ -17,6 +17,8 @@
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::type_complexity)]
 #![allow(clippy::if_not_else)]
 #![allow(clippy::match_same_arms)]
 #![allow(clippy::assigning_clones)]

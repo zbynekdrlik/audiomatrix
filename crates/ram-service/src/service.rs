@@ -617,7 +617,7 @@ impl AudioMatrixService {
                             }
                         }
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                    () = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
                         if !running.load(Ordering::SeqCst) {
                             break;
                         }
