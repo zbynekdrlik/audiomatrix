@@ -25,7 +25,7 @@ struct WsInner {
 
 /// Events received from the server.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum WsEvent {
     /// Metering data update.
     Metering(MeteringUpdate),
@@ -86,7 +86,7 @@ pub struct DeviceStatusUpdate {
 
 /// Commands sent to the server.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "command", content = "data", rename_all = "snake_case")]
 pub enum WsCommand {
     /// Subscribe to metering for a device.
     SubscribeMetering { node: String, device: String },
@@ -339,12 +339,14 @@ mod tests {
             device: "test".to_string(),
         };
         let json = serde_json::to_string(&cmd).unwrap();
-        assert!(json.contains("subscribe_metering"));
+        assert!(json.contains("\"command\":\"subscribe_metering\""));
+        assert!(json.contains("\"data\""));
         assert!(json.contains("LOCAL"));
     }
 
     #[test]
     fn test_ws_event_deserialization() {
+        // Unit variants don't need data field in adjacently tagged enums
         let json = r#"{"type":"pong"}"#;
         let event: WsEvent = serde_json::from_str(json).unwrap();
         assert!(matches!(event, WsEvent::Pong));
@@ -352,11 +354,13 @@ mod tests {
 
     #[test]
     fn test_metering_event_deserialization() {
-        let json = r#"{"type":"metering","node":"LOCAL","device":"test","direction":"input","levels":[-12.0,-18.0],"peaks":[-6.0,-9.0]}"#;
+        // Adjacently tagged format: {"type":"...", "data":{...}}
+        let json = r#"{"type":"metering","data":{"node":"LOCAL","device":"test","direction":"input","levels":[-12.0,-18.0],"peaks":[-6.0,-9.0]}}"#;
         let event: WsEvent = serde_json::from_str(json).unwrap();
         if let WsEvent::Metering(m) = event {
             assert_eq!(m.device, "test");
             assert_eq!(m.levels.len(), 2);
+            assert_eq!(m.peaks.len(), 2);
         } else {
             panic!("Expected Metering event");
         }
