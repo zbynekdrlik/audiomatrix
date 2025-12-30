@@ -3,13 +3,26 @@
 use leptos::prelude::*;
 use ram_api::models::DeviceStatus;
 
-use super::DeviceCard;
+use super::{DeviceCard, VirtualDeviceDialog};
 use crate::state::AppState;
 
 /// List of all audio devices grouped by type and attachment status.
 #[component]
 pub fn DeviceList() -> impl IntoView {
     let app_state = expect_context::<AppState>();
+
+    // Dialog state
+    let show_virtual_dialog = RwSignal::new(false);
+
+    // Get current node for virtual device creation
+    let app_state_node = app_state.clone();
+    let selected_node = move || {
+        app_state_node
+            .current_node
+            .get()
+            .map(|n| n.id)
+            .unwrap_or_else(|| "local".to_string())
+    };
 
     // Attached input devices
     let app_state_1 = app_state.clone();
@@ -57,8 +70,36 @@ pub fn DeviceList() -> impl IntoView {
     let available_inputs_for = available_inputs.clone();
     let available_outputs_for = available_outputs.clone();
 
+    // Clone selected_node for the dialog
+    let selected_node_for_dialog = selected_node.clone();
+
     view! {
+        // Virtual Device Dialog
+        {move || {
+            if show_virtual_dialog.get() {
+                let node = selected_node_for_dialog();
+                Some(view! {
+                    <VirtualDeviceDialog
+                        node_id=node
+                        on_close=Callback::new(move |()| show_virtual_dialog.set(false))
+                    />
+                })
+            } else {
+                None
+            }
+        }}
+
         <div class="device-list">
+            // Create Virtual Device Button
+            <div class="device-actions">
+                <button
+                    class="create-virtual-btn"
+                    on:click=move |_| show_virtual_dialog.set(true)
+                >
+                    "+ Create Virtual Device"
+                </button>
+            </div>
+
             // Attached Devices Section
             <section class="device-section">
                 <h2>"Attached Input Devices"</h2>
