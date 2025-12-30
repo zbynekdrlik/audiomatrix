@@ -1,7 +1,7 @@
 //! Device card component.
 
 use leptos::prelude::*;
-use ram_api::models::{DeviceInfo, DeviceStatus};
+use ram_api::models::{DeviceInfo, DeviceStatus, DeviceType};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
@@ -11,13 +11,11 @@ use crate::services::websocket::WsService;
 use crate::state::{AppState, ChannelLevel};
 
 /// Card displaying a single audio device with meters.
+/// Shows UNIFIED device with both inputs and outputs.
 #[component]
 pub fn DeviceCard(
     /// The device to display.
     device: DeviceInfo,
-    /// Whether this is an input device.
-    #[prop(default = true)]
-    is_input: bool,
     /// Whether to show attach/detach controls.
     #[prop(default = true)]
     show_controls: bool,
@@ -30,28 +28,35 @@ pub fn DeviceCard(
         .display_name
         .clone()
         .unwrap_or_else(|| device.name.clone());
-    let channel_count = if is_input {
-        device.input_channels
-    } else {
-        device.output_channels
-    };
+    let input_channels = device.input_channels;
+    let output_channels = device.output_channels;
     let sample_rate = device.sample_rate;
     let device_status = device.status;
+    let device_type = device.device_type;
 
-    // Get levels for this device
-    let levels = {
+    // Get input levels for this device
+    let input_levels = {
         let app_state = app_state.clone();
         let device_id = device_id.clone();
         Signal::derive(move || {
-            let levels_map = if is_input {
-                app_state.input_levels.get()
-            } else {
-                app_state.output_levels.get()
-            };
+            let levels_map = app_state.input_levels.get();
             levels_map
                 .get(&device_id)
                 .cloned()
-                .unwrap_or_else(|| vec![ChannelLevel::default(); channel_count as usize])
+                .unwrap_or_else(|| vec![ChannelLevel::default(); input_channels as usize])
+        })
+    };
+
+    // Get output levels for this device
+    let output_levels = {
+        let app_state = app_state.clone();
+        let device_id = device_id.clone();
+        Signal::derive(move || {
+            let levels_map = app_state.output_levels.get();
+            levels_map
+                .get(&device_id)
+                .cloned()
+                .unwrap_or_else(|| vec![ChannelLevel::default(); output_channels as usize])
         })
     };
 
@@ -67,7 +72,6 @@ pub fn DeviceCard(
 
         // Only subscribe if device is attached or active
         if matches!(device_status, DeviceStatus::Attached | DeviceStatus::Active) {
-            // Subscribe to metering for this device
             log::debug!(
                 "Subscribing to metering for device {} on node {}",
                 device_id_sub,
@@ -77,10 +81,11 @@ pub fn DeviceCard(
         }
     }
 
-    let device_type_class = if is_input {
-        "device-input"
-    } else {
-        "device-output"
+    // Device type indicator
+    let type_indicator = match device_type {
+        DeviceType::Input => "IN",
+        DeviceType::Output => "OUT",
+        DeviceType::Duplex => "I/O",
     };
 
     // Status class and text
@@ -216,10 +221,7 @@ pub fn DeviceCard(
             spawn_local(async move {
                 match api::update_device(&node_id, &device_id, Some(&new_name)).await {
                     Ok(updated) => {
-                        let display = updated
-                            .display_name
-                            .clone()
-                            .unwrap_or_else(|| updated.name.clone());
+                        let display = updated.display_name.clone().unwrap_or_else(|| updated.name.clone());
                         current_display_name.set(display);
                         // Update device in state
                         app_state.devices.update(|devices| {
@@ -262,6 +264,21 @@ pub fn DeviceCard(
         .map(|n| n.id)
         .unwrap_or_else(|| "LOCAL".to_string());
 
+    // Format channel info string
+    let channel_info = if input_channels > 0 && output_channels > 0 {
+        format!("{} in / {} out", input_channels, output_channels)
+    } else if input_channels > 0 {
+        format!("{} in", input_channels)
+    } else if output_channels > 0 {
+        format!("{} out", output_channels)
+    } else {
+        "0 ch".to_string()
+    };
+
+    // Build input channels list
+    let input_ch_list: Vec<usize> = (0..input_channels as usize).collect();
+    let output_ch_list: Vec<usize> = (0..output_channels as usize).collect();
+
     view! {
         // Channel Label Editor Dialog
         {move || {
@@ -282,8 +299,9 @@ pub fn DeviceCard(
             }
         }}
 
-        <div class=format!("device-card {}", device_type_class)>
+        <div class="device-card">
             <div class="device-header">
+                <span class="device-type-badge">{type_indicator}</span>
                 {move || {
                     if is_renaming.get() {
                         view! {
@@ -310,41 +328,88 @@ pub fn DeviceCard(
                 <span class=format!("device-status {}", status_class)>{status_text}</span>
             </div>
 
-            <div class="device-meters">
-                <For
-                    each=move || {
-                        (0..channel_count as usize).collect::<Vec<_>>()
-                    }
-                    key=|idx| *idx
-                    children=move |idx| {
-                        let level_signal = {
-                            let levels = levels.clone();
-                            Signal::derive(move || {
-                                levels.get().get(idx).map_or(-60.0, |l| l.level_db)
-                            })
-                        };
-                        let peak_signal = {
-                            let levels = levels.clone();
-                            Signal::derive(move || {
-                                levels.get().get(idx).map_or(-60.0, |l| l.peak_db)
-                            })
-                        };
-                        view! {
-                            <div class="channel-meter">
-                                <span class="channel-label">{idx + 1}</span>
-                                <Meter
-                                    level=level_signal
-                                    peak=peak_signal
-                                    orientation="vertical"
-                                />
+            // Input channels meters (if any)
+            {move || {
+                if input_channels > 0 {
+                    let ch_list = input_ch_list.clone();
+                    Some(view! {
+                        <div class="device-meters-section">
+                            <span class="meters-label">"IN"</span>
+                            <div class="device-meters">
+                                {ch_list.into_iter().map(|idx| {
+                                    let level_signal = {
+                                        let levels = input_levels.clone();
+                                        Signal::derive(move || {
+                                            levels.get().get(idx).map_or(-60.0, |l| l.level_db)
+                                        })
+                                    };
+                                    let peak_signal = {
+                                        let levels = input_levels.clone();
+                                        Signal::derive(move || {
+                                            levels.get().get(idx).map_or(-60.0, |l| l.peak_db)
+                                        })
+                                    };
+                                    view! {
+                                        <div class="channel-meter">
+                                            <span class="channel-label">{idx + 1}</span>
+                                            <Meter
+                                                level=level_signal
+                                                peak=peak_signal
+                                                orientation="vertical"
+                                            />
+                                        </div>
+                                    }
+                                }).collect_view()}
                             </div>
-                        }
-                    }
-                />
-            </div>
+                        </div>
+                    })
+                } else {
+                    None
+                }
+            }}
+
+            // Output channels meters (if any)
+            {move || {
+                if output_channels > 0 {
+                    let ch_list = output_ch_list.clone();
+                    Some(view! {
+                        <div class="device-meters-section">
+                            <span class="meters-label">"OUT"</span>
+                            <div class="device-meters">
+                                {ch_list.into_iter().map(|idx| {
+                                    let level_signal = {
+                                        let levels = output_levels.clone();
+                                        Signal::derive(move || {
+                                            levels.get().get(idx).map_or(-60.0, |l| l.level_db)
+                                        })
+                                    };
+                                    let peak_signal = {
+                                        let levels = output_levels.clone();
+                                        Signal::derive(move || {
+                                            levels.get().get(idx).map_or(-60.0, |l| l.peak_db)
+                                        })
+                                    };
+                                    view! {
+                                        <div class="channel-meter">
+                                            <span class="channel-label">{idx + 1}</span>
+                                            <Meter
+                                                level=level_signal
+                                                peak=peak_signal
+                                                orientation="vertical"
+                                            />
+                                        </div>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        </div>
+                    })
+                } else {
+                    None
+                }
+            }}
 
             <div class="device-info">
-                <span class="device-channels">{channel_count}" ch"</span>
+                <span class="device-channels">{channel_info}</span>
                 <span class="device-sample-rate">" @ "{sample_rate}" Hz"</span>
             </div>
 

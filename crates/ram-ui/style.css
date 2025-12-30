@@ -386,19 +386,22 @@ body {
     padding: var(--spacing-md);
 }
 
-.device-card.device-input {
-    border-left: 3px solid var(--accent-success);
-}
-
-.device-card.device-output {
-    border-left: 3px solid var(--accent-primary);
-}
-
 .device-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--spacing-sm);
+    gap: var(--spacing-sm);
+}
+
+.device-type-badge {
+    font-size: var(--font-xs);
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--accent-primary);
+    flex-shrink: 0;
 }
 
 .device-name {
@@ -406,6 +409,23 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+}
+
+/* Meter sections for input and output */
+.device-meters-section {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin: var(--spacing-xs) 0;
+}
+
+.meters-label {
+    font-size: var(--font-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    width: 24px;
+    flex-shrink: 0;
 }
 
 .device-channels {
@@ -416,10 +436,10 @@ body {
 .device-meters {
     display: flex;
     gap: 2px;
-    height: 60px;
-    margin: var(--spacing-sm) 0;
+    height: 50px;
     overflow: hidden;
-    max-width: 100%;
+    flex: 1;
+    max-width: calc(100% - 28px);
 }
 
 .channel-meter {

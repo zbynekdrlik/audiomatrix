@@ -9,7 +9,8 @@ use super::{DeviceCard, VirtualDeviceDialog};
 use crate::api;
 use crate::state::AppState;
 
-/// List of all audio devices grouped by type and attachment status.
+/// List of all audio devices grouped by attachment status.
+/// Devices are shown as unified entities with both inputs and outputs.
 #[component]
 pub fn DeviceList() -> impl IntoView {
     let app_state = expect_context::<AppState>();
@@ -53,14 +54,18 @@ pub fn DeviceList() -> impl IntoView {
             let node_id = selected_node_id.get();
             if !node_id.is_empty() {
                 let state = state.clone();
+                let node_id_clone = node_id.clone();
                 let node_id_encoded = urlencoding::encode(&node_id).to_string();
                 spawn_local(async move {
+                    log::info!("Fetching devices for node: {}", node_id_clone);
                     match api::get_devices(&node_id_encoded).await {
                         Ok(devices) => {
+                            log::info!("Got {} devices from node {}", devices.len(), node_id_clone);
                             state.devices.set(devices);
                         }
                         Err(e) => {
-                            log::error!("Failed to fetch devices for node {}: {}", node_id_encoded, e);
+                            log::error!("Failed to fetch devices for node {}: {}", node_id_clone, e);
+                            state.error.set(Some(format!("Failed to fetch devices: {}", e)));
                         }
                     }
                 });
@@ -73,59 +78,50 @@ pub fn DeviceList() -> impl IntoView {
         let target = ev.target().unwrap();
         let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
         let new_node_id = select.value();
+        log::info!("Node changed to: {}", new_node_id);
         selected_node_id.set(new_node_id);
     };
 
-    // Attached input devices
-    let app_state_1 = app_state.clone();
-    let attached_inputs = move || {
-        app_state_1
-            .input_devices()
-            .into_iter()
-            .filter(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
-            .collect::<Vec<_>>()
+    // All attached devices (unified - not separated by input/output)
+    let attached_devices = {
+        let state = app_state.clone();
+        move || {
+            state
+                .devices
+                .get()
+                .into_iter()
+                .filter(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
+                .collect::<Vec<_>>()
+        }
     };
 
-    // Available input devices
-    let app_state_2 = app_state.clone();
-    let available_inputs = move || {
-        app_state_2
-            .input_devices()
-            .into_iter()
-            .filter(|d| matches!(d.status, DeviceStatus::Available | DeviceStatus::Detached))
-            .collect::<Vec<_>>()
-    };
-
-    // Attached output devices
-    let app_state_3 = app_state.clone();
-    let attached_outputs = move || {
-        app_state_3
-            .output_devices()
-            .into_iter()
-            .filter(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
-            .collect::<Vec<_>>()
-    };
-
-    // Available output devices
-    let app_state_4 = app_state.clone();
-    let available_outputs = move || {
-        app_state_4
-            .output_devices()
-            .into_iter()
-            .filter(|d| matches!(d.status, DeviceStatus::Available | DeviceStatus::Detached))
-            .collect::<Vec<_>>()
+    // All available devices (unified - not separated by input/output)
+    let available_devices = {
+        let state = app_state.clone();
+        move || {
+            state
+                .devices
+                .get()
+                .into_iter()
+                .filter(|d| matches!(d.status, DeviceStatus::Available | DeviceStatus::Detached))
+                .collect::<Vec<_>>()
+        }
     };
 
     // Clone closures for For and conditional use
-    let attached_inputs_for = attached_inputs.clone();
-    let attached_outputs_for = attached_outputs.clone();
-    let available_inputs_for = available_inputs.clone();
-    let available_outputs_for = available_outputs.clone();
+    let attached_devices_for = attached_devices.clone();
+    let available_devices_for = available_devices.clone();
 
     // Clone selected_node for the dialog
     let selected_node_for_dialog = selected_node.clone();
 
-    // Get nodes list for selector
+    // Get current node ID for comparison
+    let current_node_id = {
+        let state = app_state.clone();
+        move || state.current_node.get().map(|n| n.id).unwrap_or_default()
+    };
+
+    // Get nodes list for selector with "(this device)" indicator
     let nodes_for_select = {
         let state = app_state.clone();
         move || state.nodes.get()
@@ -138,9 +134,12 @@ pub fn DeviceList() -> impl IntoView {
             let node_id = selected_node_id.get();
             if !node_id.is_empty() {
                 let state = state.clone();
+                let node_id_clone = node_id.clone();
                 let node_id_encoded = urlencoding::encode(&node_id).to_string();
                 spawn_local(async move {
+                    log::info!("Refreshing devices for node: {}", node_id_clone);
                     if let Ok(devices) = api::get_devices(&node_id_encoded).await {
+                        log::info!("Refreshed {} devices", devices.len());
                         state.devices.set(devices);
                     }
                 });
@@ -178,20 +177,24 @@ pub fn DeviceList() -> impl IntoView {
                         key=|node| node.id.clone()
                         children=move |node| {
                             let node_id = node.id.clone();
-                            let node_name = node.name.clone();
+                            let is_current = current_node_id() == node_id;
+                            let display_name = if is_current {
+                                format!("{} (this device)", node.name)
+                            } else {
+                                node.name.clone()
+                            };
                             let is_selected = {
                                 let selected = selected_node_id.get();
-                                selected == node_id || (selected.is_empty() && app_state.current_node.get().map(|n| n.id == node_id).unwrap_or(false))
+                                selected == node_id || (selected.is_empty() && is_current)
                             };
                             view! {
                                 <option value={node_id.clone()} selected=is_selected>
-                                    {node_name}
+                                    {display_name}
                                 </option>
                             }
                         }
                     />
                 </select>
-                <span class="node-hint">" (Select node to manage its devices)"</span>
             </div>
 
             // Create Virtual Device Button
@@ -204,22 +207,22 @@ pub fn DeviceList() -> impl IntoView {
                 </button>
             </div>
 
-            // Attached Devices Section
+            // Attached Devices Section - UNIFIED (not separated by type)
             <section class="device-section">
-                <h2>"Attached Input Devices"</h2>
+                <h2>"Attached Devices"</h2>
                 <div class="device-grid">
                     <For
-                        each=attached_inputs_for
+                        each=attached_devices_for
                         key=|d| d.id.clone()
                         children=move |device| {
-                            view! { <DeviceCard device=device is_input=true/> }
+                            view! { <DeviceCard device=device /> }
                         }
                     />
                 </div>
                 {move || {
-                    if attached_inputs().is_empty() {
+                    if attached_devices().is_empty() {
                         Some(view! {
-                            <p class="empty-message">"No input devices attached. Attach a device from the Available section below."</p>
+                            <p class="empty-message">"No devices attached. Attach a device from the Available section below."</p>
                         })
                     } else {
                         None
@@ -227,66 +230,22 @@ pub fn DeviceList() -> impl IntoView {
                 }}
             </section>
 
-            <section class="device-section">
-                <h2>"Attached Output Devices"</h2>
-                <div class="device-grid">
-                    <For
-                        each=attached_outputs_for
-                        key=|d| d.id.clone()
-                        children=move |device| {
-                            view! { <DeviceCard device=device is_input=false/> }
-                        }
-                    />
-                </div>
-                {move || {
-                    if attached_outputs().is_empty() {
-                        Some(view! {
-                            <p class="empty-message">"No output devices attached. Attach a device from the Available section below."</p>
-                        })
-                    } else {
-                        None
-                    }
-                }}
-            </section>
-
-            // Available Devices Section
+            // Available Devices Section - UNIFIED (not separated by type)
             <section class="device-section available-section">
-                <h2>"Available Input Devices"</h2>
+                <h2>"Available Devices"</h2>
                 <div class="device-grid">
                     <For
-                        each=available_inputs_for
+                        each=available_devices_for
                         key=|d| d.id.clone()
                         children=move |device| {
-                            view! { <DeviceCard device=device is_input=true/> }
+                            view! { <DeviceCard device=device /> }
                         }
                     />
                 </div>
                 {move || {
-                    if available_inputs().is_empty() {
+                    if available_devices().is_empty() {
                         Some(view! {
-                            <p class="empty-message">"No available input devices."</p>
-                        })
-                    } else {
-                        None
-                    }
-                }}
-            </section>
-
-            <section class="device-section available-section">
-                <h2>"Available Output Devices"</h2>
-                <div class="device-grid">
-                    <For
-                        each=available_outputs_for
-                        key=|d| d.id.clone()
-                        children=move |device| {
-                            view! { <DeviceCard device=device is_input=false/> }
-                        }
-                    />
-                </div>
-                {move || {
-                    if available_outputs().is_empty() {
-                        Some(view! {
-                            <p class="empty-message">"No available output devices."</p>
+                            <p class="empty-message">"No available devices."</p>
                         })
                     } else {
                         None
