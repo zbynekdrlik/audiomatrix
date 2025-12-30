@@ -160,6 +160,16 @@ fn RoutesPage() -> impl IntoView {
 fn SettingsPage() -> impl IntoView {
     let app_state = expect_context::<AppState>();
 
+    // Fetch version from health API
+    let version = RwSignal::new("Loading...".to_string());
+    let version_signal = version;
+    spawn_local(async move {
+        match api::health_check().await {
+            Ok(health) => version_signal.set(health.version),
+            Err(_) => version_signal.set("Unknown".to_string()),
+        }
+    });
+
     // Get node info
     let node_name = move || {
         app_state
@@ -181,7 +191,13 @@ fn SettingsPage() -> impl IntoView {
         app_state
             .current_node
             .get()
-            .map(|n| n.addresses.join(", "))
+            .map(|n| {
+                if n.addresses.is_empty() {
+                    "Not available".to_string()
+                } else {
+                    n.addresses.join(", ")
+                }
+            })
             .unwrap_or_else(|| "Unknown".to_string())
     };
 
@@ -268,7 +284,7 @@ fn SettingsPage() -> impl IntoView {
                     </div>
                     <div class="setting-row">
                         <span class="setting-label">"Version"</span>
-                        <span class="setting-value">"0.1.0-dev.11"</span>
+                        <span class="setting-value">{move || version.get()}</span>
                     </div>
                     <div class="setting-row">
                         <span class="setting-label">"Documentation"</span>
