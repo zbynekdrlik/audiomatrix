@@ -27,8 +27,8 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.15
-> **Last Updated:** 2025-12-30
+> **Current Version:** 0.1.0-dev.24
+> **Last Updated:** 2025-12-31
 
 ### Backend Implementation Status
 
@@ -61,6 +61,8 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Wave Generator API** | Complete | ram-api | Per-channel test signal endpoints |
 | **Zero Auto-Connect** | Complete | ram-service | Config option `auto_start_devices` |
 | **State Persistence** | Complete | ram-core | Routes, attachments, labels, virtual devices |
+| **Device State Manager** | Complete | ram-service | JSON persistence for device config |
+| **Device Config API** | Complete | ram-api | Sample rate, buffer size update endpoints |
 
 ### Web UI Implementation Status (~75% Complete)
 
@@ -78,6 +80,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | **Virtual Device Creation** | Complete | Dialog with name, channels, sample rate |
 | **Channel Label Editor** | Complete | Per-channel naming component |
 | **Generator Controls** | Complete | Waveform selection, frequency, amplitude |
+| **Device Config Dialog** | Complete | Sample rate/buffer size configuration UI |
 | **Settings Page** | Not Started | Empty placeholder only |
 | **Stream Monitor** | Not Started | API ready, no streams page |
 
@@ -86,7 +89,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 | Category | Status | Notes |
 |----------|--------|-------|
 | **Unit Tests** | 154+ tests | All backend crates fully tested |
-| **API E2E Tests** | Not Started | Spec created, needs implementation |
+| **API E2E Tests** | In Progress | 14 device config tests implemented |
 | **WebSocket E2E** | Not Started | Spec created, needs implementation |
 | **UI E2E (Playwright)** | Not Started | Spec created, needs implementation |
 | **Cross-Node E2E** | Not Started | Spec created, needs Docker setup |
