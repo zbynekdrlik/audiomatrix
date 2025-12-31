@@ -839,11 +839,19 @@ impl AudioProcessor {
         device_id: &str,
         direction: DeviceDirection,
     ) -> Result<(cpal::Device, CpalStreamConfig)> {
+        // Handle virtual devices - they don't use cpal
+        if device_id.starts_with("virtual_") {
+            return Err(anyhow!(
+                "Virtual devices don't use cpal streams: {device_id}"
+            ));
+        }
+
         let parts: Vec<&str> = device_id.splitn(3, ':').collect();
         if parts.len() < 3 {
             return Err(anyhow!("Invalid device ID format: {device_id}"));
         }
         let host_name = parts[0];
+        let device_type = parts[1]; // "input", "output", or "duplex"
         let device_name = parts[2];
 
         let hosts = cpal::available_hosts();
@@ -855,17 +863,55 @@ impl AudioProcessor {
         let host = cpal::host_from_id(*host_id)
             .map_err(|e| anyhow!("Failed to get host {host_name}: {e}"))?;
 
+        // For duplex devices (like ASIO), we need to search in the appropriate list
+        // ASIO devices typically appear in output_devices() even when we want input
+        let is_duplex = device_type == "duplex";
+
         let device = match direction {
-            DeviceDirection::Input => host
-                .input_devices()
-                .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
-                .find(|d| d.name().ok().as_deref() == Some(device_name))
-                .ok_or_else(|| anyhow!("Input device not found: {device_name}"))?,
-            DeviceDirection::Output => host
-                .output_devices()
-                .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
-                .find(|d| d.name().ok().as_deref() == Some(device_name))
-                .ok_or_else(|| anyhow!("Output device not found: {device_name}"))?,
+            DeviceDirection::Input => {
+                // First try input_devices
+                let input_device = host
+                    .input_devices()
+                    .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
+                    .find(|d| d.name().ok().as_deref() == Some(device_name));
+
+                if let Some(d) = input_device {
+                    d
+                } else if is_duplex {
+                    // For duplex devices, also check output_devices (ASIO uses this)
+                    host.output_devices()
+                        .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
+                        .find(|d| d.name().ok().as_deref() == Some(device_name))
+                        .ok_or_else(|| {
+                            anyhow!("Input device not found in input or output list: {device_name}")
+                        })?
+                } else {
+                    return Err(anyhow!("Input device not found: {device_name}"));
+                }
+            },
+            DeviceDirection::Output => {
+                // First try output_devices
+                let output_device = host
+                    .output_devices()
+                    .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
+                    .find(|d| d.name().ok().as_deref() == Some(device_name));
+
+                if let Some(d) = output_device {
+                    d
+                } else if is_duplex {
+                    // For duplex devices, also check input_devices
+                    host.input_devices()
+                        .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
+                        .find(|d| d.name().ok().as_deref() == Some(device_name))
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "Output device not found in output or input list: {device_name}"
+                            )
+                        })?
+                } else {
+                    return Err(anyhow!("Output device not found: {device_name}"));
+                }
+            },
             DeviceDirection::Duplex => {
                 // For duplex devices, we find in either input or output list
                 // (they should be the same physical device)
