@@ -800,6 +800,50 @@ pub async fn get_route_latency(
         .ok_or_else(|| crate::Error::NotFound(format!("route: {id}")))
 }
 
+// --- Debug Handlers ---
+
+/// Debug information response.
+#[derive(Debug, serde::Serialize)]
+pub struct DebugInfo {
+    /// Stream counts from stream registry.
+    pub stream_registry: StreamRegistryDebug,
+    /// Route controller status.
+    pub route_controller_available: bool,
+    /// Attached devices.
+    pub attached_devices: Vec<String>,
+}
+
+/// Stream registry debug info.
+#[derive(Debug, serde::Serialize)]
+pub struct StreamRegistryDebug {
+    /// Number of input streams.
+    pub input_count: usize,
+    /// Number of output streams.
+    pub output_count: usize,
+}
+
+/// Get debug information about the service state.
+pub async fn get_debug_info(State(state): State<AppState>) -> Json<DebugInfo> {
+    let (input_count, output_count) = state.stream_counts();
+    let route_controller_available = state.has_route_controller();
+
+    let attached_devices: Vec<String> = state
+        .all_devices()
+        .into_iter()
+        .filter(|d| matches!(d.status, crate::models::DeviceStatus::Attached | crate::models::DeviceStatus::Active))
+        .map(|d| d.id)
+        .collect();
+
+    Json(DebugInfo {
+        stream_registry: StreamRegistryDebug {
+            input_count,
+            output_count,
+        },
+        route_controller_available,
+        attached_devices,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

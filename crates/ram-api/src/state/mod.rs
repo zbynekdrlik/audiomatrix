@@ -749,6 +749,12 @@ impl AppState {
         }
     }
 
+    /// Returns whether a route controller is available.
+    #[must_use]
+    pub fn has_route_controller(&self) -> bool {
+        self.inner.route_controller.is_some()
+    }
+
     // --- Subscription Management ---
 
     /// Returns all subscriptions (incoming and outgoing).
