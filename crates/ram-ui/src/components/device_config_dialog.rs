@@ -104,19 +104,23 @@ pub fn DeviceConfigDialog(
 
     // Sample rate change handler
     let on_sample_rate_change = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
-        if let Ok(value) = select.value().parse::<u32>() {
-            sample_rate.set(value);
+        if let Some(target) = ev.target() {
+            if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                if let Ok(value) = select.value().parse::<u32>() {
+                    sample_rate.set(value);
+                }
+            }
         }
     };
 
     // Buffer size change handler
     let on_buffer_size_change = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
-        if let Ok(value) = select.value().parse::<u32>() {
-            buffer_size.set(value);
+        if let Some(target) = ev.target() {
+            if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                if let Ok(value) = select.value().parse::<u32>() {
+                    buffer_size.set(value);
+                }
+            }
         }
     };
 

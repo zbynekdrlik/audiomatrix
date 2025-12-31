@@ -32,6 +32,10 @@ pub enum Error {
     #[error("forbidden: {0}")]
     Forbidden(String),
 
+    /// Service unavailable - remote node unreachable.
+    #[error("service unavailable: {0}")]
+    ServiceUnavailable(String),
+
     /// Core error.
     #[error("core error: {0}")]
     Core(#[from] ram_core::Error),
@@ -44,6 +48,7 @@ impl IntoResponse for Error {
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             Self::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             Self::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
+            Self::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
             Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
             Self::Core(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };

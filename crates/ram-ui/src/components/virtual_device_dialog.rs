@@ -57,40 +57,50 @@ pub fn VirtualDeviceDialog(
 
     // Input handlers
     let on_name_input = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-        name.set(input.value());
+        if let Some(target) = ev.target() {
+            if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                name.set(input.value());
+            }
+        }
     };
 
     let on_input_channels_input = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-        if let Ok(v) = input.value().parse::<u16>() {
-            input_channels.set(v.min(256));
+        if let Some(target) = ev.target() {
+            if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                if let Ok(v) = input.value().parse::<u16>() {
+                    input_channels.set(v.min(256));
+                }
+            }
         }
     };
 
     let on_output_channels_input = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-        if let Ok(v) = input.value().parse::<u16>() {
-            output_channels.set(v.min(256));
+        if let Some(target) = ev.target() {
+            if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                if let Ok(v) = input.value().parse::<u16>() {
+                    output_channels.set(v.min(256));
+                }
+            }
         }
     };
 
     let on_sample_rate_change = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
-        if let Ok(v) = select.value().parse::<u32>() {
-            sample_rate.set(v);
+        if let Some(target) = ev.target() {
+            if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                if let Ok(v) = select.value().parse::<u32>() {
+                    sample_rate.set(v);
+                }
+            }
         }
     };
 
     let on_buffer_size_change = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
-        if let Ok(v) = select.value().parse::<u32>() {
-            buffer_size.set(v);
+        if let Some(target) = ev.target() {
+            if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                if let Ok(v) = select.value().parse::<u32>() {
+                    buffer_size.set(v);
+                }
+            }
         }
     };
 

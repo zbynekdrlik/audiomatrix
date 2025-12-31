@@ -79,18 +79,20 @@ fn ChannelGenerator(
     let on_waveform_change = {
         let update_generator = update_generator.clone();
         move |ev: web_sys::Event| {
-            let target = ev.target().unwrap();
-            let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
-            let new_waveform = match select.value().as_str() {
-                "sine" => WaveformType::Sine,
-                "pink_noise" => WaveformType::PinkNoise,
-                "channel_id" => WaveformType::ChannelId,
-                "sweep" => WaveformType::Sweep,
-                "click" => WaveformType::Click,
-                _ => WaveformType::Sine,
-            };
-            waveform.set(new_waveform);
-            update_generator();
+            if let Some(target) = ev.target() {
+                if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                    let new_waveform = match select.value().as_str() {
+                        "sine" => WaveformType::Sine,
+                        "pink_noise" => WaveformType::PinkNoise,
+                        "channel_id" => WaveformType::ChannelId,
+                        "sweep" => WaveformType::Sweep,
+                        "click" => WaveformType::Click,
+                        _ => WaveformType::Sine,
+                    };
+                    waveform.set(new_waveform);
+                    update_generator();
+                }
+            }
         }
     };
 
@@ -98,11 +100,13 @@ fn ChannelGenerator(
     let on_frequency_change = {
         let update_generator = update_generator.clone();
         move |ev: web_sys::Event| {
-            let target = ev.target().unwrap();
-            let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-            if let Ok(v) = input.value().parse::<u32>() {
-                frequency.set(v.clamp(20, 20000));
-                update_generator();
+            if let Some(target) = ev.target() {
+                if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                    if let Ok(v) = input.value().parse::<u32>() {
+                        frequency.set(v.clamp(20, 20000));
+                        update_generator();
+                    }
+                }
             }
         }
     };
@@ -111,11 +115,13 @@ fn ChannelGenerator(
     let on_level_change = {
         let update_generator = update_generator.clone();
         move |ev: web_sys::Event| {
-            let target = ev.target().unwrap();
-            let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-            if let Ok(v) = input.value().parse::<f32>() {
-                level_db.set(v.clamp(-60.0, 0.0));
-                update_generator();
+            if let Some(target) = ev.target() {
+                if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                    if let Ok(v) = input.value().parse::<f32>() {
+                        level_db.set(v.clamp(-60.0, 0.0));
+                        update_generator();
+                    }
+                }
             }
         }
     };

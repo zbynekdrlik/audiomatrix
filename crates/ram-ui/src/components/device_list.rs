@@ -81,11 +81,13 @@ pub fn DeviceList() -> impl IntoView {
 
     // Node change handler
     let on_node_change = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let select: web_sys::HtmlSelectElement = target.dyn_into().unwrap();
-        let new_node_id = select.value();
-        log::info!("Node changed to: {}", new_node_id);
-        selected_node_id.set(new_node_id);
+        if let Some(target) = ev.target() {
+            if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                let new_node_id = select.value();
+                log::info!("Node changed to: {}", new_node_id);
+                selected_node_id.set(new_node_id);
+            }
+        }
     };
 
     // All attached devices (unified - not separated by input/output)

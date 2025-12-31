@@ -65,26 +65,28 @@ pub async fn list_devices(
         Ok(Json(state.all_devices()))
     } else {
         // Proxy to remote node
-        if let Some(node) = state.get_remote_node(&node_id) {
-            if let Some(addr) = node.addresses.first() {
-                let url = format!(
-                    "http://{}:{}/api/v1/nodes/local/devices",
-                    addr, node.api_port
-                );
-                match reqwest::get(&url).await {
-                    Ok(resp) => match resp.json::<Vec<DeviceInfo>>().await {
-                        Ok(devices) => return Ok(Json(devices)),
-                        Err(e) => {
-                            tracing::warn!("Failed to parse devices from {}: {}", node_id, e);
-                        },
-                    },
-                    Err(e) => {
-                        tracing::warn!("Failed to fetch devices from {}: {}", node_id, e);
-                    },
-                }
-            }
-        }
-        Ok(Json(vec![]))
+        let node = state
+            .get_remote_node(&node_id)
+            .ok_or_else(|| crate::Error::NotFound(format!("node: {node_id}")))?;
+
+        let addr = node
+            .addresses
+            .first()
+            .ok_or_else(|| crate::Error::ServiceUnavailable(format!("node {node_id} has no address")))?;
+
+        let url = format!("http://{}:{}/api/v1/nodes/local/devices", addr, node.api_port);
+
+        let resp = state.http_client().get(&url).send().await.map_err(|e| {
+            tracing::warn!("Failed to fetch devices from {}: {}", node_id, e);
+            crate::Error::ServiceUnavailable(format!("failed to reach node {node_id}: {e}"))
+        })?;
+
+        let devices = resp.json::<Vec<DeviceInfo>>().await.map_err(|e| {
+            tracing::warn!("Failed to parse devices from {}: {}", node_id, e);
+            crate::Error::Internal(format!("invalid response from node {node_id}: {e}"))
+        })?;
+
+        Ok(Json(devices))
     }
 }
 
@@ -100,24 +102,35 @@ pub async fn get_device(
             .ok_or_else(|| crate::Error::NotFound(format!("device: {device_id}")))
     } else {
         // Proxy to remote node
-        if let Some(node) = state.get_remote_node(&node_id) {
-            if let Some(addr) = node.addresses.first() {
-                let url = format!(
-                    "http://{}:{}/api/v1/nodes/local/devices/{}",
-                    addr,
-                    node.api_port,
-                    urlencoding::encode(&device_id)
-                );
-                if let Ok(resp) = reqwest::get(&url).await {
-                    if let Ok(device) = resp.json::<DeviceInfo>().await {
-                        return Ok(Json(device));
-                    }
-                }
-            }
+        let node = state
+            .get_remote_node(&node_id)
+            .ok_or_else(|| crate::Error::NotFound(format!("node: {node_id}")))?;
+
+        let addr = node
+            .addresses
+            .first()
+            .ok_or_else(|| crate::Error::ServiceUnavailable(format!("node {node_id} has no address")))?;
+
+        let url = format!(
+            "http://{}:{}/api/v1/nodes/local/devices/{}",
+            addr,
+            node.api_port,
+            urlencoding::encode(&device_id)
+        );
+
+        let resp = state.http_client().get(&url).send().await.map_err(|e| {
+            crate::Error::ServiceUnavailable(format!("failed to reach node {node_id}: {e}"))
+        })?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(crate::Error::NotFound(format!("device: {node_id}/{device_id}")));
         }
-        Err(crate::Error::NotFound(format!(
-            "device: {node_id}/{device_id}"
-        )))
+
+        let device = resp.json::<DeviceInfo>().await.map_err(|e| {
+            crate::Error::Internal(format!("invalid response from node {node_id}: {e}"))
+        })?;
+
+        Ok(Json(device))
     }
 }
 
@@ -137,8 +150,7 @@ pub async fn attach_device(
                     node.api_port,
                     urlencoding::encode(&device_id)
                 );
-                let client = reqwest::Client::new();
-                match client.post(&url).json(&req).send().await {
+                match state.http_client().post(&url).json(&req).send().await {
                     Ok(resp) => match resp.json::<AttachDeviceResponse>().await {
                         Ok(result) => return Ok(Json(result)),
                         Err(e) => {
@@ -202,8 +214,7 @@ pub async fn detach_device(
                     node.api_port,
                     urlencoding::encode(&device_id)
                 );
-                let client = reqwest::Client::new();
-                match client.post(&url).send().await {
+                match state.http_client().post(&url).send().await {
                     Ok(resp) => match resp.json::<AttachDeviceResponse>().await {
                         Ok(result) => return Ok(Json(result)),
                         Err(e) => {
@@ -348,8 +359,7 @@ pub async fn create_virtual_device(
                     "http://{}:{}/api/v1/nodes/local/virtual-devices",
                     addr, node.api_port
                 );
-                let client = reqwest::Client::new();
-                match client.post(&url).json(&req).send().await {
+                match state.http_client().post(&url).json(&req).send().await {
                     Ok(resp) => match resp.json::<VirtualDeviceResponse>().await {
                         Ok(result) => return Ok(Json(result)),
                         Err(e) => {
@@ -442,8 +452,7 @@ pub async fn update_virtual_device(
                     node.api_port,
                     urlencoding::encode(&device_id)
                 );
-                let client = reqwest::Client::new();
-                match client.put(&url).json(&req).send().await {
+                match state.http_client().put(&url).json(&req).send().await {
                     Ok(resp) => match resp.json::<VirtualDeviceResponse>().await {
                         Ok(result) => return Ok(Json(result)),
                         Err(e) => {
@@ -520,8 +529,7 @@ pub async fn delete_virtual_device(
                     node.api_port,
                     urlencoding::encode(&device_id)
                 );
-                let client = reqwest::Client::new();
-                match client.delete(&url).send().await {
+                match state.http_client().delete(&url).send().await {
                     Ok(resp) => match resp.json::<VirtualDeviceResponse>().await {
                         Ok(result) => return Ok(Json(result)),
                         Err(e) => {

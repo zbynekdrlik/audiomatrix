@@ -555,6 +555,10 @@ pub struct ConnectionId {
 
 impl ConnectionId {
     /// Creates a new connection ID.
+    ///
+    /// # Panics
+    ///
+    /// Panics if channel numbers are 0 (channels are 1-based).
     #[must_use]
     pub fn new(
         source_node: impl Into<String>,
@@ -564,6 +568,11 @@ impl ConnectionId {
         destination_device: impl Into<String>,
         destination_channel: u16,
     ) -> Self {
+        assert!(source_channel > 0, "source channel must be 1-based (got 0)");
+        assert!(
+            destination_channel > 0,
+            "destination channel must be 1-based (got 0)"
+        );
         Self {
             source_node: source_node.into(),
             source_device: source_device.into(),
@@ -572,6 +581,55 @@ impl ConnectionId {
             destination_device: destination_device.into(),
             destination_channel,
         }
+    }
+
+    /// Creates a new connection ID with validation, returning an error if invalid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Channel numbers are 0 (channels are 1-based)
+    /// - Node or device names are empty
+    pub fn try_new(
+        source_node: impl Into<String>,
+        source_device: impl Into<String>,
+        source_channel: u16,
+        destination_node: impl Into<String>,
+        destination_device: impl Into<String>,
+        destination_channel: u16,
+    ) -> Result<Self, &'static str> {
+        let source_node = source_node.into();
+        let source_device = source_device.into();
+        let destination_node = destination_node.into();
+        let destination_device = destination_device.into();
+
+        if source_channel == 0 {
+            return Err("source channel must be 1-based (got 0)");
+        }
+        if destination_channel == 0 {
+            return Err("destination channel must be 1-based (got 0)");
+        }
+        if source_node.is_empty() {
+            return Err("source node name cannot be empty");
+        }
+        if source_device.is_empty() {
+            return Err("source device name cannot be empty");
+        }
+        if destination_node.is_empty() {
+            return Err("destination node name cannot be empty");
+        }
+        if destination_device.is_empty() {
+            return Err("destination device name cannot be empty");
+        }
+
+        Ok(Self {
+            source_node,
+            source_device,
+            source_channel,
+            destination_node,
+            destination_device,
+            destination_channel,
+        })
     }
 
     /// Creates a local connection ID (both source and destination on this node).

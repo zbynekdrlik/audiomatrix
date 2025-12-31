@@ -69,9 +69,11 @@ fn ChannelRow(channel: ChannelInfo, node_id: String, device_id: String) -> impl 
 
     // Input change handler
     let on_input = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-        label_value.set(input.value());
+        if let Some(target) = ev.target() {
+            if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                label_value.set(input.value());
+            }
+        }
     };
 
     // Key handler

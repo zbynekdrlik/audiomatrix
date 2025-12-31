@@ -73,6 +73,8 @@ pub(crate) struct AppStateInner {
     pub route_controller: Option<Arc<dyn RouteController>>,
     /// Subscription client for cross-node subscriptions.
     pub subscription_client: SubscriptionClient,
+    /// Shared HTTP client for remote node requests (connection pooling).
+    pub http_client: reqwest::Client,
 }
 
 impl AppState {
@@ -113,6 +115,13 @@ impl AppState {
         let (device_commands, _) = broadcast::channel(64);
         let subscription_client = SubscriptionClient::new(vban_port);
 
+        // Create shared HTTP client with connection pooling for remote node requests
+        let http_client = reqwest::Client::builder()
+            .pool_max_idle_per_host(4)
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_default();
+
         Self {
             inner: Arc::new(AppStateInner {
                 local_node: RwLock::new(local_node),
@@ -125,6 +134,7 @@ impl AppState {
                 device_commands,
                 route_controller,
                 subscription_client,
+                http_client,
             }),
         }
     }
@@ -168,6 +178,12 @@ impl AppState {
     fn send_device_command(&self, command: DeviceCommand) {
         // Ignore send errors (no subscribers)
         let _ = self.inner.device_commands.send(command);
+    }
+
+    /// Returns the shared HTTP client for remote node requests.
+    #[must_use]
+    pub fn http_client(&self) -> &reqwest::Client {
+        &self.inner.http_client
     }
 
     // --- Node Management ---

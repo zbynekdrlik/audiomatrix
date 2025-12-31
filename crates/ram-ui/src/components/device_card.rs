@@ -258,9 +258,11 @@ pub fn DeviceCard(
 
     // Input change
     let on_rename_input = move |ev: web_sys::Event| {
-        let target = ev.target().unwrap();
-        let input: web_sys::HtmlInputElement = target.dyn_into().unwrap();
-        rename_value.set(input.value());
+        if let Some(target) = ev.target() {
+            if let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() {
+                rename_value.set(input.value());
+            }
+        }
     };
 
     // IDs for label editor
