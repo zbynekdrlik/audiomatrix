@@ -176,8 +176,11 @@ impl AppState {
 
     /// Sends a device command.
     fn send_device_command(&self, command: DeviceCommand) {
-        // Ignore send errors (no subscribers)
-        let _ = self.inner.device_commands.send(command);
+        tracing::info!("Sending device command: {:?}", command);
+        match self.inner.device_commands.send(command) {
+            Ok(count) => tracing::info!("Device command sent to {} subscribers", count),
+            Err(e) => tracing::warn!("Failed to send device command (no subscribers?): {:?}", e),
+        }
     }
 
     /// Returns the shared HTTP client for remote node requests.

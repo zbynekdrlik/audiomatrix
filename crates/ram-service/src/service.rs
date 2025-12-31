@@ -716,14 +716,16 @@ impl AudioMatrixService {
         let running = self.running.clone();
 
         let task = tokio::spawn(async move {
+            info!("Device command handler task started, waiting for commands...");
             loop {
                 tokio::select! {
                     result = rx.recv() => {
+                        info!("Device command handler received message: {:?}", result);
                         match result {
                             Ok(command) => {
                                 match command {
                                     DeviceCommand::StartStreams { device_id, device_type } => {
-                                        info!("Starting streams for device: {} (type: {:?})", device_id, device_type);
+                                        info!("Processing StartStreams for device: {} (type: {:?})", device_id, device_type);
 
                                         // Persist attached state
                                         if let Err(e) = device_state_manager.set_device_attached(&device_id, true) {
