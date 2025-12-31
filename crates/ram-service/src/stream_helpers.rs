@@ -74,8 +74,8 @@ pub fn find_cpal_device(
         .find(|h| h.name() == host_name)
         .ok_or_else(|| anyhow!("Host not found: {host_name}"))?;
 
-    let host = cpal::host_from_id(*host_id)
-        .map_err(|e| anyhow!("Failed to get host {host_name}: {e}"))?;
+    let host =
+        cpal::host_from_id(*host_id).map_err(|e| anyhow!("Failed to get host {host_name}: {e}"))?;
 
     // For duplex devices (like ASIO), we need to search in the appropriate list
     // ASIO devices typically appear in output_devices() even when we want input
@@ -102,7 +102,7 @@ pub fn find_cpal_device(
             } else {
                 return Err(anyhow!("Input device not found: {device_name}"));
             }
-        }
+        },
         DeviceDirection::Output => {
             // First try output_devices
             let output_device = host
@@ -118,14 +118,12 @@ pub fn find_cpal_device(
                     .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
                     .find(|d| d.name().ok().as_deref() == Some(device_name))
                     .ok_or_else(|| {
-                        anyhow!(
-                            "Output device not found in output or input list: {device_name}"
-                        )
+                        anyhow!("Output device not found in output or input list: {device_name}")
                     })?
             } else {
                 return Err(anyhow!("Output device not found: {device_name}"));
             }
-        }
+        },
         DeviceDirection::Duplex => {
             // For duplex devices, we find in either input or output list
             // (they should be the same physical device)
@@ -133,7 +131,7 @@ pub fn find_cpal_device(
                 .map_err(|e| anyhow!("Failed to enumerate devices: {e}"))?
                 .find(|d| d.name().ok().as_deref() == Some(device_name))
                 .ok_or_else(|| anyhow!("Duplex device not found: {device_name}"))?
-        }
+        },
     };
 
     // Get the appropriate config based on direction
@@ -143,28 +141,24 @@ pub fn find_cpal_device(
             // Try input config first, fall back to output for duplex ASIO devices
             device.default_input_config().or_else(|e| {
                 if is_duplex {
-                    debug!(
-                        "Input config failed for duplex device, trying output: {e}"
-                    );
+                    debug!("Input config failed for duplex device, trying output: {e}");
                     device.default_output_config()
                 } else {
                     Err(e)
                 }
             })
-        }
+        },
         DeviceDirection::Output => {
             // Try output config first, fall back to input for duplex devices
             device.default_output_config().or_else(|e| {
                 if is_duplex {
-                    debug!(
-                        "Output config failed for duplex device, trying input: {e}"
-                    );
+                    debug!("Output config failed for duplex device, trying input: {e}");
                     device.default_input_config()
                 } else {
                     Err(e)
                 }
             })
-        }
+        },
         DeviceDirection::Duplex => device.default_output_config(),
     }
     .map_err(|e| anyhow!("Failed to get config for {device_name}: {e}"))?;
@@ -183,10 +177,13 @@ pub fn find_cpal_device(
         buffer_size: cpal::BufferSize::Default,
     };
 
-    Ok((device, ExtendedStreamConfig {
-        config: stream_config,
-        sample_format,
-    }))
+    Ok((
+        device,
+        ExtendedStreamConfig {
+            config: stream_config,
+            sample_format,
+        },
+    ))
 }
 
 /// Builds an input stream for the given device and configuration.
@@ -222,7 +219,7 @@ pub fn build_input_stream(
             device
                 .build_input_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build F32 input stream: {e}"))
-        }
+        },
         SampleFormat::I32 => {
             let mut inner_callback = create_input_callback(context);
             let callback = move |data: &[i32], _info: &cpal::InputCallbackInfo| {
@@ -233,7 +230,7 @@ pub fn build_input_stream(
             device
                 .build_input_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build I32 input stream: {e}"))
-        }
+        },
         SampleFormat::I16 => {
             let mut inner_callback = create_input_callback(context);
             let callback = move |data: &[i16], _info: &cpal::InputCallbackInfo| {
@@ -244,7 +241,7 @@ pub fn build_input_stream(
             device
                 .build_input_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build I16 input stream: {e}"))
-        }
+        },
         SampleFormat::U8 => {
             let mut inner_callback = create_input_callback(context);
             let callback = move |data: &[u8], _info: &cpal::InputCallbackInfo| {
@@ -255,7 +252,7 @@ pub fn build_input_stream(
             device
                 .build_input_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build U8 input stream: {e}"))
-        }
+        },
         format => Err(anyhow!("Unsupported sample format: {:?}", format)),
     }
 }
@@ -293,7 +290,7 @@ pub fn build_output_stream(
             device
                 .build_output_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build F32 output stream: {e}"))
-        }
+        },
         SampleFormat::I32 => {
             let mut inner_callback = create_output_callback(context);
             let callback = move |data: &mut [i32], _info: &cpal::OutputCallbackInfo| {
@@ -307,7 +304,7 @@ pub fn build_output_stream(
             device
                 .build_output_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build I32 output stream: {e}"))
-        }
+        },
         SampleFormat::I16 => {
             let mut inner_callback = create_output_callback(context);
             let callback = move |data: &mut [i16], _info: &cpal::OutputCallbackInfo| {
@@ -321,7 +318,7 @@ pub fn build_output_stream(
             device
                 .build_output_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build I16 output stream: {e}"))
-        }
+        },
         SampleFormat::U8 => {
             let mut inner_callback = create_output_callback(context);
             let callback = move |data: &mut [u8], _info: &cpal::OutputCallbackInfo| {
@@ -335,7 +332,7 @@ pub fn build_output_stream(
             device
                 .build_output_stream(config, callback, err_fn, None)
                 .map_err(|e| anyhow!("Failed to build U8 output stream: {e}"))
-        }
+        },
         format => Err(anyhow!("Unsupported sample format: {:?}", format)),
     }
 }

@@ -20,7 +20,9 @@ use tracing::{debug, info, warn};
 use ram_core::active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig};
 use ram_core::callbacks::{InputCallbackContext, OutputCallbackContext};
 
-use crate::stream_helpers::{build_input_stream, build_output_stream, find_cpal_device, DeviceDirection};
+use crate::stream_helpers::{
+    build_input_stream, build_output_stream, find_cpal_device, DeviceDirection,
+};
 use ram_core::latency::LatencyCalculator;
 use ram_core::metering::MeterLevels;
 use ram_core::ring_buffer_pool::RingBufferPool;
@@ -575,8 +577,8 @@ impl AudioProcessor {
             ));
         }
 
-        let (device, extended_config) =
-            find_cpal_device(device_id, DeviceDirection::Input).map_err(|e| {
+        let (device, extended_config) = find_cpal_device(device_id, DeviceDirection::Input)
+            .map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
@@ -584,21 +586,18 @@ impl AudioProcessor {
         let sample_format = extended_config.sample_format;
         let channels = config.channels;
 
-        info!(
-            "Device {device_id}: sample format {:?}",
-            sample_format
-        );
+        info!("Device {device_id}: sample format {:?}", sample_format);
 
         let (context, buffer_indices) = self.create_input_context(device_id, channels as usize)?;
 
         // Try to build stream with default config, fall back to other sample rates if it fails
         // This is needed for ASIO devices which may be configured for a different sample rate
         let sample_rates_to_try = [
-            config.sample_rate.0,      // Default first
-            48000,                     // Common studio rate
-            44100,                     // CD quality
-            96000,                     // High-res
-            88200,                     // High-res alternative
+            config.sample_rate.0, // Default first
+            48000,                // Common studio rate
+            44100,                // CD quality
+            96000,                // High-res
+            88200,                // High-res alternative
         ];
 
         let mut last_error = None;
@@ -617,11 +616,11 @@ impl AudioProcessor {
                     actual_sample_rate = rate;
                     stream_result = Some(stream);
                     break;
-                }
+                },
                 Err(e) => {
                     debug!("Failed to build input stream at {}Hz: {e}", rate);
                     last_error = Some(e);
-                }
+                },
             }
         }
 
@@ -757,8 +756,8 @@ impl AudioProcessor {
             ));
         }
 
-        let (device, extended_config) =
-            find_cpal_device(device_id, DeviceDirection::Output).map_err(|e| {
+        let (device, extended_config) = find_cpal_device(device_id, DeviceDirection::Output)
+            .map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
@@ -766,21 +765,18 @@ impl AudioProcessor {
         let sample_format = extended_config.sample_format;
         let channels = config.channels;
 
-        info!(
-            "Device {device_id}: sample format {:?}",
-            sample_format
-        );
+        info!("Device {device_id}: sample format {:?}", sample_format);
 
         let (context, dest_indices) = self.create_output_context(device_id, channels as usize);
 
         // Try to build stream with default config, fall back to other sample rates if it fails
         // This is needed for ASIO devices which may be configured for a different sample rate
         let sample_rates_to_try = [
-            config.sample_rate.0,      // Default first
-            48000,                     // Common studio rate
-            44100,                     // CD quality
-            96000,                     // High-res
-            88200,                     // High-res alternative
+            config.sample_rate.0, // Default first
+            48000,                // Common studio rate
+            44100,                // CD quality
+            96000,                // High-res
+            88200,                // High-res alternative
         ];
 
         let mut last_error = None;
@@ -799,16 +795,17 @@ impl AudioProcessor {
                     actual_sample_rate = rate;
                     stream_result = Some(stream);
                     break;
-                }
+                },
                 Err(e) => {
                     debug!("Failed to build output stream at {}Hz: {e}", rate);
                     last_error = Some(e);
-                }
+                },
             }
         }
 
         let stream = stream_result.ok_or_else(|| {
-            last_error.unwrap_or_else(|| anyhow!("Failed to build output stream at any sample rate"))
+            last_error
+                .unwrap_or_else(|| anyhow!("Failed to build output stream at any sample rate"))
         })?;
         stream
             .play()
