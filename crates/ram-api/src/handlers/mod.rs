@@ -830,7 +830,12 @@ pub async fn get_debug_info(State(state): State<AppState>) -> Json<DebugInfo> {
     let attached_devices: Vec<String> = state
         .all_devices()
         .into_iter()
-        .filter(|d| matches!(d.status, crate::models::DeviceStatus::Attached | crate::models::DeviceStatus::Active))
+        .filter(|d| {
+            matches!(
+                d.status,
+                crate::models::DeviceStatus::Attached | crate::models::DeviceStatus::Active
+            )
+        })
         .map(|d| d.id)
         .collect();
 
