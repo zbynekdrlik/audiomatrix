@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
+use ram_core::active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig};
 use ram_core::callbacks::{
     create_input_callback, create_output_callback, InputCallbackContext, OutputCallbackContext,
 };
@@ -590,7 +591,24 @@ impl AudioProcessor {
             .map_err(|e| anyhow!("Failed to start input stream: {e}"))?;
 
         // Register context for metering access (thread-safe)
-        self.metering_contexts.register_input(device_id, context);
+        self.metering_contexts
+            .register_input(device_id, Arc::clone(&context));
+
+        // Register with stream registry for API visibility
+        let stream_id = format!("input-{device_id}");
+        let active_stream = Arc::new(ActiveInputStream::new(
+            stream_id,
+            device_id,
+            StreamConfig {
+                sample_rate,
+                buffer_size: 256, // Default buffer size
+                channels,
+            },
+            buffer_indices.clone(),
+            context,
+        ));
+        active_stream.set_running(true);
+        self.stream_registry().register_input(active_stream);
 
         self.input_streams.write().insert(
             device_id.to_string(),
@@ -705,7 +723,24 @@ impl AudioProcessor {
             .map_err(|e| anyhow!("Failed to start output stream: {e}"))?;
 
         // Register context for metering access (thread-safe)
-        self.metering_contexts.register_output(device_id, context);
+        self.metering_contexts
+            .register_output(device_id, Arc::clone(&context));
+
+        // Register with stream registry for API visibility
+        let stream_id = format!("output-{device_id}");
+        let active_stream = Arc::new(ActiveOutputStream::new(
+            stream_id,
+            device_id,
+            StreamConfig {
+                sample_rate,
+                buffer_size: 256, // Default buffer size
+                channels,
+            },
+            dest_indices.clone(),
+            context,
+        ));
+        active_stream.set_running(true);
+        self.stream_registry().register_output(active_stream);
 
         self.output_streams.write().insert(
             device_id.to_string(),
@@ -726,6 +761,7 @@ impl AudioProcessor {
         let removed = self.input_streams.write().remove(device_id);
         if removed.is_some() {
             self.metering_contexts.unregister_input(device_id);
+            self.stream_registry().unregister_input(device_id);
             info!("Input stream stopped on {device_id}");
             Ok(())
         } else {
@@ -736,6 +772,7 @@ impl AudioProcessor {
     /// Stops an output stream for the specified device.
     pub fn stop_output_stream(&self, device_id: &str) -> Result<()> {
         self.metering_contexts.unregister_output(device_id);
+        self.stream_registry().unregister_output(device_id);
         let removed = self.output_streams.write().remove(device_id);
         if removed.is_some() {
             info!("Output stream stopped on {device_id}");
