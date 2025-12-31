@@ -576,22 +576,52 @@ impl AudioProcessor {
             ));
         }
 
-        let (device, config) =
+        let (device, mut config) =
             Self::find_cpal_device(device_id, DeviceDirection::Input).map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
         let channels = config.channels;
-        let sample_rate = config.sample_rate.0;
 
         let (context, buffer_indices) = self.create_input_context(device_id, channels as usize)?;
 
-        info!(
-            "Starting input stream on {}: {} channels @ {}Hz, buffers {:?}",
-            device_id, channels, sample_rate, buffer_indices
-        );
+        // Try to build stream with default config, fall back to other sample rates if it fails
+        // This is needed for ASIO devices which may be configured for a different sample rate
+        let sample_rates_to_try = [
+            config.sample_rate.0,      // Default first
+            48000,                     // Common studio rate
+            44100,                     // CD quality
+            96000,                     // High-res
+            88200,                     // High-res alternative
+        ];
 
-        let stream = Self::build_input_stream(&device, &config, Arc::clone(&context))?;
+        let mut last_error = None;
+        let mut stream_result: Option<Stream> = None;
+        let mut actual_sample_rate = config.sample_rate.0;
+
+        for rate in sample_rates_to_try {
+            config.sample_rate = cpal::SampleRate(rate);
+            info!(
+                "Trying input stream on {}: {} channels @ {}Hz, buffers {:?}",
+                device_id, channels, rate, buffer_indices
+            );
+
+            match Self::build_input_stream(&device, &config, Arc::clone(&context)) {
+                Ok(stream) => {
+                    actual_sample_rate = rate;
+                    stream_result = Some(stream);
+                    break;
+                }
+                Err(e) => {
+                    debug!("Failed to build input stream at {}Hz: {e}", rate);
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        let stream = stream_result.ok_or_else(|| {
+            last_error.unwrap_or_else(|| anyhow!("Failed to build input stream at any sample rate"))
+        })?;
         stream
             .play()
             .map_err(|e| anyhow!("Failed to start input stream: {e}"))?;
@@ -606,7 +636,7 @@ impl AudioProcessor {
             stream_id,
             device_id,
             StreamConfig {
-                sample_rate,
+                sample_rate: actual_sample_rate,
                 buffer_size: 256, // Default buffer size
                 channels,
             },
@@ -626,11 +656,14 @@ impl AudioProcessor {
                 stream: SyncStream(stream),
                 device_id: device_id.to_string(),
                 channels,
-                sample_rate,
+                sample_rate: actual_sample_rate,
             },
         );
 
-        info!("Input stream started on {device_id}");
+        info!(
+            "Input stream started on {device_id} at {}Hz",
+            actual_sample_rate
+        );
         Ok(())
     }
 
@@ -718,22 +751,52 @@ impl AudioProcessor {
             ));
         }
 
-        let (device, config) =
+        let (device, mut config) =
             Self::find_cpal_device(device_id, DeviceDirection::Output).map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
         let channels = config.channels;
-        let sample_rate = config.sample_rate.0;
 
         let (context, dest_indices) = self.create_output_context(device_id, channels as usize);
 
-        info!(
-            "Starting output stream on {}: {} channels @ {}Hz, destinations {:?}",
-            device_id, channels, sample_rate, dest_indices
-        );
+        // Try to build stream with default config, fall back to other sample rates if it fails
+        // This is needed for ASIO devices which may be configured for a different sample rate
+        let sample_rates_to_try = [
+            config.sample_rate.0,      // Default first
+            48000,                     // Common studio rate
+            44100,                     // CD quality
+            96000,                     // High-res
+            88200,                     // High-res alternative
+        ];
 
-        let stream = Self::build_output_stream(&device, &config, Arc::clone(&context))?;
+        let mut last_error = None;
+        let mut stream_result: Option<Stream> = None;
+        let mut actual_sample_rate = config.sample_rate.0;
+
+        for rate in sample_rates_to_try {
+            config.sample_rate = cpal::SampleRate(rate);
+            info!(
+                "Trying output stream on {}: {} channels @ {}Hz, destinations {:?}",
+                device_id, channels, rate, dest_indices
+            );
+
+            match Self::build_output_stream(&device, &config, Arc::clone(&context)) {
+                Ok(stream) => {
+                    actual_sample_rate = rate;
+                    stream_result = Some(stream);
+                    break;
+                }
+                Err(e) => {
+                    debug!("Failed to build output stream at {}Hz: {e}", rate);
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        let stream = stream_result.ok_or_else(|| {
+            last_error.unwrap_or_else(|| anyhow!("Failed to build output stream at any sample rate"))
+        })?;
         stream
             .play()
             .map_err(|e| anyhow!("Failed to start output stream: {e}"))?;
@@ -748,7 +811,7 @@ impl AudioProcessor {
             stream_id,
             device_id,
             StreamConfig {
-                sample_rate,
+                sample_rate: actual_sample_rate,
                 buffer_size: 256, // Default buffer size
                 channels,
             },
@@ -768,11 +831,11 @@ impl AudioProcessor {
                 stream: SyncStream(stream),
                 device_id: device_id.to_string(),
                 channels,
-                sample_rate,
+                sample_rate: actual_sample_rate,
             },
         );
 
-        info!("Output stream started on {device_id}");
+        info!("Output stream started on {device_id} at {actual_sample_rate}Hz");
         Ok(())
     }
 
