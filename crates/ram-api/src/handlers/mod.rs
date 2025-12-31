@@ -69,12 +69,14 @@ pub async fn list_devices(
             .get_remote_node(&node_id)
             .ok_or_else(|| crate::Error::NotFound(format!("node: {node_id}")))?;
 
-        let addr = node
-            .addresses
-            .first()
-            .ok_or_else(|| crate::Error::ServiceUnavailable(format!("node {node_id} has no address")))?;
+        let addr = node.addresses.first().ok_or_else(|| {
+            crate::Error::ServiceUnavailable(format!("node {node_id} has no address"))
+        })?;
 
-        let url = format!("http://{}:{}/api/v1/nodes/local/devices", addr, node.api_port);
+        let url = format!(
+            "http://{}:{}/api/v1/nodes/local/devices",
+            addr, node.api_port
+        );
 
         let resp = state.http_client().get(&url).send().await.map_err(|e| {
             tracing::warn!("Failed to fetch devices from {}: {}", node_id, e);
@@ -106,10 +108,9 @@ pub async fn get_device(
             .get_remote_node(&node_id)
             .ok_or_else(|| crate::Error::NotFound(format!("node: {node_id}")))?;
 
-        let addr = node
-            .addresses
-            .first()
-            .ok_or_else(|| crate::Error::ServiceUnavailable(format!("node {node_id} has no address")))?;
+        let addr = node.addresses.first().ok_or_else(|| {
+            crate::Error::ServiceUnavailable(format!("node {node_id} has no address"))
+        })?;
 
         let url = format!(
             "http://{}:{}/api/v1/nodes/local/devices/{}",
@@ -123,7 +124,9 @@ pub async fn get_device(
         })?;
 
         if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(crate::Error::NotFound(format!("device: {node_id}/{device_id}")));
+            return Err(crate::Error::NotFound(format!(
+                "device: {node_id}/{device_id}"
+            )));
         }
 
         let device = resp.json::<DeviceInfo>().await.map_err(|e| {
@@ -274,7 +277,12 @@ pub async fn update_device(
     }
 
     state
-        .update_device(&device_id, req.display_name, req.sample_rate, req.buffer_size)
+        .update_device(
+            &device_id,
+            req.display_name,
+            req.sample_rate,
+            req.buffer_size,
+        )
         .map(Json)
         .map_err(crate::Error::BadRequest)
 }

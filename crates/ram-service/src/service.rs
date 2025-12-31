@@ -278,7 +278,9 @@ impl AudioMatrixService {
                 }
             } else {
                 match device.attachment_state {
-                    ram_core::AttachmentState::Available => ram_api::models::DeviceStatus::Available,
+                    ram_core::AttachmentState::Available => {
+                        ram_api::models::DeviceStatus::Available
+                    },
                     ram_core::AttachmentState::Attached => ram_api::models::DeviceStatus::Attached,
                     ram_core::AttachmentState::Active => ram_api::models::DeviceStatus::Active,
                     ram_core::AttachmentState::Detached => ram_api::models::DeviceStatus::Detached,
@@ -304,8 +306,14 @@ impl AudioMatrixService {
 
             debug!(
                 "Registering device: {} ({:?}) - {} in / {} out, attached={}",
-                device.name, device_type, input_channels, output_channels,
-                matches!(status, ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active)
+                device.name,
+                device_type,
+                input_channels,
+                output_channels,
+                matches!(
+                    status,
+                    ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active
+                )
             );
             self.app_state.register_device(ram_api::models::DeviceInfo {
                 id: device.id.clone(),
@@ -602,10 +610,7 @@ impl AudioMatrixService {
                 info!("Restoring device: {} ({})", device.name, device_id);
 
                 // Start input stream for devices with input capability
-                if matches!(
-                    device.device_type,
-                    DeviceType::Input | DeviceType::Duplex
-                ) {
+                if matches!(device.device_type, DeviceType::Input | DeviceType::Duplex) {
                     match self.audio_processor.start_input_stream(&device_id) {
                         Ok(()) => info!("Input stream restored for: {}", device_id),
                         Err(e) => warn!("Failed to restore input stream for {}: {e}", device_id),
@@ -613,22 +618,19 @@ impl AudioMatrixService {
                 }
 
                 // Start output stream for devices with output capability
-                if matches!(
-                    device.device_type,
-                    DeviceType::Output | DeviceType::Duplex
-                ) {
+                if matches!(device.device_type, DeviceType::Output | DeviceType::Duplex) {
                     match self.audio_processor.start_output_stream(&device_id) {
                         Ok(()) => info!("Output stream restored for: {}", device_id),
                         Err(e) => warn!("Failed to restore output stream for {}: {e}", device_id),
                     }
                 }
             } else {
-                warn!(
-                    "Previously attached device no longer exists: {}",
-                    device_id
-                );
+                warn!("Previously attached device no longer exists: {}", device_id);
                 // Remove from persisted state since device is gone
-                if let Err(e) = self.device_state_manager.set_device_attached(&device_id, false) {
+                if let Err(e) = self
+                    .device_state_manager
+                    .set_device_attached(&device_id, false)
+                {
                     warn!("Failed to update persisted state: {e}");
                 }
             }

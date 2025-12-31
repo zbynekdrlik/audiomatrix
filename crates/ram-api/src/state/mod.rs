@@ -329,7 +329,13 @@ impl AppState {
         sample_rate: Option<u32>,
         buffer_size: Option<u32>,
     ) -> Result<DeviceInfo, String> {
-        devices::update_device(&self.inner.devices, id, display_name, sample_rate, buffer_size)
+        devices::update_device(
+            &self.inner.devices,
+            id,
+            display_name,
+            sample_rate,
+            buffer_size,
+        )
     }
 
     /// Gets channel information for a device.

@@ -92,16 +92,16 @@ impl DeviceStateManager {
                 Ok(state) => {
                     info!("Loaded device state from {}", path.display());
                     Some(state)
-                }
+                },
                 Err(e) => {
                     error!("Failed to parse device state file: {}", e);
                     None
-                }
+                },
             },
             Err(e) => {
                 error!("Failed to read device state file: {}", e);
                 None
-            }
+            },
         }
     }
 
@@ -280,8 +280,10 @@ impl DeviceStateManager {
                     }
                 }
             } else {
-                let filtered: HashMap<u16, String> =
-                    labels_map.into_iter().filter(|(_, v)| !v.is_empty()).collect();
+                let filtered: HashMap<u16, String> = labels_map
+                    .into_iter()
+                    .filter(|(_, v)| !v.is_empty())
+                    .collect();
                 if !filtered.is_empty() {
                     state.channel_labels.push(PersistedChannelLabels {
                         device_id: device_id.to_string(),

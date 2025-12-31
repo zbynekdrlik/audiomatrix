@@ -57,7 +57,9 @@ pub fn RouteControl(
         let dest_device = dest_device.clone();
         move |ev: web_sys::Event| {
             let Some(target) = ev.target() else { return };
-            let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() else { return };
+            let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() else {
+                return;
+            };
             let new_volume: f32 = input.value().parse().unwrap_or(1.0);
             volume.set(new_volume);
 
