@@ -136,7 +136,7 @@ impl DeviceStateManager {
             .devices
             .iter()
             .find(|d| d.id == device_id)
-            .map_or(false, |d| d.attached)
+            .is_some_and(|d| d.attached)
     }
 
     /// Gets the persisted state for a device.
