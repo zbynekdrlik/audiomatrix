@@ -575,12 +575,19 @@ impl AudioProcessor {
             ));
         }
 
-        let (device, mut config) =
+        let (device, extended_config) =
             find_cpal_device(device_id, DeviceDirection::Input).map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
+        let mut config = extended_config.config;
+        let sample_format = extended_config.sample_format;
         let channels = config.channels;
+
+        info!(
+            "Device {device_id}: sample format {:?}",
+            sample_format
+        );
 
         let (context, buffer_indices) = self.create_input_context(device_id, channels as usize)?;
 
@@ -601,11 +608,11 @@ impl AudioProcessor {
         for rate in sample_rates_to_try {
             config.sample_rate = cpal::SampleRate(rate);
             info!(
-                "Trying input stream on {}: {} channels @ {}Hz, buffers {:?}",
-                device_id, channels, rate, buffer_indices
+                "Trying input stream on {}: {} channels @ {}Hz, format {:?}, buffers {:?}",
+                device_id, channels, rate, sample_format, buffer_indices
             );
 
-            match build_input_stream(&device, &config, Arc::clone(&context)) {
+            match build_input_stream(&device, &config, sample_format, Arc::clone(&context)) {
                 Ok(stream) => {
                     actual_sample_rate = rate;
                     stream_result = Some(stream);
@@ -750,12 +757,19 @@ impl AudioProcessor {
             ));
         }
 
-        let (device, mut config) =
+        let (device, extended_config) =
             find_cpal_device(device_id, DeviceDirection::Output).map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
+        let mut config = extended_config.config;
+        let sample_format = extended_config.sample_format;
         let channels = config.channels;
+
+        info!(
+            "Device {device_id}: sample format {:?}",
+            sample_format
+        );
 
         let (context, dest_indices) = self.create_output_context(device_id, channels as usize);
 
@@ -776,11 +790,11 @@ impl AudioProcessor {
         for rate in sample_rates_to_try {
             config.sample_rate = cpal::SampleRate(rate);
             info!(
-                "Trying output stream on {}: {} channels @ {}Hz, destinations {:?}",
-                device_id, channels, rate, dest_indices
+                "Trying output stream on {}: {} channels @ {}Hz, format {:?}, destinations {:?}",
+                device_id, channels, rate, sample_format, dest_indices
             );
 
-            match build_output_stream(&device, &config, Arc::clone(&context)) {
+            match build_output_stream(&device, &config, sample_format, Arc::clone(&context)) {
                 Ok(stream) => {
                     actual_sample_rate = rate;
                     stream_result = Some(stream);

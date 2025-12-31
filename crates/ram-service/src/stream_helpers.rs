@@ -4,9 +4,9 @@
 
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::Stream;
+use cpal::{Sample, SampleFormat, Stream};
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use ram_core::callbacks::{
     create_input_callback, create_output_callback, InputCallbackContext, OutputCallbackContext,
@@ -14,6 +14,15 @@ use ram_core::callbacks::{
 
 /// Type alias for cpal stream config.
 pub type CpalStreamConfig = cpal::StreamConfig;
+
+/// Extended stream config that includes sample format.
+#[derive(Debug, Clone)]
+pub struct ExtendedStreamConfig {
+    /// Base cpal stream config.
+    pub config: CpalStreamConfig,
+    /// Sample format required by the device.
+    pub sample_format: SampleFormat,
+}
 
 /// Direction for device lookup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +44,7 @@ pub enum DeviceDirection {
 ///
 /// # Returns
 ///
-/// A tuple of the cpal device and its stream configuration.
+/// A tuple of the cpal device and its extended stream configuration (including sample format).
 ///
 /// # Errors
 ///
@@ -43,7 +52,7 @@ pub enum DeviceDirection {
 pub fn find_cpal_device(
     device_id: &str,
     direction: DeviceDirection,
-) -> Result<(cpal::Device, CpalStreamConfig)> {
+) -> Result<(cpal::Device, ExtendedStreamConfig)> {
     // Handle virtual devices - they don't use cpal
     if device_id.starts_with("virtual_") {
         return Err(anyhow!(
@@ -160,13 +169,24 @@ pub fn find_cpal_device(
     }
     .map_err(|e| anyhow!("Failed to get config for {device_name}: {e}"))?;
 
+    let sample_format = config.sample_format();
+    info!(
+        "Device {device_name}: {} channels, {}Hz, format {:?}",
+        config.channels(),
+        config.sample_rate().0,
+        sample_format
+    );
+
     let stream_config = CpalStreamConfig {
         channels: config.channels(),
         sample_rate: config.sample_rate(),
         buffer_size: cpal::BufferSize::Default,
     };
 
-    Ok((device, stream_config))
+    Ok((device, ExtendedStreamConfig {
+        config: stream_config,
+        sample_format,
+    }))
 }
 
 /// Builds an input stream for the given device and configuration.
@@ -175,6 +195,7 @@ pub fn find_cpal_device(
 ///
 /// * `device` - The cpal device to create the stream on
 /// * `config` - Stream configuration (sample rate, channels, buffer size)
+/// * `sample_format` - The sample format required by the device
 /// * `context` - The input callback context for processing audio
 ///
 /// # Returns
@@ -187,20 +208,56 @@ pub fn find_cpal_device(
 pub fn build_input_stream(
     device: &cpal::Device,
     config: &CpalStreamConfig,
+    sample_format: SampleFormat,
     context: Arc<InputCallbackContext>,
 ) -> Result<Stream> {
     let err_fn = |err| error!("Input stream error: {err}");
 
-    let mut inner_callback = create_input_callback(context);
-    let callback = move |data: &[f32], _info: &cpal::InputCallbackInfo| {
-        inner_callback(data);
-    };
-
-    let stream = device
-        .build_input_stream(config, callback, err_fn, None)
-        .map_err(|e| anyhow!("Failed to build input stream: {e}"))?;
-
-    Ok(stream)
+    match sample_format {
+        SampleFormat::F32 => {
+            let mut inner_callback = create_input_callback(context);
+            let callback = move |data: &[f32], _info: &cpal::InputCallbackInfo| {
+                inner_callback(data);
+            };
+            device
+                .build_input_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build F32 input stream: {e}"))
+        }
+        SampleFormat::I32 => {
+            let mut inner_callback = create_input_callback(context);
+            let callback = move |data: &[i32], _info: &cpal::InputCallbackInfo| {
+                // Convert i32 samples to f32
+                let f32_data: Vec<f32> = data.iter().map(|&s| s.to_float_sample()).collect();
+                inner_callback(&f32_data);
+            };
+            device
+                .build_input_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build I32 input stream: {e}"))
+        }
+        SampleFormat::I16 => {
+            let mut inner_callback = create_input_callback(context);
+            let callback = move |data: &[i16], _info: &cpal::InputCallbackInfo| {
+                // Convert i16 samples to f32
+                let f32_data: Vec<f32> = data.iter().map(|&s| s.to_float_sample()).collect();
+                inner_callback(&f32_data);
+            };
+            device
+                .build_input_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build I16 input stream: {e}"))
+        }
+        SampleFormat::U8 => {
+            let mut inner_callback = create_input_callback(context);
+            let callback = move |data: &[u8], _info: &cpal::InputCallbackInfo| {
+                // Convert u8 samples to f32 (centered at 128)
+                let f32_data: Vec<f32> = data.iter().map(|&s| (s as f32 - 128.0) / 128.0).collect();
+                inner_callback(&f32_data);
+            };
+            device
+                .build_input_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build U8 input stream: {e}"))
+        }
+        format => Err(anyhow!("Unsupported sample format: {:?}", format)),
+    }
 }
 
 /// Builds an output stream for the given device and configuration.
@@ -209,6 +266,7 @@ pub fn build_input_stream(
 ///
 /// * `device` - The cpal device to create the stream on
 /// * `config` - Stream configuration (sample rate, channels, buffer size)
+/// * `sample_format` - The sample format required by the device
 /// * `context` - The output callback context for processing audio
 ///
 /// # Returns
@@ -221,18 +279,63 @@ pub fn build_input_stream(
 pub fn build_output_stream(
     device: &cpal::Device,
     config: &CpalStreamConfig,
+    sample_format: SampleFormat,
     context: Arc<OutputCallbackContext>,
 ) -> Result<Stream> {
     let err_fn = |err| error!("Output stream error: {err}");
 
-    let mut inner_callback = create_output_callback(context);
-    let callback = move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-        inner_callback(data);
-    };
-
-    let stream = device
-        .build_output_stream(config, callback, err_fn, None)
-        .map_err(|e| anyhow!("Failed to build output stream: {e}"))?;
-
-    Ok(stream)
+    match sample_format {
+        SampleFormat::F32 => {
+            let mut inner_callback = create_output_callback(context);
+            let callback = move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+                inner_callback(data);
+            };
+            device
+                .build_output_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build F32 output stream: {e}"))
+        }
+        SampleFormat::I32 => {
+            let mut inner_callback = create_output_callback(context);
+            let callback = move |data: &mut [i32], _info: &cpal::OutputCallbackInfo| {
+                // Get f32 samples and convert to i32
+                let mut f32_data: Vec<f32> = vec![0.0; data.len()];
+                inner_callback(&mut f32_data);
+                for (out, &sample) in data.iter_mut().zip(f32_data.iter()) {
+                    *out = i32::from_sample(sample);
+                }
+            };
+            device
+                .build_output_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build I32 output stream: {e}"))
+        }
+        SampleFormat::I16 => {
+            let mut inner_callback = create_output_callback(context);
+            let callback = move |data: &mut [i16], _info: &cpal::OutputCallbackInfo| {
+                // Get f32 samples and convert to i16
+                let mut f32_data: Vec<f32> = vec![0.0; data.len()];
+                inner_callback(&mut f32_data);
+                for (out, &sample) in data.iter_mut().zip(f32_data.iter()) {
+                    *out = i16::from_sample(sample);
+                }
+            };
+            device
+                .build_output_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build I16 output stream: {e}"))
+        }
+        SampleFormat::U8 => {
+            let mut inner_callback = create_output_callback(context);
+            let callback = move |data: &mut [u8], _info: &cpal::OutputCallbackInfo| {
+                // Get f32 samples and convert to u8 (centered at 128)
+                let mut f32_data: Vec<f32> = vec![0.0; data.len()];
+                inner_callback(&mut f32_data);
+                for (out, &sample) in data.iter_mut().zip(f32_data.iter()) {
+                    *out = ((sample * 128.0) + 128.0).clamp(0.0, 255.0) as u8;
+                }
+            };
+            device
+                .build_output_stream(config, callback, err_fn, None)
+                .map_err(|e| anyhow!("Failed to build U8 output stream: {e}"))
+        }
+        format => Err(anyhow!("Unsupported sample format: {:?}", format)),
+    }
 }
