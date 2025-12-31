@@ -802,6 +802,8 @@ pub async fn get_route_latency(
 
 // --- Debug Handlers ---
 
+use ram_core::route_controller::{AudioDiagnostics, DeviceDiagnostic};
+
 /// Debug information response.
 #[derive(Debug, serde::Serialize)]
 pub struct DebugInfo {
@@ -811,6 +813,10 @@ pub struct DebugInfo {
     pub route_controller_available: bool,
     /// Attached devices.
     pub attached_devices: Vec<String>,
+    /// Audio system diagnostics (cpal devices).
+    pub audio_diagnostics: Option<AudioDiagnostics>,
+    /// Device-specific diagnostics for attached devices.
+    pub device_diagnostics: Vec<DeviceDiagnostic>,
 }
 
 /// Stream registry debug info.
@@ -839,6 +845,19 @@ pub async fn get_debug_info(State(state): State<AppState>) -> Json<DebugInfo> {
         .map(|d| d.id)
         .collect();
 
+    // Get audio diagnostics if route controller is available
+    let (audio_diagnostics, device_diagnostics) = if let Some(controller) = state.route_controller()
+    {
+        let diags = controller.audio_diagnostics();
+        let device_diags: Vec<DeviceDiagnostic> = attached_devices
+            .iter()
+            .map(|id| controller.diagnose_device(id))
+            .collect();
+        (Some(diags), device_diags)
+    } else {
+        (None, Vec::new())
+    };
+
     Json(DebugInfo {
         stream_registry: StreamRegistryDebug {
             input_count,
@@ -846,6 +865,8 @@ pub async fn get_debug_info(State(state): State<AppState>) -> Json<DebugInfo> {
         },
         route_controller_available,
         attached_devices,
+        audio_diagnostics,
+        device_diagnostics,
     })
 }
 

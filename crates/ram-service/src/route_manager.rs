@@ -9,13 +9,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
+use cpal::traits::{DeviceTrait, HostTrait};
 use parking_lot::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use ram_core::latency::{LatencyCalculator, LatencyReport};
 use ram_core::metering::MeterLevels;
 use ram_core::ring_buffer_pool::RingBufferPool;
-use ram_core::route_controller::{RouteController, RouteError, RouteResult};
+use ram_core::route_controller::{
+    AudioDiagnostics, CpalDeviceInfo, DeviceDiagnostic, RouteController, RouteError, RouteResult,
+};
 use ram_core::routing_snapshot::DestinationSnapshot;
 use ram_core::routing_table::RoutingTable;
 use ram_core::stream_registry::StreamRegistry;
@@ -623,6 +626,185 @@ impl RouteController for RouteManager {
             contexts.all_output_meters()
         } else {
             Vec::new()
+        }
+    }
+
+    fn audio_diagnostics(&self) -> AudioDiagnostics {
+        let mut hosts = Vec::new();
+        let mut input_devices = Vec::new();
+        let mut output_devices = Vec::new();
+
+        for host_id in cpal::available_hosts() {
+            let host_name = host_id.name().to_string();
+            hosts.push(host_name.clone());
+
+            let Ok(host) = cpal::host_from_id(host_id) else {
+                warn!("Failed to get host: {}", host_name);
+                continue;
+            };
+
+            // Enumerate input devices
+            if let Ok(devices) = host.input_devices() {
+                for device in devices {
+                    let name = device.name().unwrap_or_else(|_| "unknown".to_string());
+                    let has_output = device.default_output_config().is_ok();
+                    input_devices.push(CpalDeviceInfo {
+                        host: host_name.clone(),
+                        name,
+                        has_input: true,
+                        has_output,
+                    });
+                }
+            }
+
+            // Enumerate output devices
+            if let Ok(devices) = host.output_devices() {
+                for device in devices {
+                    let name = device.name().unwrap_or_else(|_| "unknown".to_string());
+                    let has_input = device.default_input_config().is_ok();
+                    // Only add if not already in input list (avoid duplicates for duplex)
+                    let already_listed = input_devices
+                        .iter()
+                        .any(|d| d.host == host_name && d.name == name);
+                    if !already_listed {
+                        output_devices.push(CpalDeviceInfo {
+                            host: host_name.clone(),
+                            name,
+                            has_input,
+                            has_output: true,
+                        });
+                    }
+                }
+            }
+        }
+
+        AudioDiagnostics {
+            hosts,
+            input_devices,
+            output_devices,
+        }
+    }
+
+    fn diagnose_device(&self, device_id: &str) -> DeviceDiagnostic {
+        // Parse device ID: HOST:TYPE:NAME
+        let parts: Vec<&str> = device_id.splitn(3, ':').collect();
+        if parts.len() < 3 {
+            return DeviceDiagnostic {
+                device_id: device_id.to_string(),
+                found: false,
+                input_stream_result: None,
+                output_stream_result: None,
+                error: Some(format!("Invalid device ID format: {device_id}")),
+            };
+        }
+
+        let host_name = parts[0];
+        // parts[1] is device_type (input/output/duplex) - not needed for diagnostics
+        let device_name = parts[2];
+
+        // Try to find the host
+        let host_id = cpal::available_hosts()
+            .into_iter()
+            .find(|h| h.name() == host_name);
+
+        let Some(host_id) = host_id else {
+            return DeviceDiagnostic {
+                device_id: device_id.to_string(),
+                found: false,
+                input_stream_result: None,
+                output_stream_result: None,
+                error: Some(format!(
+                    "Host not found: {host_name}. Available: {:?}",
+                    cpal::available_hosts()
+                        .iter()
+                        .map(|h| h.name())
+                        .collect::<Vec<_>>()
+                )),
+            };
+        };
+
+        let Ok(host) = cpal::host_from_id(host_id) else {
+            return DeviceDiagnostic {
+                device_id: device_id.to_string(),
+                found: false,
+                input_stream_result: None,
+                output_stream_result: None,
+                error: Some(format!("Failed to get host: {host_name}")),
+            };
+        };
+
+        // Search for device in input list
+        let input_device = host.input_devices().ok().and_then(|mut devices| {
+            devices.find(|d| d.name().ok().as_deref() == Some(device_name))
+        });
+
+        // Search for device in output list
+        let output_device = host.output_devices().ok().and_then(|mut devices| {
+            devices.find(|d| d.name().ok().as_deref() == Some(device_name))
+        });
+
+        let found = input_device.is_some() || output_device.is_some();
+
+        if !found {
+            // List all available device names for debugging
+            let mut available = Vec::new();
+            if let Ok(devices) = host.input_devices() {
+                for d in devices {
+                    if let Ok(name) = d.name() {
+                        available.push(format!("input:{name}"));
+                    }
+                }
+            }
+            if let Ok(devices) = host.output_devices() {
+                for d in devices {
+                    if let Ok(name) = d.name() {
+                        available.push(format!("output:{name}"));
+                    }
+                }
+            }
+
+            return DeviceDiagnostic {
+                device_id: device_id.to_string(),
+                found: false,
+                input_stream_result: None,
+                output_stream_result: None,
+                error: Some(format!(
+                    "Device '{}' not found in host {}. Available devices: {:?}",
+                    device_name, host_name, available
+                )),
+            };
+        }
+
+        // Check input config
+        let input_result = input_device
+            .as_ref()
+            .or(output_device.as_ref())
+            .and_then(|d| {
+                d.default_input_config()
+                    .map(|c| format!("OK: {} channels @ {}Hz", c.channels(), c.sample_rate().0))
+                    .map_err(|e| format!("Error: {e}"))
+                    .ok()
+                    .or_else(|| Some("No input config available".to_string()))
+            });
+
+        // Check output config
+        let output_result = output_device
+            .as_ref()
+            .or(input_device.as_ref())
+            .and_then(|d| {
+                d.default_output_config()
+                    .map(|c| format!("OK: {} channels @ {}Hz", c.channels(), c.sample_rate().0))
+                    .map_err(|e| format!("Error: {e}"))
+                    .ok()
+                    .or_else(|| Some("No output config available".to_string()))
+            });
+
+        DeviceDiagnostic {
+            device_id: device_id.to_string(),
+            found,
+            input_stream_result: input_result,
+            output_stream_result: output_result,
+            error: None,
         }
     }
 }

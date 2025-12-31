@@ -181,6 +181,55 @@ pub trait RouteController: Send + Sync {
     /// Returns a vector of (device_id, channel_levels) pairs.
     /// The levels are reset after reading.
     fn all_output_meters(&self) -> Vec<(String, Vec<MeterLevels>)>;
+
+    /// Returns diagnostic information about available audio devices.
+    ///
+    /// This is useful for debugging device detection issues.
+    fn audio_diagnostics(&self) -> AudioDiagnostics;
+
+    /// Attempts to diagnose why a device stream cannot be started.
+    ///
+    /// Returns detailed diagnostic information about what went wrong.
+    fn diagnose_device(&self, device_id: &str) -> DeviceDiagnostic;
+}
+
+/// Audio system diagnostics.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AudioDiagnostics {
+    /// Available audio hosts (e.g., ASIO, WASAPI).
+    pub hosts: Vec<String>,
+    /// Input devices visible to cpal.
+    pub input_devices: Vec<CpalDeviceInfo>,
+    /// Output devices visible to cpal.
+    pub output_devices: Vec<CpalDeviceInfo>,
+}
+
+/// Information about a cpal device.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CpalDeviceInfo {
+    /// Host name (e.g., "ASIO", "WASAPI").
+    pub host: String,
+    /// Device name as reported by cpal.
+    pub name: String,
+    /// Whether this device supports input.
+    pub has_input: bool,
+    /// Whether this device supports output.
+    pub has_output: bool,
+}
+
+/// Diagnostic information for a specific device.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeviceDiagnostic {
+    /// The device ID being diagnosed.
+    pub device_id: String,
+    /// Whether the device was found.
+    pub found: bool,
+    /// Whether an input stream could be started.
+    pub input_stream_result: Option<String>,
+    /// Whether an output stream could be started.
+    pub output_stream_result: Option<String>,
+    /// Detailed error message if any operation failed.
+    pub error: Option<String>,
 }
 
 #[cfg(test)]
@@ -295,6 +344,24 @@ mod tests {
 
         fn all_output_meters(&self) -> Vec<(String, Vec<MeterLevels>)> {
             Vec::new()
+        }
+
+        fn audio_diagnostics(&self) -> AudioDiagnostics {
+            AudioDiagnostics {
+                hosts: vec!["MockHost".to_string()],
+                input_devices: vec![],
+                output_devices: vec![],
+            }
+        }
+
+        fn diagnose_device(&self, device_id: &str) -> DeviceDiagnostic {
+            DeviceDiagnostic {
+                device_id: device_id.to_string(),
+                found: false,
+                input_stream_result: None,
+                output_stream_result: None,
+                error: Some("Mock controller - no real devices".to_string()),
+            }
         }
     }
 
