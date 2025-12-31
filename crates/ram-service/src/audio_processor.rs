@@ -15,7 +15,7 @@ use cpal::{Stream, StreamConfig as CpalStreamConfig};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use ram_core::active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig};
 use ram_core::callbacks::{
@@ -568,13 +568,19 @@ impl AudioProcessor {
 
     /// Starts an input stream for the specified device.
     pub fn start_input_stream(&self, device_id: &str) -> Result<()> {
+        info!("start_input_stream called for device: {device_id}");
+
         if self.input_streams.read().contains_key(device_id) {
             return Err(anyhow!(
                 "Input stream already exists for device: {device_id}"
             ));
         }
 
-        let (device, config) = Self::find_cpal_device(device_id, DeviceDirection::Input)?;
+        let (device, config) =
+            Self::find_cpal_device(device_id, DeviceDirection::Input).map_err(|e| {
+                warn!("find_cpal_device failed for {device_id}: {e}");
+                e
+            })?;
         let channels = config.channels;
         let sample_rate = config.sample_rate.0;
 
@@ -609,6 +615,10 @@ impl AudioProcessor {
         ));
         active_stream.set_running(true);
         self.stream_registry().register_input(active_stream);
+        info!(
+            "Registered input stream in registry, count: {}",
+            self.stream_registry().input_count()
+        );
 
         self.input_streams.write().insert(
             device_id.to_string(),
@@ -700,13 +710,19 @@ impl AudioProcessor {
 
     /// Starts an output stream for the specified device.
     pub fn start_output_stream(&self, device_id: &str) -> Result<()> {
+        info!("start_output_stream called for device: {device_id}");
+
         if self.output_streams.read().contains_key(device_id) {
             return Err(anyhow!(
                 "Output stream already exists for device: {device_id}"
             ));
         }
 
-        let (device, config) = Self::find_cpal_device(device_id, DeviceDirection::Output)?;
+        let (device, config) =
+            Self::find_cpal_device(device_id, DeviceDirection::Output).map_err(|e| {
+                warn!("find_cpal_device failed for {device_id}: {e}");
+                e
+            })?;
         let channels = config.channels;
         let sample_rate = config.sample_rate.0;
 
@@ -741,6 +757,10 @@ impl AudioProcessor {
         ));
         active_stream.set_running(true);
         self.stream_registry().register_output(active_stream);
+        info!(
+            "Registered output stream in registry, count: {}",
+            self.stream_registry().output_count()
+        );
 
         self.output_streams.write().insert(
             device_id.to_string(),
@@ -922,14 +942,38 @@ impl AudioProcessor {
             },
         };
 
+        // Get the appropriate config based on direction
+        // For duplex devices (especially ASIO), we may need to try both configs
         let config = match direction {
-            DeviceDirection::Input => device
-                .default_input_config()
-                .map_err(|e| anyhow!("Failed to get input config: {e}"))?,
-            DeviceDirection::Output | DeviceDirection::Duplex => device
-                .default_output_config()
-                .map_err(|e| anyhow!("Failed to get output config: {e}"))?,
-        };
+            DeviceDirection::Input => {
+                // Try input config first, fall back to output for duplex ASIO devices
+                device.default_input_config().or_else(|e| {
+                    if is_duplex {
+                        tracing::debug!(
+                            "Input config failed for duplex device, trying output: {e}"
+                        );
+                        device.default_output_config()
+                    } else {
+                        Err(e)
+                    }
+                })
+            },
+            DeviceDirection::Output => {
+                // Try output config first, fall back to input for duplex devices
+                device.default_output_config().or_else(|e| {
+                    if is_duplex {
+                        tracing::debug!(
+                            "Output config failed for duplex device, trying input: {e}"
+                        );
+                        device.default_input_config()
+                    } else {
+                        Err(e)
+                    }
+                })
+            },
+            DeviceDirection::Duplex => device.default_output_config(),
+        }
+        .map_err(|e| anyhow!("Failed to get config for {device_name}: {e}"))?;
 
         let stream_config = CpalStreamConfig {
             channels: config.channels(),
