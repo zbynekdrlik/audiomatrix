@@ -55,6 +55,7 @@ mod config;
 mod device_state;
 mod route_manager;
 mod service;
+mod stream_helpers;
 #[cfg(windows)]
 mod tray;
 mod vban_manager;

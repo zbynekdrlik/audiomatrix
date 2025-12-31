@@ -10,18 +10,17 @@
 //! - Managing the audio processing lifecycle
 
 use anyhow::{anyhow, Result};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Stream, StreamConfig as CpalStreamConfig};
+use cpal::traits::StreamTrait;
+use cpal::Stream;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use ram_core::active_stream::{ActiveInputStream, ActiveOutputStream, StreamConfig};
-use ram_core::callbacks::{
-    create_input_callback, create_output_callback, InputCallbackContext, OutputCallbackContext,
-};
-use ram_core::device::DeviceDirection;
+use ram_core::callbacks::{InputCallbackContext, OutputCallbackContext};
+
+use crate::stream_helpers::{build_input_stream, build_output_stream, find_cpal_device, DeviceDirection};
 use ram_core::latency::LatencyCalculator;
 use ram_core::metering::MeterLevels;
 use ram_core::ring_buffer_pool::RingBufferPool;
@@ -577,7 +576,7 @@ impl AudioProcessor {
         }
 
         let (device, mut config) =
-            Self::find_cpal_device(device_id, DeviceDirection::Input).map_err(|e| {
+            find_cpal_device(device_id, DeviceDirection::Input).map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
@@ -606,7 +605,7 @@ impl AudioProcessor {
                 device_id, channels, rate, buffer_indices
             );
 
-            match Self::build_input_stream(&device, &config, Arc::clone(&context)) {
+            match build_input_stream(&device, &config, Arc::clone(&context)) {
                 Ok(stream) => {
                     actual_sample_rate = rate;
                     stream_result = Some(stream);
@@ -752,7 +751,7 @@ impl AudioProcessor {
         }
 
         let (device, mut config) =
-            Self::find_cpal_device(device_id, DeviceDirection::Output).map_err(|e| {
+            find_cpal_device(device_id, DeviceDirection::Output).map_err(|e| {
                 warn!("find_cpal_device failed for {device_id}: {e}");
                 e
             })?;
@@ -781,7 +780,7 @@ impl AudioProcessor {
                 device_id, channels, rate, dest_indices
             );
 
-            match Self::build_output_stream(&device, &config, Arc::clone(&context)) {
+            match build_output_stream(&device, &config, Arc::clone(&context)) {
                 Ok(stream) => {
                     actual_sample_rate = rate;
                     stream_result = Some(stream);
@@ -912,177 +911,6 @@ impl AudioProcessor {
     #[must_use]
     pub fn active_output_devices(&self) -> Vec<String> {
         self.output_streams.read().keys().cloned().collect()
-    }
-
-    // ========================================================================
-    // Private Helpers
-    // ========================================================================
-
-    fn find_cpal_device(
-        device_id: &str,
-        direction: DeviceDirection,
-    ) -> Result<(cpal::Device, CpalStreamConfig)> {
-        // Handle virtual devices - they don't use cpal
-        if device_id.starts_with("virtual_") {
-            return Err(anyhow!(
-                "Virtual devices don't use cpal streams: {device_id}"
-            ));
-        }
-
-        let parts: Vec<&str> = device_id.splitn(3, ':').collect();
-        if parts.len() < 3 {
-            return Err(anyhow!("Invalid device ID format: {device_id}"));
-        }
-        let host_name = parts[0];
-        let device_type = parts[1]; // "input", "output", or "duplex"
-        let device_name = parts[2];
-
-        let hosts = cpal::available_hosts();
-        let host_id = hosts
-            .iter()
-            .find(|h| h.name() == host_name)
-            .ok_or_else(|| anyhow!("Host not found: {host_name}"))?;
-
-        let host = cpal::host_from_id(*host_id)
-            .map_err(|e| anyhow!("Failed to get host {host_name}: {e}"))?;
-
-        // For duplex devices (like ASIO), we need to search in the appropriate list
-        // ASIO devices typically appear in output_devices() even when we want input
-        let is_duplex = device_type == "duplex";
-
-        let device = match direction {
-            DeviceDirection::Input => {
-                // First try input_devices
-                let input_device = host
-                    .input_devices()
-                    .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
-                    .find(|d| d.name().ok().as_deref() == Some(device_name));
-
-                if let Some(d) = input_device {
-                    d
-                } else if is_duplex {
-                    // For duplex devices, also check output_devices (ASIO uses this)
-                    host.output_devices()
-                        .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
-                        .find(|d| d.name().ok().as_deref() == Some(device_name))
-                        .ok_or_else(|| {
-                            anyhow!("Input device not found in input or output list: {device_name}")
-                        })?
-                } else {
-                    return Err(anyhow!("Input device not found: {device_name}"));
-                }
-            },
-            DeviceDirection::Output => {
-                // First try output_devices
-                let output_device = host
-                    .output_devices()
-                    .map_err(|e| anyhow!("Failed to enumerate output devices: {e}"))?
-                    .find(|d| d.name().ok().as_deref() == Some(device_name));
-
-                if let Some(d) = output_device {
-                    d
-                } else if is_duplex {
-                    // For duplex devices, also check input_devices
-                    host.input_devices()
-                        .map_err(|e| anyhow!("Failed to enumerate input devices: {e}"))?
-                        .find(|d| d.name().ok().as_deref() == Some(device_name))
-                        .ok_or_else(|| {
-                            anyhow!(
-                                "Output device not found in output or input list: {device_name}"
-                            )
-                        })?
-                } else {
-                    return Err(anyhow!("Output device not found: {device_name}"));
-                }
-            },
-            DeviceDirection::Duplex => {
-                // For duplex devices, we find in either input or output list
-                // (they should be the same physical device)
-                host.output_devices()
-                    .map_err(|e| anyhow!("Failed to enumerate devices: {e}"))?
-                    .find(|d| d.name().ok().as_deref() == Some(device_name))
-                    .ok_or_else(|| anyhow!("Duplex device not found: {device_name}"))?
-            },
-        };
-
-        // Get the appropriate config based on direction
-        // For duplex devices (especially ASIO), we may need to try both configs
-        let config = match direction {
-            DeviceDirection::Input => {
-                // Try input config first, fall back to output for duplex ASIO devices
-                device.default_input_config().or_else(|e| {
-                    if is_duplex {
-                        tracing::debug!(
-                            "Input config failed for duplex device, trying output: {e}"
-                        );
-                        device.default_output_config()
-                    } else {
-                        Err(e)
-                    }
-                })
-            },
-            DeviceDirection::Output => {
-                // Try output config first, fall back to input for duplex devices
-                device.default_output_config().or_else(|e| {
-                    if is_duplex {
-                        tracing::debug!(
-                            "Output config failed for duplex device, trying input: {e}"
-                        );
-                        device.default_input_config()
-                    } else {
-                        Err(e)
-                    }
-                })
-            },
-            DeviceDirection::Duplex => device.default_output_config(),
-        }
-        .map_err(|e| anyhow!("Failed to get config for {device_name}: {e}"))?;
-
-        let stream_config = CpalStreamConfig {
-            channels: config.channels(),
-            sample_rate: config.sample_rate(),
-            buffer_size: cpal::BufferSize::Default,
-        };
-
-        Ok((device, stream_config))
-    }
-
-    fn build_input_stream(
-        device: &cpal::Device,
-        config: &CpalStreamConfig,
-        context: Arc<InputCallbackContext>,
-    ) -> Result<Stream> {
-        let err_fn = |err| error!("Input stream error: {err}");
-
-        let mut inner_callback = create_input_callback(context);
-        let callback = move |data: &[f32], _info: &cpal::InputCallbackInfo| {
-            inner_callback(data);
-        };
-
-        let stream = device
-            .build_input_stream(config, callback, err_fn, None)
-            .map_err(|e| anyhow!("Failed to build input stream: {e}"))?;
-
-        Ok(stream)
-    }
-
-    fn build_output_stream(
-        device: &cpal::Device,
-        config: &CpalStreamConfig,
-        context: Arc<OutputCallbackContext>,
-    ) -> Result<Stream> {
-        let err_fn = |err| error!("Output stream error: {err}");
-
-        let mut inner_callback = create_output_callback(context);
-        let callback = move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-            inner_callback(data);
-        };
-
-        let stream = device
-            .build_output_stream(config, callback, err_fn, None)
-            .map_err(|e| anyhow!("Failed to build output stream: {e}"))?;
-
-        Ok(stream)
     }
 }
 
