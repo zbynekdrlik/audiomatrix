@@ -237,6 +237,49 @@ mod vban_protocol;
 3. **Audio path tests**: Must verify lock-free behavior
 4. **Benchmark regressions**: CI fails on performance degradation
 
+### E2E Tests - HIGHEST PRIORITY (STRICT ENFORCEMENT)
+
+**E2E tests are MANDATORY and must NEVER be skipped or ignored.**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  CRITICAL: E2E TESTS MUST RUN ON EVERY CI BUILD                        │
+│                                                                         │
+│  • stagebox1.lan is a self-hosted GitHub Actions runner                 │
+│  • E2E tests run with REAL ASIO devices and network infrastructure      │
+│  • Tests FAIL LOUDLY if infrastructure is unavailable                   │
+│  • NEVER use #[ignore] on E2E tests - this defeats the purpose          │
+│  • NEVER gracefully skip tests - they must FAIL to alert the team       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**E2E Test Enforcement Rules:**
+
+1. **NO #[ignore] attributes** - All E2E tests run on every build
+2. **NO graceful skipping** - If conditions aren't met, tests FAIL with clear error
+3. **Infrastructure errors = test failures** - Missing devices, nodes, or routes cause failures
+4. **Fix the environment, not the tests** - When E2E tests fail, fix the test infrastructure
+
+**Why This Matters:**
+- Previous approach: "Skip if no devices" → Silent regressions for months
+- Correct approach: "FAIL if no devices" → Team immediately knows to fix infrastructure
+
+**E2E Test Categories (all MANDATORY):**
+- Device attach/detach → Streams actually start/stop
+- Sample rate/buffer changes → Streams reconfigure correctly
+- Route CRUD → Audio paths established/removed
+- Cross-node routing → Network audio works
+- Persistence → Config survives restart
+- Metering → WebSocket provides real-time levels
+
+**Running E2E Tests:**
+```bash
+# On stagebox1 (self-hosted runner) - automatic via CI
+cargo test -p ram-service --test e2e_tests
+
+# All tests MUST pass - no ignored tests allowed
+```
+
 ### Test File Organization
 
 ```rust
@@ -270,10 +313,12 @@ async fn vban_sender_receiver_roundtrip() {
 }
 
 // tests/e2e/full_routing.rs - E2E test
+// NOTE: E2E tests run on stagebox1 self-hosted runner with real hardware
+// DO NOT use #[ignore] - tests must FAIL if infrastructure missing
 #[tokio::test]
-#[ignore] // Requires real audio hardware
 async fn route_audio_between_virtual_devices() {
-    // Full system test with virtual ASIO
+    // Full system test with real ASIO devices
+    // FAILS if devices not available - this is intentional
 }
 ```
 

@@ -13,7 +13,6 @@ pub struct HealthResponse {
 
 /// Test that the health endpoint returns correct status.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_health_returns_ok() {
     let client = TestClient::new();
 
@@ -32,7 +31,6 @@ async fn test_health_returns_ok() {
 
 /// Test that the health endpoint returns valid version format.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_health_version_format() {
     let client = TestClient::new();
 

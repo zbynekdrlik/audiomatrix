@@ -14,7 +14,6 @@ fn ws_url() -> String {
 
 /// Test WebSocket connection can be established.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_websocket_connection() {
     let connect_result = timeout(Duration::from_secs(5), connect_async(&ws_url())).await;
 
@@ -37,7 +36,6 @@ async fn test_websocket_connection() {
 
 /// Test WebSocket ping-pong keepalive.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_websocket_ping_pong() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -72,7 +70,6 @@ async fn test_websocket_ping_pong() {
 
 /// Test WebSocket handles invalid messages gracefully.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_websocket_invalid_message() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -102,7 +99,6 @@ async fn test_websocket_invalid_message() {
 
 /// Test WebSocket close is handled properly.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_websocket_close() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -115,7 +111,6 @@ async fn test_websocket_close() {
 
 /// Test multiple WebSocket connections can coexist.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_multiple_websocket_connections() {
     // Connect 3 clients
     let (ws1, _) = connect_async(&ws_url())

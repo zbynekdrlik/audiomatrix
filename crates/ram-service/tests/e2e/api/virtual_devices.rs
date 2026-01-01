@@ -7,7 +7,6 @@ use crate::e2e::TestClient;
 
 /// Test listing virtual devices.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_list_virtual_devices() {
     let client = TestClient::new();
 
@@ -35,7 +34,6 @@ async fn test_list_virtual_devices() {
 
 /// Test creating a virtual device.
 #[tokio::test]
-#[ignore = "Requires running server with ASIO support"]
 async fn test_create_virtual_device() {
     let client = TestClient::new();
 
@@ -71,7 +69,6 @@ async fn test_create_virtual_device() {
 
 /// Test creating virtual device with invalid sample rate returns 400.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_create_virtual_device_invalid_sample_rate() {
     let client = TestClient::new();
 
@@ -97,7 +94,6 @@ async fn test_create_virtual_device_invalid_sample_rate() {
 
 /// Test creating virtual device with invalid channel count returns 400.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_create_virtual_device_invalid_channels() {
     let client = TestClient::new();
 
@@ -124,7 +120,6 @@ async fn test_create_virtual_device_invalid_channels() {
 
 /// Test creating virtual device with too many channels returns 400.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_create_virtual_device_too_many_channels() {
     let client = TestClient::new();
 
@@ -150,7 +145,6 @@ async fn test_create_virtual_device_too_many_channels() {
 
 /// Test deleting a virtual device.
 #[tokio::test]
-#[ignore = "Requires running server with ASIO support"]
 async fn test_delete_virtual_device() {
     let client = TestClient::new();
 
@@ -201,7 +195,6 @@ async fn test_delete_virtual_device() {
 
 /// Test deleting nonexistent virtual device returns 404.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_delete_nonexistent_virtual_device() {
     let client = TestClient::new();
 

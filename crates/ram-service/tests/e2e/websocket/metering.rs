@@ -19,7 +19,6 @@ fn ws_url() -> String {
 
 /// Test subscribing to metering for a device.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_subscribe_metering() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -50,7 +49,6 @@ async fn test_subscribe_metering() {
 
 /// Test unsubscribing from metering.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_unsubscribe_metering() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -98,7 +96,6 @@ async fn test_unsubscribe_metering() {
 
 /// Test metering data format when device is active.
 #[tokio::test]
-#[ignore = "Requires running server with active audio device"]
 async fn test_metering_data_format() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -148,7 +145,6 @@ async fn test_metering_data_format() {
 
 /// Test subscribing to multiple devices.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_subscribe_multiple_devices() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -181,7 +177,6 @@ async fn test_subscribe_multiple_devices() {
 /// Note: Route change events are automatically broadcast to all connected clients
 /// when routes are created, updated, or deleted. No explicit subscription is needed.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_route_change_events() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 
@@ -208,7 +203,6 @@ async fn test_route_change_events() {
 /// Note: Device status events are automatically broadcast to all connected clients
 /// when devices are attached, detached, or their status changes. No explicit subscription needed.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_device_status_events() {
     let (ws_stream, _) = connect_async(&ws_url()).await.expect("Failed to connect");
 

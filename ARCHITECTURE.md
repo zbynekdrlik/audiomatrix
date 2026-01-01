@@ -27,7 +27,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.35
+> **Current Version:** 0.1.0-dev.36
 > **Last Updated:** 2026-01-01
 
 ### Backend Implementation Status

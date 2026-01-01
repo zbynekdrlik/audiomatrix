@@ -7,7 +7,6 @@ use crate::e2e::TestClient;
 
 /// Test listing generators for a device.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_list_generators() {
     let client = TestClient::new();
 
@@ -38,7 +37,6 @@ async fn test_list_generators() {
 
 /// Test starting a sine wave generator.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_start_sine_generator() {
     let client = TestClient::new();
 
@@ -85,7 +83,6 @@ async fn test_start_sine_generator() {
 
 /// Test starting pink noise generator.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_start_pink_noise_generator() {
     let client = TestClient::new();
 
@@ -130,7 +127,6 @@ async fn test_start_pink_noise_generator() {
 
 /// Test stopping a generator.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_stop_generator() {
     let client = TestClient::new();
 
@@ -180,7 +176,6 @@ async fn test_stop_generator() {
 
 /// Test starting generator with invalid channel returns 400.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_start_generator_invalid_channel() {
     let client = TestClient::new();
 
@@ -222,7 +217,6 @@ async fn test_start_generator_invalid_channel() {
 
 /// Test stopping nonexistent generator returns 404.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_stop_nonexistent_generator() {
     let client = TestClient::new();
 

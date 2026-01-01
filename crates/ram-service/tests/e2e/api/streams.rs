@@ -5,7 +5,6 @@ use crate::e2e::TestClient;
 
 /// Test listing active streams.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_list_streams() {
     let client = TestClient::new();
 
@@ -26,7 +25,6 @@ async fn test_list_streams() {
 
 /// Test getting stream by ID returns 404 for nonexistent stream.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_get_nonexistent_stream_returns_404() {
     let client = TestClient::new();
 
@@ -44,7 +42,6 @@ async fn test_get_nonexistent_stream_returns_404() {
 
 /// Test stream statistics endpoint.
 #[tokio::test]
-#[ignore = "Requires running server with active streams"]
 async fn test_get_stream_stats() {
     let client = TestClient::new();
 

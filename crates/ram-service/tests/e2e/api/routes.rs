@@ -13,7 +13,6 @@ pub struct RouteResponse {
 
 /// Test route listing.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_list_routes() {
     let client = TestClient::new();
 
@@ -34,7 +33,6 @@ async fn test_list_routes() {
 
 /// Test route creation with valid devices.
 #[tokio::test]
-#[ignore = "Requires running server with devices"]
 async fn test_create_route() {
     let client = TestClient::new();
 
@@ -111,7 +109,6 @@ async fn test_create_route() {
 
 /// Test route deletion returns 404 for nonexistent route.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_delete_nonexistent_route_returns_404() {
     let client = TestClient::new();
 

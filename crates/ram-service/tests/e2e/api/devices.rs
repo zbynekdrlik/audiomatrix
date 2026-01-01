@@ -7,7 +7,6 @@ use crate::e2e::TestClient;
 
 /// Test listing devices for local node.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_list_devices() {
     let client = TestClient::new();
 
@@ -37,7 +36,6 @@ async fn test_list_devices() {
 
 /// Test listing devices filters by type.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_list_devices_by_type() {
     let client = TestClient::new();
 
@@ -76,7 +74,6 @@ async fn test_list_devices_by_type() {
 
 /// Test getting a specific device by ID.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_get_device_by_id() {
     let client = TestClient::new();
 
@@ -109,7 +106,6 @@ async fn test_get_device_by_id() {
 
 /// Test getting nonexistent device returns 404.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_get_nonexistent_device_returns_404() {
     let client = TestClient::new();
 
@@ -127,7 +123,6 @@ async fn test_get_nonexistent_device_returns_404() {
 
 /// Test attaching a device.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_attach_device() {
     let client = TestClient::new();
 
@@ -169,7 +164,6 @@ async fn test_attach_device() {
 
 /// Test detaching a device.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_detach_device() {
     let client = TestClient::new();
 
@@ -206,7 +200,6 @@ async fn test_detach_device() {
 
 /// Test getting device channels.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_get_device_channels() {
     let client = TestClient::new();
 
@@ -236,7 +229,6 @@ async fn test_get_device_channels() {
 
 /// Test updating device display name.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_update_device_display_name() {
     let client = TestClient::new();
 
@@ -285,7 +277,6 @@ async fn test_update_device_display_name() {
 
 /// Test updating device sample rate.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_update_device_sample_rate() {
     let client = TestClient::new();
 
@@ -345,7 +336,6 @@ async fn test_update_device_sample_rate() {
 
 /// Test updating device buffer size.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_update_device_buffer_size() {
     let client = TestClient::new();
 
@@ -405,7 +395,6 @@ async fn test_update_device_buffer_size() {
 
 /// Test updating device with invalid sample rate fails.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_update_device_invalid_sample_rate() {
     let client = TestClient::new();
 
@@ -445,7 +434,6 @@ async fn test_update_device_invalid_sample_rate() {
 
 /// Test updating device with invalid buffer size fails.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_update_device_invalid_buffer_size() {
     let client = TestClient::new();
 
@@ -485,7 +473,6 @@ async fn test_update_device_invalid_buffer_size() {
 
 /// Test updating channel label.
 #[tokio::test]
-#[ignore = "Requires running server"]
 async fn test_update_channel_label() {
     let client = TestClient::new();
 

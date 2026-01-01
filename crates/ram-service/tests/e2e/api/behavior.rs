@@ -1,8 +1,12 @@
 #![allow(clippy::doc_markdown)]
-//! Behavioral E2E tests.
+//! Behavioral E2E tests - STRICT, NO SKIPPING.
 //!
 //! These tests verify that API operations have their intended EFFECT,
 //! not just that they return success responses.
+//!
+//! IMPORTANT: These tests are MANDATORY and must NEVER be skipped.
+//! If test infrastructure is unavailable, tests MUST FAIL to alert
+//! the team that the CI environment needs fixing.
 //!
 //! Key distinction from other E2E tests:
 //! - Other tests: "Does attach return 200?" (API contract)
@@ -13,6 +17,20 @@ use serde::Deserialize;
 use std::time::Duration;
 
 use crate::e2e::TestClient;
+
+/// Macro to enforce test infrastructure availability.
+/// Tests MUST fail if required conditions are not met - NO SKIPPING.
+macro_rules! require {
+    ($condition:expr, $msg:expr) => {
+        if !$condition {
+            panic!(
+                "TEST INFRASTRUCTURE ERROR: {}. \
+                 Fix the test environment - DO NOT SKIP TESTS.",
+                $msg
+            );
+        }
+    };
+}
 
 /// Response for stream counts endpoint.
 #[derive(Debug, Deserialize)]
@@ -49,7 +67,6 @@ where
 /// 2. /streams endpoint shows the device's streams
 /// 3. Stream count increased
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_attach_device_starts_streams() {
     let client = TestClient::new();
 
@@ -65,14 +82,14 @@ async fn test_attach_device_starts_streams() {
         .await
         .expect("Failed to list devices");
 
-    let available = devices
+    let device = devices
         .iter()
-        .find(|d| matches!(d.status, DeviceStatus::Available));
-
-    let Some(device) = available else {
-        println!("No available devices to test - skipping");
-        return;
-    };
+        .find(|d| matches!(d.status, DeviceStatus::Available))
+        .expect(
+            "TEST INFRASTRUCTURE ERROR: No available devices on test server. \
+             Ensure stagebox1 has ASIO devices available (not attached). \
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+        );
 
     let device_id = urlencoding::encode(&device.id);
 
@@ -142,7 +159,6 @@ async fn test_attach_device_starts_streams() {
 
 /// Test: After detaching a device, streams should actually stop.
 #[tokio::test]
-#[ignore = "Requires running server with attached audio device"]
 async fn test_detach_device_stops_streams() {
     let client = TestClient::new();
 
@@ -156,10 +172,13 @@ async fn test_detach_device_stops_streams() {
         matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
     });
 
-    let Some(device) = attached else {
-        println!("No attached devices to test - skipping");
-        return;
-    };
+    let device = attached.expect(
+        "TEST INFRASTRUCTURE ERROR: No attached devices on test server. 
+\
+             Attach an ASIO device on stagebox1 before running tests. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let device_id = urlencoding::encode(&device.id);
 
@@ -227,7 +246,6 @@ async fn test_detach_device_stops_streams() {
 /// This is the CRITICAL test that was missing - previously sample rate
 /// changes only updated the stored value without affecting actual streams.
 #[tokio::test]
-#[ignore = "Requires running server with attached audio device"]
 async fn test_sample_rate_change_restarts_streams() {
     let client = TestClient::new();
 
@@ -241,10 +259,13 @@ async fn test_sample_rate_change_restarts_streams() {
         matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
     });
 
-    let Some(device) = attached else {
-        println!("No attached devices to test - skipping");
-        return;
-    };
+    let device = attached.expect(
+        "TEST INFRASTRUCTURE ERROR: No attached devices on test server. 
+\
+             Attach an ASIO device on stagebox1 before running tests. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let device_id = urlencoding::encode(&device.id);
     let original_rate = device.sample_rate;
@@ -335,7 +356,6 @@ async fn test_sample_rate_change_restarts_streams() {
 
 /// Test: Changing sample rate on UNATTACHED device does NOT start streams.
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_sample_rate_change_unattached_no_streams() {
     let client = TestClient::new();
 
@@ -349,10 +369,11 @@ async fn test_sample_rate_change_unattached_no_streams() {
         .iter()
         .find(|d| matches!(d.status, DeviceStatus::Available));
 
-    let Some(device) = available else {
-        println!("No available devices to test - skipping");
-        return;
-    };
+    let device = available.expect(
+        "TEST INFRASTRUCTURE ERROR: No available devices. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let device_id = urlencoding::encode(&device.id);
 
@@ -407,7 +428,6 @@ async fn test_sample_rate_change_unattached_no_streams() {
 /// 1. Route appears in route list
 /// 2. If devices are attached, route is marked as active
 #[tokio::test]
-#[ignore = "Requires running server with attached audio devices"]
 async fn test_route_creation_establishes_path() {
     let client = TestClient::new();
 
@@ -427,10 +447,11 @@ async fn test_route_creation_establishes_path() {
             && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
     });
 
-    let (Some(input), Some(output)) = (input_device, output_device) else {
-        println!("Need both attached input and output devices - skipping");
-        return;
-    };
+    require!(
+        input_device.is_some() && output_device.is_some(),
+        "Need both attached input and output devices. Attach I/O devices on stagebox1."
+    );
+    let (input, output) = (input_device.unwrap(), output_device.unwrap());
 
     // Create route
     let route = serde_json::json!({
@@ -479,7 +500,6 @@ async fn test_route_creation_establishes_path() {
 
 /// Test: Deleting a route removes the audio path.
 #[tokio::test]
-#[ignore = "Requires running server with routes"]
 async fn test_route_deletion_removes_path() {
     let client = TestClient::new();
 
@@ -489,10 +509,13 @@ async fn test_route_deletion_removes_path() {
         .await
         .expect("Failed to list routes");
 
-    let Some(route) = routes.first() else {
-        println!("No routes to test deletion - skipping");
-        return;
-    };
+    let route = routes.first().expect(
+        "TEST INFRASTRUCTURE ERROR: No routes exist for deletion test. 
+\
+             Create routes via API before running tests. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let route_id = route
         .get("id")
@@ -532,7 +555,6 @@ async fn test_route_deletion_removes_path() {
 
 /// Test: Changing route volume actually affects the route.
 #[tokio::test]
-#[ignore = "Requires running server with routes"]
 async fn test_route_volume_change_applied() {
     let client = TestClient::new();
 
@@ -542,10 +564,13 @@ async fn test_route_volume_change_applied() {
         .await
         .expect("Failed to list routes");
 
-    let Some(route) = routes.first() else {
-        println!("No routes to test - skipping");
-        return;
-    };
+    let route = routes.first().expect(
+        "TEST INFRASTRUCTURE ERROR: No routes exist. 
+\
+             Create routes via API before running tests. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let route_id = route
         .get("id")
@@ -589,7 +614,6 @@ async fn test_route_volume_change_applied() {
 
 /// Test: Muting a route actually mutes it.
 #[tokio::test]
-#[ignore = "Requires running server with routes"]
 async fn test_route_mute_applied() {
     let client = TestClient::new();
 
@@ -599,10 +623,13 @@ async fn test_route_mute_applied() {
         .await
         .expect("Failed to list routes");
 
-    let Some(route) = routes.first() else {
-        println!("No routes to test - skipping");
-        return;
-    };
+    let route = routes.first().expect(
+        "TEST INFRASTRUCTURE ERROR: No routes exist. 
+\
+             Create routes via API before running tests. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let route_id = route
         .get("id")
@@ -662,7 +689,6 @@ async fn test_route_mute_applied() {
 
 /// Test: Starting a generator actually produces audio levels.
 #[tokio::test]
-#[ignore = "Requires running server with attached audio device"]
 async fn test_generator_produces_levels() {
     let client = TestClient::new();
 
@@ -677,10 +703,13 @@ async fn test_generator_produces_levels() {
             && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
     });
 
-    let Some(device) = attached else {
-        println!("No attached input devices - skipping");
-        return;
-    };
+    let device = attached.expect(
+        "TEST INFRASTRUCTURE ERROR: No attached input devices. 
+\
+             Attach an input/duplex ASIO device on stagebox1. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let device_id = urlencoding::encode(&device.id);
 
@@ -749,7 +778,6 @@ pub struct NodeInfo {
 /// 2. Route creation succeeds
 /// 3. Route shows remote node info correctly
 #[tokio::test]
-#[ignore = "Requires running server with network peer"]
 async fn test_cross_node_route_creation() {
     let client = TestClient::new();
 
@@ -762,10 +790,13 @@ async fn test_cross_node_route_creation() {
     // Find a remote node (not LOCAL)
     let remote_node = nodes.iter().find(|n| n.name != "LOCAL" && n.name != "local");
 
-    let Some(remote) = remote_node else {
-        println!("No remote nodes discovered - skipping cross-node test");
-        return;
-    };
+    let remote = remote_node.expect(
+        "TEST INFRASTRUCTURE ERROR: No remote nodes discovered. 
+\
+             Ensure develbox and iem are running audiomatrix. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     // Get devices on remote node
     let remote_devices: Vec<DeviceInfo> = client
@@ -777,10 +808,11 @@ async fn test_cross_node_route_creation() {
         matches!(d.device_type, DeviceType::Output | DeviceType::Duplex)
     });
 
-    let Some(output_device) = remote_output else {
-        println!("No output devices on remote node - skipping");
-        return;
-    };
+    let output_device = remote_output.expect(
+        "TEST INFRASTRUCTURE ERROR: No output devices on remote node. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     // Get local devices
     let local_devices: Vec<DeviceInfo> = client
@@ -793,10 +825,13 @@ async fn test_cross_node_route_creation() {
             && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
     });
 
-    let Some(input_device) = local_input else {
-        println!("No attached local input devices - skipping");
-        return;
-    };
+    let input_device = local_input.expect(
+        "TEST INFRASTRUCTURE ERROR: No attached local input devices. 
+\
+             Attach input ASIO device on stagebox1. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     // Create cross-node route: LOCAL input -> REMOTE output
     let route = serde_json::json!({
@@ -851,7 +886,6 @@ async fn test_cross_node_route_creation() {
 ///
 /// Verifies routes can be created in both directions between nodes.
 #[tokio::test]
-#[ignore = "Requires running server with network peer"]
 async fn test_cross_node_bidirectional_routing() {
     let client = TestClient::new();
 
@@ -863,10 +897,13 @@ async fn test_cross_node_bidirectional_routing() {
 
     let remote_node = nodes.iter().find(|n| n.name != "LOCAL" && n.name != "local");
 
-    let Some(remote) = remote_node else {
-        println!("No remote nodes - skipping");
-        return;
-    };
+    let remote = remote_node.expect(
+        "TEST INFRASTRUCTURE ERROR: No remote nodes discovered. 
+\
+             Ensure develbox and iem are running audiomatrix. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     // Get devices on both nodes
     let local_devices: Vec<DeviceInfo> = client
@@ -889,10 +926,11 @@ async fn test_cross_node_bidirectional_routing() {
         .iter()
         .find(|d| matches!(d.device_type, DeviceType::Duplex));
 
-    let (Some(local_dev), Some(remote_dev)) = (local_duplex, remote_duplex) else {
-        println!("Need duplex devices on both nodes - skipping");
-        return;
-    };
+    require!(
+        local_duplex.is_some() && remote_duplex.is_some(),
+        "Need duplex devices on both local and remote nodes"
+    );
+    let (local_dev, remote_dev) = (local_duplex.unwrap(), remote_duplex.unwrap());
 
     // Create route: LOCAL -> REMOTE
     let route_out = serde_json::json!({
@@ -956,7 +994,6 @@ async fn test_cross_node_bidirectional_routing() {
 /// 2. Buffer size changes are stored
 /// 3. Display name changes are stored
 #[tokio::test]
-#[ignore = "Requires running server with audio devices"]
 async fn test_device_config_persists() {
     let client = TestClient::new();
 
@@ -966,10 +1003,11 @@ async fn test_device_config_persists() {
         .await
         .expect("Failed to list devices");
 
-    let Some(device) = devices.first() else {
-        println!("No devices - skipping");
-        return;
-    };
+    let device = devices.first().expect(
+        "TEST INFRASTRUCTURE ERROR: No devices on test server. 
+\
+             DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let device_id = urlencoding::encode(&device.id);
     let original_name = device.display_name.clone().unwrap_or_else(|| device.id.clone());
@@ -1012,7 +1050,6 @@ async fn test_device_config_persists() {
 /// Verifies routes can be created and remain in the system.
 /// Note: Full restart persistence requires service restart test.
 #[tokio::test]
-#[ignore = "Requires running server with devices"]
 async fn test_route_persists() {
     let client = TestClient::new();
 
@@ -1029,10 +1066,11 @@ async fn test_route_persists() {
         matches!(d.device_type, DeviceType::Output | DeviceType::Duplex)
     });
 
-    let (Some(inp), Some(out)) = (input, output) else {
-        println!("Need input and output devices - skipping");
-        return;
-    };
+    require!(
+        input.is_some() && output.is_some(),
+        "Need input and output devices"
+    );
+    let (inp, out) = (input.unwrap(), output.unwrap());
 
     // Create a unique route
     let route = serde_json::json!({
@@ -1098,7 +1136,6 @@ async fn test_route_persists() {
 /// 2. Metering events are received
 /// 3. Levels are within valid range (-60 to 0 dB typical)
 #[tokio::test]
-#[ignore = "Requires running server with attached audio device"]
 async fn test_metering_websocket_provides_levels() {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::connect_async;
@@ -1188,7 +1225,6 @@ async fn test_metering_websocket_provides_levels() {
 ///
 /// Verifies that route creation/deletion events are broadcast to WebSocket clients.
 #[tokio::test]
-#[ignore = "Requires running server with devices"]
 async fn test_websocket_broadcasts_route_changes() {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::connect_async;
@@ -1215,10 +1251,11 @@ async fn test_websocket_broadcasts_route_changes() {
         matches!(d.device_type, DeviceType::Output | DeviceType::Duplex)
     });
 
-    let (Some(inp), Some(out)) = (input, output) else {
-        println!("Need input and output devices - skipping");
-        return;
-    };
+    require!(
+        input.is_some() && output.is_some(),
+        "Need input and output devices"
+    );
+    let (inp, out) = (input.unwrap(), output.unwrap());
 
     // Create route via REST API
     let route = serde_json::json!({
@@ -1292,7 +1329,6 @@ async fn test_websocket_broadcasts_route_changes() {
 /// Similar to sample rate test - buffer size changes should trigger
 /// stream reconfiguration on attached devices.
 #[tokio::test]
-#[ignore = "Requires running server with attached audio device"]
 async fn test_buffer_size_change_restarts_streams() {
     let client = TestClient::new();
 
@@ -1302,14 +1338,13 @@ async fn test_buffer_size_change_restarts_streams() {
         .await
         .expect("Failed to list devices");
 
-    let attached = devices.iter().find(|d| {
+    let device = devices.iter().find(|d| {
         matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
-    });
-
-    let Some(device) = attached else {
-        println!("No attached devices - skipping");
-        return;
-    };
+    }).expect(
+        "TEST INFRASTRUCTURE ERROR: No attached devices on test server. \
+         Attach an ASIO device on stagebox1 before running tests. \
+         DO NOT SKIP - FIX THE TEST ENVIRONMENT."
+    );
 
     let device_id = urlencoding::encode(&device.id);
     let original_buffer = device.buffer_size;
