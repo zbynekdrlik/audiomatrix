@@ -9,7 +9,7 @@ use tokio_tungstenite::connect_async;
 async fn test_metering_websocket_provides_levels() {
     let base_url =
         std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "localhost:8080".to_string());
-    let ws_url = format!("ws://{}/api/v1/ws", base_url);
+    let ws_url = format!("ws://{base_url}/api/v1/ws");
 
     let (mut ws, _) = connect_async(&ws_url)
         .await
@@ -87,7 +87,7 @@ async fn test_websocket_broadcasts_route_changes() {
     let client = TestClient::new();
     let base_url =
         std::env::var("TEST_SERVER_URL").unwrap_or_else(|_| "localhost:8080".to_string());
-    let ws_url = format!("ws://{}/api/v1/ws", base_url);
+    let ws_url = format!("ws://{base_url}/api/v1/ws");
 
     let (mut ws, _) = connect_async(&ws_url)
         .await

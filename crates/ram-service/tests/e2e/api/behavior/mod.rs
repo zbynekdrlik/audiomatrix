@@ -1,4 +1,9 @@
 #![allow(clippy::doc_markdown)]
+#![allow(clippy::items_after_statements)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::range_plus_one)]
+#![allow(clippy::manual_range_contains)]
 //! Behavioral E2E tests - STRICT, NO SKIPPING.
 //!
 //! These tests verify that API operations have their intended EFFECT,

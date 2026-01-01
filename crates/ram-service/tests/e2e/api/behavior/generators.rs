@@ -51,7 +51,7 @@ async fn test_generator_produces_levels() {
 
     let enabled = gen_status
         .get("enabled")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
 
     assert!(enabled, "Generator should be enabled");

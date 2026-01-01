@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Route response for parsing.
+#[derive(Deserialize)]
+struct RouteResponse {
+    id: String,
+}
+
 /// Test: Cross-node route creation establishes network audio path.
 #[tokio::test]
 async fn test_cross_node_route_creation() {
@@ -68,10 +74,6 @@ async fn test_cross_node_route_creation() {
         "Cross-node route creation should succeed"
     );
 
-    #[derive(Deserialize)]
-    struct RouteResponse {
-        id: String,
-    }
     let route_response: RouteResponse = response.json().await.expect("Failed to parse response");
 
     let routes: Vec<serde_json::Value> = client
@@ -158,11 +160,7 @@ async fn test_cross_node_bidirectional_routing() {
         "Outbound route should succeed"
     );
 
-    #[derive(Deserialize)]
-    struct RouteResp {
-        id: String,
-    }
-    let out_id: RouteResp = resp_out.json().await.unwrap();
+    let out_id: RouteResponse = resp_out.json().await.unwrap();
 
     // Create route: REMOTE -> LOCAL
     let route_in = serde_json::json!({
@@ -185,7 +183,7 @@ async fn test_cross_node_bidirectional_routing() {
         "Inbound route should succeed"
     );
 
-    let in_id: RouteResp = resp_in.json().await.unwrap();
+    let in_id: RouteResponse = resp_in.json().await.unwrap();
 
     let routes: Vec<serde_json::Value> = client
         .get_json("/routes")

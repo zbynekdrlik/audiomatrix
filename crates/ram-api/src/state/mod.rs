@@ -28,6 +28,7 @@ use crate::websocket::{SubscriptionNeededEvent, WsEvent};
 /// These commands are sent from the API layer to the service layer
 /// to trigger stream start/stop operations for metering.
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
 pub enum DeviceCommand {
     /// Start streams for a device (for metering).
     StartStreams {
