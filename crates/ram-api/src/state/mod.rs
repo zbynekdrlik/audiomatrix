@@ -361,10 +361,8 @@ impl AppState {
         let (needs_reconfigure, device_type, old_sample_rate, old_buffer_size) = {
             let devices = self.inner.devices.read();
             if let Some(device) = devices.get(id) {
-                let is_attached = matches!(
-                    device.status,
-                    DeviceStatus::Attached | DeviceStatus::Active
-                );
+                let is_attached =
+                    matches!(device.status, DeviceStatus::Attached | DeviceStatus::Active);
                 let sr_changed = sample_rate.is_some() && sample_rate != Some(device.sample_rate);
                 let bs_changed = buffer_size.is_some() && buffer_size != Some(device.buffer_size);
                 (

@@ -598,10 +598,7 @@ impl AudioProcessor {
         // Override sample rate if specified
         if let Some(rate) = sample_rate {
             config.sample_rate = cpal::SampleRate(rate);
-            info!(
-                "Device {device_id}: using requested sample rate {}Hz",
-                rate
-            );
+            info!("Device {device_id}: using requested sample rate {}Hz", rate);
         }
 
         info!("Device {device_id}: sample format {:?}", sample_format);
@@ -795,10 +792,7 @@ impl AudioProcessor {
         // Override sample rate if specified
         if let Some(rate) = sample_rate {
             config.sample_rate = cpal::SampleRate(rate);
-            info!(
-                "Device {device_id}: using requested sample rate {}Hz",
-                rate
-            );
+            info!("Device {device_id}: using requested sample rate {}Hz", rate);
         }
 
         info!("Device {device_id}: sample format {:?}", sample_format);
