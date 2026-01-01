@@ -349,6 +349,51 @@ jobs:
           fi
           echo "All Rust files are within size limits"
 
+  # E2E Test Policy Enforcement - NO SKIPPING ALLOWED
+  e2e-no-skip-check:
+    name: E2E No-Skip Policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check for forbidden #[ignore] in E2E tests
+        run: |
+          echo "Checking E2E tests for forbidden #[ignore] attributes..."
+
+          # Search for #[ignore in all E2E test files
+          IGNORED=$(grep -rn '#\[ignore' crates/ram-service/tests/e2e/ 2>/dev/null || true)
+
+          if [ -n "$IGNORED" ]; then
+            echo "::error::FORBIDDEN: Found #[ignore] attributes in E2E tests!"
+            echo "::error::E2E tests must NEVER be skipped. Fix the test infrastructure instead."
+            echo ""
+            echo "Violations found:"
+            echo "$IGNORED"
+            echo ""
+            echo "POLICY: E2E tests run on stagebox1 self-hosted runner with real ASIO devices."
+            echo "        If tests fail, fix the environment - DO NOT add #[ignore]."
+            exit 1
+          fi
+
+          echo "✓ No #[ignore] attributes found in E2E tests - policy enforced!"
+
+      - name: Check for graceful skip patterns
+        run: |
+          echo "Checking for forbidden skip patterns..."
+
+          # Check for patterns that silently skip tests
+          SKIPS=$(grep -rn 'println!.*skipping\|println!.*Skipping\|return;.*// skip\|eprintln!.*skipping' crates/ram-service/tests/e2e/ 2>/dev/null || true)
+
+          if [ -n "$SKIPS" ]; then
+            echo "::error::FORBIDDEN: Found graceful skip patterns in E2E tests!"
+            echo "::error::Tests must FAIL loudly, not skip silently."
+            echo ""
+            echo "Violations found:"
+            echo "$SKIPS"
+            exit 1
+          fi
+
+          echo "✓ No graceful skip patterns found - tests will fail loudly if infrastructure missing!"
+
   # E2E Tests (Playwright)
   e2e:
     name: E2E Tests
@@ -407,7 +452,7 @@ jobs:
   # All checks must pass
   ci-complete:
     name: CI Complete
-    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size, e2e]
+    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size, e2e-no-skip-check, e2e]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -424,6 +469,7 @@ jobs:
              [ "${{ needs.audit.result }}" != "success" ] || \
              [ "${{ needs.docs.result }}" != "success" ] || \
              [ "${{ needs.file-size.result }}" != "success" ] || \
+             [ "${{ needs.e2e-no-skip-check.result }}" != "success" ] || \
              [ "${{ needs.e2e.result }}" != "success" ]; then
             echo "::error::One or more required checks failed"
             exit 1
