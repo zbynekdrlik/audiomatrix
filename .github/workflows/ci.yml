@@ -416,8 +416,14 @@ jobs:
           key: behavioral-tests
 
       - name: Build test binary
-        run: cargo test -p ram-service --test e2e_tests --no-run --message-format=json | Out-File -FilePath test-output.json
         shell: powershell
+        run: |
+          cargo test -p ram-service --test e2e_tests --no-run 2>&1 | Tee-Object -Variable buildOutput
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed. Full output:"
+            Write-Host $buildOutput
+            exit $LASTEXITCODE
+          }
 
       - name: Find and copy test binary
         shell: powershell
