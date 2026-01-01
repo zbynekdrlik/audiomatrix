@@ -134,7 +134,7 @@ jobs:
       - name: Run tests (Windows - no ASIO, skip behavioral E2E)
         if: runner.os == 'Windows'
         # Exclude behavioral E2E tests - they run on stagebox1 with real ASIO
-        run: cargo test --workspace -- --skip behavior::
+        run: "cargo test --workspace -- --skip behavior::"
       - name: Run doc tests (Unix)
         if: runner.os != 'Windows'
         run: cargo test --doc --all-features
