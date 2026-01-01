@@ -1,5 +1,6 @@
 //! API E2E tests.
 
+mod behavior;
 mod devices;
 mod generators;
 mod health;
