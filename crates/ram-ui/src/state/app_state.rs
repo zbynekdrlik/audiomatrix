@@ -161,43 +161,89 @@ impl AppState {
         });
     }
 
-    /// Gets input devices.
+    /// Gets input devices (attached/active only, including duplex devices with input channels).
     #[must_use]
     pub fn input_devices(&self) -> Vec<DeviceInfo> {
         self.devices
             .get()
             .into_iter()
-            .filter(|d| matches!(d.device_type, ram_api::models::DeviceType::Input))
+            .filter(|d| {
+                // Only show attached or active devices
+                let is_attached = matches!(
+                    d.status,
+                    ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active
+                );
+                // Include input devices OR duplex devices with input channels
+                let has_input = matches!(d.device_type, ram_api::models::DeviceType::Input)
+                    || (matches!(d.device_type, ram_api::models::DeviceType::Duplex)
+                        && d.input_channels > 0);
+                is_attached && has_input
+            })
             .collect()
     }
 
-    /// Gets output devices.
+    /// Gets output devices (attached/active only, including duplex devices with output channels).
     #[must_use]
     pub fn output_devices(&self) -> Vec<DeviceInfo> {
         self.devices
             .get()
             .into_iter()
-            .filter(|d| matches!(d.device_type, ram_api::models::DeviceType::Output))
+            .filter(|d| {
+                // Only show attached or active devices
+                let is_attached = matches!(
+                    d.status,
+                    ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active
+                );
+                // Include output devices OR duplex devices with output channels
+                let has_output = matches!(d.device_type, ram_api::models::DeviceType::Output)
+                    || (matches!(d.device_type, ram_api::models::DeviceType::Duplex)
+                        && d.output_channels > 0);
+                is_attached && has_output
+            })
             .collect()
     }
 
     /// Gets input devices from the source node (for cross-node routing).
+    /// Filters to only show attached/active devices with input capability.
     #[must_use]
     pub fn source_input_devices(&self) -> Vec<DeviceInfo> {
         self.source_devices
             .get()
             .into_iter()
-            .filter(|d| matches!(d.device_type, ram_api::models::DeviceType::Input))
+            .filter(|d| {
+                // Only show attached or active devices
+                let is_attached = matches!(
+                    d.status,
+                    ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active
+                );
+                // Include input devices OR duplex devices with input channels
+                let has_input = matches!(d.device_type, ram_api::models::DeviceType::Input)
+                    || (matches!(d.device_type, ram_api::models::DeviceType::Duplex)
+                        && d.input_channels > 0);
+                is_attached && has_input
+            })
             .collect()
     }
 
     /// Gets output devices from the destination node (for cross-node routing).
+    /// Filters to only show attached/active devices with output capability.
     #[must_use]
     pub fn dest_output_devices(&self) -> Vec<DeviceInfo> {
         self.dest_devices
             .get()
             .into_iter()
-            .filter(|d| matches!(d.device_type, ram_api::models::DeviceType::Output))
+            .filter(|d| {
+                // Only show attached or active devices
+                let is_attached = matches!(
+                    d.status,
+                    ram_api::models::DeviceStatus::Attached | ram_api::models::DeviceStatus::Active
+                );
+                // Include output devices OR duplex devices with output channels
+                let has_output = matches!(d.device_type, ram_api::models::DeviceType::Output)
+                    || (matches!(d.device_type, ram_api::models::DeviceType::Duplex)
+                        && d.output_channels > 0);
+                is_attached && has_output
+            })
             .collect()
     }
 
