@@ -785,6 +785,60 @@ impl AudioMatrixService {
 
                                         audio_processor.stop_device_streams(&device_id);
                                     }
+                                    DeviceCommand::ReconfigureStreams { device_id, device_type, sample_rate, buffer_size } => {
+                                        info!("Reconfiguring streams for device: {device_id} (sample_rate: {sample_rate}, buffer_size: {buffer_size})");
+
+                                        // Stop existing streams
+                                        audio_processor.stop_device_streams(&device_id);
+
+                                        // Persist new config
+                                        if let Err(e) = device_state_manager.set_device_config(&device_id, Some(sample_rate), Some(buffer_size)) {
+                                            warn!("Failed to persist device config: {e}");
+                                        }
+
+                                        // Start streams with new config
+                                        // Note: The audio_processor will read the new config from device state
+                                        let mut input_ok = true;
+                                        let mut output_ok = true;
+                                        let mut error_msg = String::new();
+
+                                        if matches!(device_type, DeviceType::Input | DeviceType::Duplex) {
+                                            match audio_processor.start_input_stream_with_config(&device_id, Some(sample_rate)) {
+                                                Ok(()) => info!("Input stream restarted for: {device_id} at {sample_rate}Hz"),
+                                                Err(e) => {
+                                                    error!("Failed to restart input stream for {device_id}: {e}");
+                                                    input_ok = false;
+                                                    error_msg = format!("Input stream failed: {e}");
+                                                }
+                                            }
+                                        }
+
+                                        if matches!(device_type, DeviceType::Output | DeviceType::Duplex) {
+                                            match audio_processor.start_output_stream_with_config(&device_id, Some(sample_rate)) {
+                                                Ok(()) => info!("Output stream restarted for: {device_id} at {sample_rate}Hz"),
+                                                Err(e) => {
+                                                    error!("Failed to restart output stream for {device_id}: {e}");
+                                                    output_ok = false;
+                                                    if !error_msg.is_empty() {
+                                                        error_msg.push_str("; ");
+                                                    }
+                                                    use std::fmt::Write;
+                                                    let _ = write!(error_msg, "Output stream failed: {e}");
+                                                }
+                                            }
+                                        }
+
+                                        if !input_ok && !output_ok {
+                                            error!("All streams failed to restart for {device_id}");
+                                            app_state.set_device_status(&device_id, DeviceStatus::Error);
+                                            app_state.broadcast_event(WsEvent::Error(ErrorUpdate {
+                                                code: "STREAM_RECONFIGURE_FAILED".to_string(),
+                                                message: format!("Failed to reconfigure streams for {}: {}", device_id, error_msg),
+                                            }));
+                                        } else {
+                                            info!("Device {} reconfigured successfully", device_id);
+                                        }
+                                    }
                                 }
                             }
                             Err(broadcast::error::RecvError::Lagged(n)) => {

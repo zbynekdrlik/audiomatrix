@@ -27,7 +27,7 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.34
+> **Current Version:** 0.1.0-dev.35
 > **Last Updated:** 2026-01-01
 
 ### Backend Implementation Status
@@ -209,6 +209,13 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 *No known bugs at this time.*
 
 ## Recently Completed
+
+- **Sample Rate/Buffer Size Change Now Works** (2026-01-01): CRITICAL fix
+  - Previously, changing sample rate or buffer size only updated stored value
+  - Now triggers stream reconfiguration: stops and restarts streams with new config
+  - Added `ReconfigureStreams` device command
+  - Added `start_input_stream_with_config()` and `start_output_stream_with_config()` methods
+  - Persists new config to device state file
 
 - **Stream Start Failure Reporting** (2026-01-01): Improved device attachment error handling
   - Device status set to "Error" when all streams fail to start

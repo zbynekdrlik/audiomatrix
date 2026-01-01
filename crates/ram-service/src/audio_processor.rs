@@ -569,6 +569,15 @@ impl AudioProcessor {
 
     /// Starts an input stream for the specified device.
     pub fn start_input_stream(&self, device_id: &str) -> Result<()> {
+        self.start_input_stream_with_config(device_id, None)
+    }
+
+    /// Starts an input stream with optional sample rate override.
+    pub fn start_input_stream_with_config(
+        &self,
+        device_id: &str,
+        sample_rate: Option<u32>,
+    ) -> Result<()> {
         info!("start_input_stream called for device: {device_id}");
 
         if self.input_streams.read().contains_key(device_id) {
@@ -585,6 +594,15 @@ impl AudioProcessor {
         let mut config = extended_config.config;
         let sample_format = extended_config.sample_format;
         let channels = config.channels;
+
+        // Override sample rate if specified
+        if let Some(rate) = sample_rate {
+            config.sample_rate = cpal::SampleRate(rate);
+            info!(
+                "Device {device_id}: using requested sample rate {}Hz",
+                rate
+            );
+        }
 
         info!("Device {device_id}: sample format {:?}", sample_format);
 
@@ -748,6 +766,15 @@ impl AudioProcessor {
 
     /// Starts an output stream for the specified device.
     pub fn start_output_stream(&self, device_id: &str) -> Result<()> {
+        self.start_output_stream_with_config(device_id, None)
+    }
+
+    /// Starts an output stream with optional sample rate override.
+    pub fn start_output_stream_with_config(
+        &self,
+        device_id: &str,
+        sample_rate: Option<u32>,
+    ) -> Result<()> {
         info!("start_output_stream called for device: {device_id}");
 
         if self.output_streams.read().contains_key(device_id) {
@@ -764,6 +791,15 @@ impl AudioProcessor {
         let mut config = extended_config.config;
         let sample_format = extended_config.sample_format;
         let channels = config.channels;
+
+        // Override sample rate if specified
+        if let Some(rate) = sample_rate {
+            config.sample_rate = cpal::SampleRate(rate);
+            info!(
+                "Device {device_id}: using requested sample rate {}Hz",
+                rate
+            );
+        }
 
         info!("Device {device_id}: sample format {:?}", sample_format);
 

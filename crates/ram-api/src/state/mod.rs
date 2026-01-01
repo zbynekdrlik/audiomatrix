@@ -41,6 +41,18 @@ pub enum DeviceCommand {
         /// Device ID to stop streams for.
         device_id: String,
     },
+    /// Reconfigure streams with new sample rate/buffer size.
+    /// Stops existing streams and restarts with new configuration.
+    ReconfigureStreams {
+        /// Device ID to reconfigure.
+        device_id: String,
+        /// Device type (input, output, duplex).
+        device_type: DeviceType,
+        /// New sample rate.
+        sample_rate: u32,
+        /// New buffer size.
+        buffer_size: u32,
+    },
 }
 
 /// Shared application state.
@@ -335,6 +347,9 @@ impl AppState {
     }
 
     /// Updates device settings.
+    ///
+    /// If sample_rate or buffer_size changes on an attached device,
+    /// triggers stream reconfiguration to apply the new settings.
     pub fn update_device(
         &self,
         id: &str,
@@ -342,13 +357,59 @@ impl AppState {
         sample_rate: Option<u32>,
         buffer_size: Option<u32>,
     ) -> Result<DeviceInfo, String> {
-        devices::update_device(
+        // Get current device state before update to check if reconfiguration needed
+        let (needs_reconfigure, device_type, old_sample_rate, old_buffer_size) = {
+            let devices = self.inner.devices.read();
+            if let Some(device) = devices.get(id) {
+                let is_attached = matches!(
+                    device.status,
+                    DeviceStatus::Attached | DeviceStatus::Active
+                );
+                let sr_changed = sample_rate.is_some() && sample_rate != Some(device.sample_rate);
+                let bs_changed = buffer_size.is_some() && buffer_size != Some(device.buffer_size);
+                (
+                    is_attached && (sr_changed || bs_changed),
+                    device.device_type,
+                    device.sample_rate,
+                    device.buffer_size,
+                )
+            } else {
+                (false, DeviceType::Duplex, 48000, 256)
+            }
+        };
+
+        // Update the device settings
+        let result = devices::update_device(
             &self.inner.devices,
             id,
             display_name,
             sample_rate,
             buffer_size,
-        )
+        )?;
+
+        // If attached and config changed, trigger stream reconfiguration
+        if needs_reconfigure {
+            let new_sample_rate = sample_rate.unwrap_or(old_sample_rate);
+            let new_buffer_size = buffer_size.unwrap_or(old_buffer_size);
+
+            tracing::info!(
+                "Device {} config changed (sample_rate: {} -> {}, buffer_size: {} -> {}), reconfiguring streams",
+                id,
+                old_sample_rate,
+                new_sample_rate,
+                old_buffer_size,
+                new_buffer_size
+            );
+
+            self.send_device_command(DeviceCommand::ReconfigureStreams {
+                device_id: id.to_string(),
+                device_type,
+                sample_rate: new_sample_rate,
+                buffer_size: new_buffer_size,
+            });
+        }
+
+        Ok(result)
     }
 
     /// Gets channel information for a device.
