@@ -413,13 +413,24 @@ jobs:
           name: ui-dist
           path: crates/ram-ui/dist/
 
-      - name: Verify Rust toolchain
+      - name: Install Rust toolchain if not present
         run: |
+          $rustc = Get-Command rustc -ErrorAction SilentlyContinue
+          if ($null -eq $rustc) {
+            Write-Host "Installing Rust toolchain..."
+            Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "rustup-init.exe"
+            .\rustup-init.exe -y --default-toolchain stable
+            Remove-Item .\rustup-init.exe
+            # Add cargo to PATH for this session
+            $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+          }
           rustc --version
           cargo --version
 
       - name: Build and run behavioral E2E tests
         run: |
+          # Ensure cargo is in PATH
+          $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
           cargo test -p ram-service --test e2e_tests behavior:: -- --test-threads=1
         env:
           TEST_SERVER_URL: "localhost:8080"
