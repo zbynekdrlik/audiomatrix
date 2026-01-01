@@ -987,7 +987,6 @@ mod tests {
             .with_node_name("TestNode")
             .with_api_port(9000);
         let service = AudioMatrixService::new(config);
-
         assert_eq!(service.app_state().local_node().name, "TestNode");
         assert_eq!(service.app_state().local_node().api_port, 9000);
     }
