@@ -63,24 +63,28 @@ pub fn DeviceCard(
     };
 
     // Subscribe to metering when device is attached/active
+    // Use Effect to react to current_node changes
     {
         let ws_service = expect_context::<WsService>();
         let device_id_sub = device_id.clone();
-        let node_id = app_state
-            .current_node
-            .get()
-            .map(|n| n.id)
-            .unwrap_or_else(|| "LOCAL".to_string());
+        let app_state_sub = app_state.clone();
 
-        // Only subscribe if device is attached or active
-        if matches!(device_status, DeviceStatus::Attached | DeviceStatus::Active) {
-            log::debug!(
-                "Subscribing to metering for device {} on node {}",
-                device_id_sub,
-                node_id
-            );
-            ws_service.subscribe_metering(&node_id, &device_id_sub);
-        }
+        Effect::new(move || {
+            // Only subscribe if we have a valid node ID (not a fallback)
+            if let Some(node) = app_state_sub.current_node.get() {
+                let node_id = node.id.clone();
+
+                // Only subscribe if device is attached or active
+                if matches!(device_status, DeviceStatus::Attached | DeviceStatus::Active) {
+                    log::debug!(
+                        "Subscribing to metering for device {} on node {}",
+                        device_id_sub,
+                        node_id
+                    );
+                    ws_service.subscribe_metering(&node_id, &device_id_sub);
+                }
+            }
+        });
     }
 
     // Device type indicator

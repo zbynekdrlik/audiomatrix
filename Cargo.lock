@@ -3334,7 +3334,7 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
 name = "ram-api"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "axum",
  "base64",
@@ -3360,7 +3360,7 @@ dependencies = [
 
 [[package]]
 name = "ram-asio"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "anyhow",
  "cpal",
@@ -3376,7 +3376,7 @@ dependencies = [
 
 [[package]]
 name = "ram-core"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "cpal",
  "crossbeam-channel",
@@ -3393,7 +3393,7 @@ dependencies = [
 
 [[package]]
 name = "ram-discovery"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "crossbeam-channel",
  "flume",
@@ -3409,7 +3409,7 @@ dependencies = [
 
 [[package]]
 name = "ram-service"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "anyhow",
  "axum",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "ram-ui"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "chrono",
  "console_error_panic_hook",
@@ -3469,7 +3469,7 @@ dependencies = [
 
 [[package]]
 name = "ram-vban"
-version = "0.1.0-dev.31"
+version = "0.1.0-dev.32"
 dependencies = [
  "crossbeam-channel",
  "parking_lot",
