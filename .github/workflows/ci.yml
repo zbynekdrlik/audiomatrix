@@ -394,6 +394,31 @@ jobs:
 
           echo "✓ No graceful skip patterns found - tests will fail loudly if infrastructure missing!"
 
+  # Behavioral E2E Tests on stagebox1 (real ASIO hardware)
+  e2e-behavioral:
+    name: E2E Behavioral (stagebox1)
+    needs: build-ui
+    runs-on: [self-hosted, Windows, asio]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: stagebox1-behavioral
+
+      - name: Build and run behavioral E2E tests
+        run: |
+          cargo test -p ram-service --test e2e_tests behavior:: -- --test-threads=1
+        env:
+          TEST_SERVER_URL: "localhost:8080"
+
   # E2E Tests (Playwright)
   e2e:
     name: E2E Tests
@@ -452,7 +477,7 @@ jobs:
   # All checks must pass
   ci-complete:
     name: CI Complete
-    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size, e2e-no-skip-check, e2e]
+    needs: [build-ui, version-check, fmt, clippy, test, test-windows-asio, build-virtual-asio, coverage, audit, docs, file-size, e2e-no-skip-check, e2e-behavioral, e2e]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -470,6 +495,7 @@ jobs:
              [ "${{ needs.docs.result }}" != "success" ] || \
              [ "${{ needs.file-size.result }}" != "success" ] || \
              [ "${{ needs.e2e-no-skip-check.result }}" != "success" ] || \
+             [ "${{ needs.e2e-behavioral.result }}" != "success" ] || \
              [ "${{ needs.e2e.result }}" != "success" ]; then
             echo "::error::One or more required checks failed"
             exit 1
