@@ -27,8 +27,8 @@ A Dante-like audio routing system built in Rust, providing unified control over 
 
 ## Implementation Status
 
-> **Current Version:** 0.1.0-dev.24
-> **Last Updated:** 2025-12-31
+> **Current Version:** 0.1.0-dev.34
+> **Last Updated:** 2026-01-01
 
 ### Backend Implementation Status
 
@@ -209,6 +209,21 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 *No known bugs at this time.*
 
 ## Recently Completed
+
+- **Stream Start Failure Reporting** (2026-01-01): Improved device attachment error handling
+  - Device status set to "Error" when all streams fail to start
+  - WebSocket error event broadcast to UI for user feedback
+  - Error logging with detailed stream failure messages
+  - Fixes issue where device attach appeared to succeed but streams silently failed
+
+- **Metering Subscription Node ID Fix** (2026-01-01): Fixed metering not appearing in UI
+  - UI was subscribing with "LOCAL" fallback but server broadcast with actual node ID
+  - Changed to reactive Effect that waits for `current_node` to be set
+  - Metering now correctly matches between subscription and broadcast
+
+- **Routing Matrix "(this device)" Indicator** (2026-01-01): UI consistency fix
+  - Added "(this device)" label to source/dest node selectors in routing matrix
+  - Matches the pattern used in Devices tab
 
 - **WebSocket Schema Alignment** (2025-12-30): Fixed frontend/backend message format mismatch
   - Fixed serde tagging: `#[serde(tag = "type", content = "data")]` for WsEvent

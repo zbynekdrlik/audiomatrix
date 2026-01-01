@@ -588,11 +588,35 @@ mod tests {
         let _ = manager.devices();
 
         // Verify refresh updates timestamp
+        // Sleep first to ensure measurable time has passed
+        std::thread::sleep(Duration::from_millis(50));
         let before = manager.time_since_refresh();
-        std::thread::sleep(Duration::from_millis(10));
+
+        // Before should now be at least 50ms since we slept
+        assert!(
+            before >= Duration::from_millis(40),
+            "Expected before >= 40ms, got {:?}",
+            before
+        );
+
+        // Now refresh and check that time_since_refresh is reset
         manager.refresh();
         let after = manager.time_since_refresh();
-        assert!(after < before);
+
+        // After refresh, time_since_refresh should be very small (less than 10ms)
+        assert!(
+            after < Duration::from_millis(10),
+            "Expected after < 10ms, got {:?}",
+            after
+        );
+
+        // And after should definitely be less than before
+        assert!(
+            after < before,
+            "Expected after ({:?}) < before ({:?})",
+            after,
+            before
+        );
     }
 
     #[test]

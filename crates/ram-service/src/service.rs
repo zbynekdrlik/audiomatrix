@@ -759,7 +759,8 @@ impl AudioMatrixService {
                                                     if !error_msg.is_empty() {
                                                         error_msg.push_str("; ");
                                                     }
-                                                    error_msg.push_str(&format!("Output stream failed: {e}"));
+                                                    use std::fmt::Write;
+                                                    let _ = write!(error_msg, "Output stream failed: {e}");
                                                 }
                                             }
                                         }
