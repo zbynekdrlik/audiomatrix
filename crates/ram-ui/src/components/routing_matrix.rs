@@ -236,8 +236,8 @@ pub fn RoutingMatrix() -> impl IntoView {
                         <select on:change=on_source_node_change>
                             <option value="" selected=app_state.source_node.get().is_none()>
                                 {move || app_state.current_node.get()
-                                    .map(|n| n.name.clone())
-                                    .unwrap_or_else(|| "Local".to_string())}
+                                    .map(|n| format!("{} (this device)", n.name))
+                                    .unwrap_or_else(|| "Local (this device)".to_string())}
                             </option>
                             {move || nodes.get().iter()
                                 .filter(|n| Some(&n.id) != app_state.current_node.get().as_ref().map(|c| &c.id))
@@ -267,8 +267,8 @@ pub fn RoutingMatrix() -> impl IntoView {
                         <select on:change=on_dest_node_change>
                             <option value="" selected=app_state.dest_node.get().is_none()>
                                 {move || app_state.current_node.get()
-                                    .map(|n| n.name.clone())
-                                    .unwrap_or_else(|| "Local".to_string())}
+                                    .map(|n| format!("{} (this device)", n.name))
+                                    .unwrap_or_else(|| "Local (this device)".to_string())}
                             </option>
                             {move || nodes.get().iter()
                                 .filter(|n| Some(&n.id) != app_state.current_node.get().as_ref().map(|c| &c.id))
