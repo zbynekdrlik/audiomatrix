@@ -395,10 +395,15 @@ jobs:
           echo "✓ No graceful skip patterns found - tests will fail loudly if infrastructure missing!"
 
   # Behavioral E2E Tests on stagebox1 (real ASIO hardware)
+  # Note: stagebox1 is a self-hosted Windows runner with Tascam US-16x08
+  # Rust toolchain must be pre-installed on the runner
   e2e-behavioral:
     name: E2E Behavioral (stagebox1)
     needs: build-ui
     runs-on: [self-hosted, Windows, asio]
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v6
 
@@ -408,16 +413,17 @@ jobs:
           name: ui-dist
           path: crates/ram-ui/dist/
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: stagebox1-behavioral
+      - name: Verify Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
 
       - name: Build and run behavioral E2E tests
         run: |
           cargo test -p ram-service --test e2e_tests behavior:: -- --test-threads=1
         env:
           TEST_SERVER_URL: "localhost:8080"
+          CPAL_ASIO_DIR: "C:\\asio_sdk"
 
   # E2E Tests (Playwright)
   e2e:
