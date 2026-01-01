@@ -131,9 +131,10 @@ jobs:
       - name: Run tests (Unix)
         if: runner.os != 'Windows'
         run: cargo test --all-features --workspace
-      - name: Run tests (Windows - no ASIO)
+      - name: Run tests (Windows - no ASIO, skip behavioral E2E)
         if: runner.os == 'Windows'
-        run: cargo test --workspace
+        # Exclude behavioral E2E tests - they run on stagebox1 with real ASIO
+        run: cargo test --workspace -- --skip behavior::
       - name: Run doc tests (Unix)
         if: runner.os != 'Windows'
         run: cargo test --doc --all-features
@@ -394,16 +395,11 @@ jobs:
 
           echo "✓ No graceful skip patterns found - tests will fail loudly if infrastructure missing!"
 
-  # Behavioral E2E Tests on stagebox1 (real ASIO hardware)
-  # Note: stagebox1 is a self-hosted Windows runner with Tascam US-16x08
-  # Rust toolchain must be pre-installed on the runner
-  e2e-behavioral:
-    name: E2E Behavioral (stagebox1)
+  # Build behavioral E2E test binaries on GitHub-hosted runner
+  build-behavioral-tests:
+    name: Build Behavioral Tests
     needs: build-ui
-    runs-on: [self-hosted, Windows, asio]
-    defaults:
-      run:
-        shell: powershell
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
 
@@ -413,25 +409,59 @@ jobs:
           name: ui-dist
           path: crates/ram-ui/dist/
 
-      - name: Install Rust toolchain if not present
-        run: |
-          $rustc = Get-Command rustc -ErrorAction SilentlyContinue
-          if ($null -eq $rustc) {
-            Write-Host "Installing Rust toolchain..."
-            Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "rustup-init.exe"
-            .\rustup-init.exe -y --default-toolchain stable
-            Remove-Item .\rustup-init.exe
-            # Add cargo to PATH for this session
-            $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-          }
-          rustc --version
-          cargo --version
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: behavioral-tests
 
-      - name: Build and run behavioral E2E tests
+      - name: Build test binary
+        run: cargo test -p ram-service --test e2e_tests --no-run --message-format=json | Out-File -FilePath test-output.json
+        shell: powershell
+
+      - name: Find and copy test binary
+        shell: powershell
         run: |
-          # Ensure cargo is in PATH
-          $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
-          cargo test -p ram-service --test e2e_tests behavior:: -- --test-threads=1
+          $testBinary = Get-ChildItem -Path target/debug/deps -Filter "e2e_tests*.exe" | Where-Object { $_.Name -notmatch '\.d$' } | Select-Object -First 1
+          if ($testBinary) {
+            Copy-Item $testBinary.FullName -Destination "e2e_tests.exe"
+            Write-Host "Found test binary: $($testBinary.Name)"
+          } else {
+            throw "Could not find test binary"
+          }
+
+      - name: Upload test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavioral-test-binary
+          path: e2e_tests.exe
+          retention-days: 1
+
+  # Run behavioral E2E tests on stagebox1 (real ASIO hardware)
+  e2e-behavioral:
+    name: E2E Behavioral (stagebox1)
+    needs: build-behavioral-tests
+    runs-on: [self-hosted, Windows, asio]
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download test binary
+        uses: actions/download-artifact@v4
+        with:
+          name: behavioral-test-binary
+          path: .
+
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
+      - name: Run behavioral E2E tests
+        run: |
+          ./e2e_tests.exe behavior:: --test-threads=1
         env:
           TEST_SERVER_URL: "localhost:8080"
           CPAL_ASIO_DIR: "C:\\asio_sdk"
