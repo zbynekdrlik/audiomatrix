@@ -13,9 +13,9 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use ram_api::{
-    models::DeviceType,
+    models::{DeviceStatus, DeviceType},
     router::create_router_with_state,
-    websocket::{MeteringUpdate, WsEvent},
+    websocket::{ErrorUpdate, MeteringUpdate, WsEvent},
     AppState, DeviceCommand,
 };
 use ram_core::device::DeviceManager;
@@ -713,6 +713,7 @@ impl AudioMatrixService {
         let mut rx = self.app_state.subscribe_device_commands();
         let audio_processor = Arc::clone(&self.audio_processor);
         let device_state_manager = Arc::clone(&self.device_state_manager);
+        let app_state = self.app_state.clone();
         let running = self.running.clone();
 
         let task = tokio::spawn(async move {
@@ -732,11 +733,19 @@ impl AudioMatrixService {
                                             warn!("Failed to persist device attached state: {e}");
                                         }
 
+                                        let mut input_ok = true;
+                                        let mut output_ok = true;
+                                        let mut error_msg = String::new();
+
                                         // Start input stream for devices with input capability
                                         if matches!(device_type, DeviceType::Input | DeviceType::Duplex) {
                                             match audio_processor.start_input_stream(&device_id) {
                                                 Ok(()) => info!("Input stream started for: {device_id}"),
-                                                Err(e) => warn!("Failed to start input stream for {device_id}: {e}"),
+                                                Err(e) => {
+                                                    error!("Failed to start input stream for {device_id}: {e}");
+                                                    input_ok = false;
+                                                    error_msg = format!("Input stream failed: {e}");
+                                                }
                                             }
                                         }
 
@@ -744,8 +753,25 @@ impl AudioMatrixService {
                                         if matches!(device_type, DeviceType::Output | DeviceType::Duplex) {
                                             match audio_processor.start_output_stream(&device_id) {
                                                 Ok(()) => info!("Output stream started for: {device_id}"),
-                                                Err(e) => warn!("Failed to start output stream for {device_id}: {e}"),
+                                                Err(e) => {
+                                                    error!("Failed to start output stream for {device_id}: {e}");
+                                                    output_ok = false;
+                                                    if !error_msg.is_empty() {
+                                                        error_msg.push_str("; ");
+                                                    }
+                                                    error_msg.push_str(&format!("Output stream failed: {e}"));
+                                                }
                                             }
+                                        }
+
+                                        // If both streams failed, update device status to error
+                                        if !input_ok && !output_ok {
+                                            error!("All streams failed for {device_id}, setting device to error state");
+                                            app_state.set_device_status(&device_id, DeviceStatus::Error);
+                                            app_state.broadcast_event(WsEvent::Error(ErrorUpdate {
+                                                code: "STREAM_START_FAILED".to_string(),
+                                                message: format!("Failed to start streams for {}: {}", device_id, error_msg),
+                                            }));
                                         }
                                     }
                                     DeviceCommand::StopStreams { device_id } => {

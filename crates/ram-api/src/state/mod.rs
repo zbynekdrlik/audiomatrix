@@ -16,9 +16,9 @@ use ram_core::{ConnectionId, RouteController, SubscriptionStats};
 
 use crate::cross_node;
 use crate::models::{
-    ChannelInfo, DeviceInfo, DeviceType, GeneratorStatus, LatencyInfo, NodeInfo, RouteDefinition,
-    StreamDirection, StreamInfo, SubscriptionInfo, SubscriptionState as ApiSubscriptionState,
-    SubscriptionStatsResponse, WaveformType,
+    ChannelInfo, DeviceInfo, DeviceStatus, DeviceType, GeneratorStatus, LatencyInfo, NodeInfo,
+    RouteDefinition, StreamDirection, StreamInfo, SubscriptionInfo,
+    SubscriptionState as ApiSubscriptionState, SubscriptionStatsResponse, WaveformType,
 };
 use crate::subscription_client::SubscriptionClient;
 use crate::websocket::{SubscriptionNeededEvent, WsEvent};
@@ -322,6 +322,16 @@ impl AppState {
         });
 
         Ok(result)
+    }
+
+    /// Updates the status of a device.
+    ///
+    /// Used to set device to error state when streams fail to start.
+    pub fn set_device_status(&self, id: &str, status: DeviceStatus) {
+        let mut devices = self.inner.devices.write();
+        if let Some(device) = devices.get_mut(id) {
+            device.status = status;
+        }
     }
 
     /// Updates device settings.
