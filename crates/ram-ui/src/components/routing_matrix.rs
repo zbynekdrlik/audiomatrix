@@ -234,7 +234,11 @@ pub fn RoutingMatrix() -> impl IntoView {
                     <div class="node-selector">
                         <label>"Source Node:"</label>
                         <select on:change=on_source_node_change>
-                            <option value="">"Local"</option>
+                            <option value="" selected=app_state.source_node.get().is_none()>
+                                {move || app_state.current_node.get()
+                                    .map(|n| n.name.clone())
+                                    .unwrap_or_else(|| "Local".to_string())}
+                            </option>
                             {move || nodes.get().iter()
                                 .filter(|n| Some(&n.id) != app_state.current_node.get().as_ref().map(|c| &c.id))
                                 .map(|n| {
@@ -261,7 +265,11 @@ pub fn RoutingMatrix() -> impl IntoView {
                     <div class="node-selector">
                         <label>"Dest Node:"</label>
                         <select on:change=on_dest_node_change>
-                            <option value="">"Local"</option>
+                            <option value="" selected=app_state.dest_node.get().is_none()>
+                                {move || app_state.current_node.get()
+                                    .map(|n| n.name.clone())
+                                    .unwrap_or_else(|| "Local".to_string())}
+                            </option>
                             {move || nodes.get().iter()
                                 .filter(|n| Some(&n.id) != app_state.current_node.get().as_ref().map(|c| &c.id))
                                 .map(|n| {
