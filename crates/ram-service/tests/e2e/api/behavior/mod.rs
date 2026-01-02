@@ -45,16 +45,20 @@ macro_rules! require {
 /// Response for stream counts endpoint.
 #[derive(Debug, Deserialize)]
 pub struct StreamCounts {
-    pub input: usize,
-    pub output: usize,
+    pub input_streams: usize,
+    pub output_streams: usize,
 }
 
 /// Response for node info.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct NodeInfo {
+    pub id: String,
     pub name: String,
-    #[allow(dead_code)]
-    pub ip: String,
+    pub addresses: Vec<String>,
+    pub api_port: u16,
+    pub vban_port: u16,
+    pub online: bool,
 }
 
 /// Helper to wait for a condition with timeout.

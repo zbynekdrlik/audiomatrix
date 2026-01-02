@@ -29,7 +29,7 @@ async fn test_generator_produces_levels() {
                 "enabled": true,
                 "waveform": "sine",
                 "frequency": 1000,
-                "amplitude": 0.5
+                "level_db": -6.0
             }),
         )
         .await

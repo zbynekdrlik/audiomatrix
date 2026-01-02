@@ -120,8 +120,8 @@ async fn test_sample_rate_change_unattached_no_streams() {
         .await
         .expect("Failed to get stream counts");
 
-    assert_eq!(counts_before.input, counts_after.input);
-    assert_eq!(counts_before.output, counts_after.output);
+    assert_eq!(counts_before.input_streams, counts_after.input_streams);
+    assert_eq!(counts_before.output_streams, counts_after.output_streams);
 }
 
 /// Test: Changing buffer size on attached device restarts streams.

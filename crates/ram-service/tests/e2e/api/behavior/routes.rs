@@ -75,19 +75,54 @@ async fn test_route_creation_establishes_path() {
 async fn test_route_deletion_removes_path() {
     let client = TestClient::new();
 
-    let routes: Vec<serde_json::Value> = client
-        .get_json("/routes")
+    // First create a route to delete
+    let devices: Vec<DeviceInfo> = client
+        .get_json("/nodes/LOCAL/devices")
         .await
-        .expect("Failed to list routes");
+        .expect("Failed to list devices");
 
-    let route = routes
-        .first()
-        .expect("TEST INFRASTRUCTURE ERROR: No routes exist for deletion test. DO NOT SKIP.");
+    let input_device = devices.iter().find(|d| {
+        (matches!(d.device_type, DeviceType::Input | DeviceType::Duplex))
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    });
 
-    let route_id = route
-        .get("id")
-        .and_then(|v| v.as_str())
-        .expect("Route should have id");
+    let output_device = devices.iter().find(|d| {
+        (matches!(d.device_type, DeviceType::Output | DeviceType::Duplex))
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    });
+
+    let input =
+        input_device.expect("TEST INFRASTRUCTURE ERROR: No attached input devices. DO NOT SKIP.");
+    let output =
+        output_device.expect("TEST INFRASTRUCTURE ERROR: No attached output devices. DO NOT SKIP.");
+
+    let route_def = serde_json::json!({
+        "source_node": "LOCAL",
+        "source_device": input.id,
+        "source_channel": 1,
+        "destination_node": "LOCAL",
+        "destination_device": output.id,
+        "destination_channel": 1,
+        "volume": 1.0,
+        "muted": false
+    });
+
+    let create_response = client
+        .post_json("/routes", &route_def)
+        .await
+        .expect("Failed to create route");
+
+    assert!(
+        create_response.status().is_success(),
+        "Route creation for deletion test should succeed"
+    );
+
+    #[derive(Deserialize)]
+    struct RouteResp {
+        id: String,
+    }
+    let created: RouteResp = create_response.json().await.expect("Failed to parse response");
+    let route_id = &created.id;
 
     let response = client
         .delete(&format!("/routes/{}", urlencoding::encode(route_id)))
@@ -119,19 +154,54 @@ async fn test_route_deletion_removes_path() {
 async fn test_route_volume_change_applied() {
     let client = TestClient::new();
 
-    let routes: Vec<serde_json::Value> = client
-        .get_json("/routes")
+    // First create a route to test volume changes
+    let devices: Vec<DeviceInfo> = client
+        .get_json("/nodes/LOCAL/devices")
         .await
-        .expect("Failed to list routes");
+        .expect("Failed to list devices");
 
-    let route = routes
-        .first()
-        .expect("TEST INFRASTRUCTURE ERROR: No routes exist. DO NOT SKIP.");
+    let input_device = devices.iter().find(|d| {
+        (matches!(d.device_type, DeviceType::Input | DeviceType::Duplex))
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    });
 
-    let route_id = route
-        .get("id")
-        .and_then(|v| v.as_str())
-        .expect("Route should have id");
+    let output_device = devices.iter().find(|d| {
+        (matches!(d.device_type, DeviceType::Output | DeviceType::Duplex))
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    });
+
+    let input =
+        input_device.expect("TEST INFRASTRUCTURE ERROR: No attached input devices. DO NOT SKIP.");
+    let output =
+        output_device.expect("TEST INFRASTRUCTURE ERROR: No attached output devices. DO NOT SKIP.");
+
+    let route_def = serde_json::json!({
+        "source_node": "LOCAL",
+        "source_device": input.id,
+        "source_channel": 1,
+        "destination_node": "LOCAL",
+        "destination_device": output.id,
+        "destination_channel": 1,
+        "volume": 1.0,
+        "muted": false
+    });
+
+    let create_response = client
+        .post_json("/routes", &route_def)
+        .await
+        .expect("Failed to create route");
+
+    assert!(
+        create_response.status().is_success(),
+        "Route creation for volume test should succeed"
+    );
+
+    #[derive(Deserialize)]
+    struct RouteResp {
+        id: String,
+    }
+    let created: RouteResp = create_response.json().await.expect("Failed to parse response");
+    let route_id = &created.id;
 
     let response = client
         .client
@@ -161,6 +231,9 @@ async fn test_route_volume_change_applied() {
         "Route volume should be 0.5, got: {}",
         volume
     );
+
+    // Cleanup
+    let _ = client.delete(&format!("/routes/{}", route_id)).await;
 }
 
 /// Test: Muting a route actually mutes it.
@@ -168,29 +241,60 @@ async fn test_route_volume_change_applied() {
 async fn test_route_mute_applied() {
     let client = TestClient::new();
 
-    let routes: Vec<serde_json::Value> = client
-        .get_json("/routes")
+    // First create a route to test mute changes
+    let devices: Vec<DeviceInfo> = client
+        .get_json("/nodes/LOCAL/devices")
         .await
-        .expect("Failed to list routes");
+        .expect("Failed to list devices");
 
-    let route = routes
-        .first()
-        .expect("TEST INFRASTRUCTURE ERROR: No routes exist. DO NOT SKIP.");
+    let input_device = devices.iter().find(|d| {
+        (matches!(d.device_type, DeviceType::Input | DeviceType::Duplex))
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    });
 
-    let route_id = route
-        .get("id")
-        .and_then(|v| v.as_str())
-        .expect("Route should have id");
+    let output_device = devices.iter().find(|d| {
+        (matches!(d.device_type, DeviceType::Output | DeviceType::Duplex))
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    });
 
-    let was_muted = route
-        .get("muted")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let input =
+        input_device.expect("TEST INFRASTRUCTURE ERROR: No attached input devices. DO NOT SKIP.");
+    let output =
+        output_device.expect("TEST INFRASTRUCTURE ERROR: No attached output devices. DO NOT SKIP.");
 
+    let route_def = serde_json::json!({
+        "source_node": "LOCAL",
+        "source_device": input.id,
+        "source_channel": 1,
+        "destination_node": "LOCAL",
+        "destination_device": output.id,
+        "destination_channel": 1,
+        "volume": 1.0,
+        "muted": false
+    });
+
+    let create_response = client
+        .post_json("/routes", &route_def)
+        .await
+        .expect("Failed to create route");
+
+    assert!(
+        create_response.status().is_success(),
+        "Route creation for mute test should succeed"
+    );
+
+    #[derive(Deserialize)]
+    struct RouteResp {
+        id: String,
+    }
+    let created: RouteResp = create_response.json().await.expect("Failed to parse response");
+    let route_id = &created.id;
+
+    // Route was created with muted: false, now toggle it to true
     let response = client
         .client
         .patch(client.api_url(&format!("/routes/{}", urlencoding::encode(route_id))))
-        .json(&serde_json::json!({ "muted": !was_muted }))
+        .json(&serde_json::json!({ "muted": true }))
         .send()
         .await
         .expect("Failed to update route");
@@ -207,13 +311,8 @@ async fn test_route_mute_applied() {
         .and_then(|v| v.as_bool())
         .expect("Route should have muted");
 
-    assert_eq!(is_muted, !was_muted, "Route mute state should have toggled");
+    assert!(is_muted, "Route should be muted after update");
 
-    // Restore original state
-    let _ = client
-        .client
-        .patch(client.api_url(&format!("/routes/{}", urlencoding::encode(route_id))))
-        .json(&serde_json::json!({ "muted": was_muted }))
-        .send()
-        .await;
+    // Cleanup
+    let _ = client.delete(&format!("/routes/{}", route_id)).await;
 }

@@ -45,11 +45,12 @@ async fn test_attach_device_starts_streams() {
         .expect("Failed to get final stream counts");
 
     let streams_increased = match device.device_type {
-        DeviceType::Input => final_counts.input > initial_counts.input,
-        DeviceType::Output => final_counts.output > initial_counts.output,
+        DeviceType::Input => final_counts.input_streams > initial_counts.input_streams,
+        DeviceType::Output => final_counts.output_streams > initial_counts.output_streams,
         DeviceType::Duplex => {
-            final_counts.input > initial_counts.input || final_counts.output > initial_counts.output
-        },
+            final_counts.input_streams > initial_counts.input_streams
+                || final_counts.output_streams > initial_counts.output_streams
+        }
     };
 
     assert!(
@@ -108,7 +109,8 @@ async fn test_detach_device_stops_streams() {
         .expect("Failed to get final stream counts");
 
     assert!(
-        final_counts.input < initial_counts.input || final_counts.output < initial_counts.output,
+        final_counts.input_streams < initial_counts.input_streams
+            || final_counts.output_streams < initial_counts.output_streams,
         "Stream count should decrease after detach"
     );
 }
