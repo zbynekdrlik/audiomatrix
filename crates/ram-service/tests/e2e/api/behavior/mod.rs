@@ -77,3 +77,110 @@ where
     }
     false
 }
+
+/// Ensure at least one device of the specified type is attached.
+/// Returns the device info after attaching if necessary.
+/// This makes tests self-sufficient by handling the attachment prerequisite.
+pub async fn ensure_attached_device(
+    client: &TestClient,
+    device_type_filter: impl Fn(&DeviceInfo) -> bool,
+) -> DeviceInfo {
+    let devices: Vec<DeviceInfo> = client
+        .get_json("/nodes/LOCAL/devices")
+        .await
+        .expect("Failed to list devices");
+
+    // First try to find an already attached device
+    if let Some(attached) = devices.iter().find(|d| {
+        device_type_filter(d) && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    }) {
+        return attached.clone();
+    }
+
+    // No attached device found, attach an available one
+    let available = devices
+        .iter()
+        .find(|d| device_type_filter(d) && matches!(d.status, DeviceStatus::Available))
+        .expect(
+            "TEST INFRASTRUCTURE ERROR: No devices available to attach. \
+             Ensure stagebox1 has ASIO devices configured. DO NOT SKIP.",
+        );
+
+    let device_id = urlencoding::encode(&available.id);
+    let response = client
+        .post_json(
+            &format!("/nodes/LOCAL/devices/{device_id}/attach"),
+            &serde_json::json!({}),
+        )
+        .await
+        .expect("Failed to attach device");
+
+    assert!(
+        response.status().is_success(),
+        "Device attachment should succeed"
+    );
+
+    // Wait for device to be attached
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // Fetch updated device info
+    client
+        .get_json(&format!("/nodes/LOCAL/devices/{device_id}"))
+        .await
+        .expect("Failed to get device info after attach")
+}
+
+/// Ensure an input device is attached.
+pub async fn ensure_input_attached(client: &TestClient) -> DeviceInfo {
+    ensure_attached_device(client, |d| {
+        matches!(d.device_type, DeviceType::Input | DeviceType::Duplex)
+    })
+    .await
+}
+
+/// Ensure an output device is attached.
+pub async fn ensure_output_attached(client: &TestClient) -> DeviceInfo {
+    ensure_attached_device(client, |d| {
+        matches!(d.device_type, DeviceType::Output | DeviceType::Duplex)
+    })
+    .await
+}
+
+/// Ensure a duplex device is attached.
+/// Returns None if no duplex devices are available.
+pub async fn ensure_duplex_attached(client: &TestClient) -> Option<DeviceInfo> {
+    let devices: Vec<DeviceInfo> = client.get_json("/nodes/LOCAL/devices").await.ok()?;
+
+    // First try to find an already attached duplex device
+    if let Some(attached) = devices.iter().find(|d| {
+        matches!(d.device_type, DeviceType::Duplex)
+            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
+    }) {
+        return Some(attached.clone());
+    }
+
+    // Try to attach an available duplex device
+    let available = devices.iter().find(|d| {
+        matches!(d.device_type, DeviceType::Duplex) && matches!(d.status, DeviceStatus::Available)
+    })?;
+
+    let device_id = urlencoding::encode(&available.id);
+    let response = client
+        .post_json(
+            &format!("/nodes/LOCAL/devices/{device_id}/attach"),
+            &serde_json::json!({}),
+        )
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    client
+        .get_json(&format!("/nodes/LOCAL/devices/{device_id}"))
+        .await
+        .ok()
+}

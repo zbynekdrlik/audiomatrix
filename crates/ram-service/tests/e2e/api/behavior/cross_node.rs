@@ -40,18 +40,8 @@ async fn test_cross_node_route_creation() {
     let output_device = remote_output
         .expect("TEST INFRASTRUCTURE ERROR: No output devices on remote node. DO NOT SKIP.");
 
-    let local_devices: Vec<DeviceInfo> = client
-        .get_json("/nodes/LOCAL/devices")
-        .await
-        .expect("Failed to get local devices");
-
-    let local_input = local_devices.iter().find(|d| {
-        matches!(d.device_type, DeviceType::Input | DeviceType::Duplex)
-            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
-    });
-
-    let input_device = local_input
-        .expect("TEST INFRASTRUCTURE ERROR: No attached local input devices. DO NOT SKIP.");
+    // Ensure we have an attached local input device
+    let input_device = ensure_input_attached(&client).await;
 
     let route = serde_json::json!({
         "source_node": "LOCAL",
@@ -112,10 +102,10 @@ async fn test_cross_node_bidirectional_routing() {
     let remote =
         remote_node.expect("TEST INFRASTRUCTURE ERROR: No remote nodes discovered. DO NOT SKIP.");
 
-    let local_devices: Vec<DeviceInfo> = client
-        .get_json("/nodes/LOCAL/devices")
+    // Ensure we have an attached local duplex device
+    let local_dev = ensure_duplex_attached(&client)
         .await
-        .expect("Failed to get local devices");
+        .expect("TEST INFRASTRUCTURE ERROR: No local duplex device available. DO NOT SKIP.");
 
     let remote_devices: Vec<DeviceInfo> = client
         .get_json(&format!(
@@ -125,17 +115,10 @@ async fn test_cross_node_bidirectional_routing() {
         .await
         .expect("Failed to get remote devices");
 
-    let local_duplex = local_devices.iter().find(|d| {
-        matches!(d.device_type, DeviceType::Duplex)
-            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
-    });
-
     let remote_duplex = remote_devices
         .iter()
         .find(|d| matches!(d.device_type, DeviceType::Duplex));
 
-    let local_dev =
-        local_duplex.expect("TEST INFRASTRUCTURE ERROR: No local duplex device. DO NOT SKIP.");
     let remote_dev =
         remote_duplex.expect("TEST INFRASTRUCTURE ERROR: No remote duplex device. DO NOT SKIP.");
 

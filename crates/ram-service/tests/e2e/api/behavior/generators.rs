@@ -7,19 +7,8 @@ use super::*;
 async fn test_generator_produces_levels() {
     let client = TestClient::new();
 
-    let devices: Vec<DeviceInfo> = client
-        .get_json("/nodes/LOCAL/devices")
-        .await
-        .expect("Failed to list devices");
-
-    let attached = devices.iter().find(|d| {
-        matches!(d.device_type, DeviceType::Input | DeviceType::Duplex)
-            && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
-    });
-
-    let device =
-        attached.expect("TEST INFRASTRUCTURE ERROR: No attached input devices. DO NOT SKIP.");
-
+    // Ensure we have an attached input device (attaches one if needed)
+    let device = ensure_input_attached(&client).await;
     let device_id = urlencoding::encode(&device.id);
 
     let response = client

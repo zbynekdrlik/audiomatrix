@@ -7,16 +7,8 @@ use super::*;
 async fn test_sample_rate_change_restarts_streams() {
     let client = TestClient::new();
 
-    let devices: Vec<DeviceInfo> = client
-        .get_json("/nodes/LOCAL/devices")
-        .await
-        .expect("Failed to list devices");
-
-    let device = devices
-        .iter()
-        .find(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
-        .expect("TEST INFRASTRUCTURE ERROR: No attached devices. DO NOT SKIP.");
-
+    // Ensure we have an attached device (attaches one if needed)
+    let device = ensure_input_attached(&client).await;
     let device_id = urlencoding::encode(&device.id);
     let original_rate = device.sample_rate;
     let new_rate = if original_rate == 48000 { 96000 } else { 48000 };
@@ -129,16 +121,8 @@ async fn test_sample_rate_change_unattached_no_streams() {
 async fn test_buffer_size_change_restarts_streams() {
     let client = TestClient::new();
 
-    let devices: Vec<DeviceInfo> = client
-        .get_json("/nodes/LOCAL/devices")
-        .await
-        .expect("Failed to list devices");
-
-    let device = devices
-        .iter()
-        .find(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
-        .expect("TEST INFRASTRUCTURE ERROR: No attached devices. DO NOT SKIP.");
-
+    // Ensure we have an attached device (attaches one if needed)
+    let device = ensure_input_attached(&client).await;
     let device_id = urlencoding::encode(&device.id);
     let original_buffer = device.buffer_size;
     let new_buffer = if original_buffer == 256 { 512 } else { 256 };

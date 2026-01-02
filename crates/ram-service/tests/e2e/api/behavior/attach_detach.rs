@@ -50,7 +50,7 @@ async fn test_attach_device_starts_streams() {
         DeviceType::Duplex => {
             final_counts.input_streams > initial_counts.input_streams
                 || final_counts.output_streams > initial_counts.output_streams
-        }
+        },
     };
 
     assert!(
