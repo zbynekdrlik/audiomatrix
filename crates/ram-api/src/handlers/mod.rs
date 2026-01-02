@@ -1,6 +1,13 @@
 //! API request handlers.
 
+mod routes;
 mod subscriptions;
+
+// Re-export route handlers
+pub use routes::{
+    create_route, delete_route, get_route, list_routes, patch_route, update_route,
+    RouteCreatedResponse, RouteDeletedResponse,
+};
 
 use axum::extract::{Path, State};
 use axum::Json;
@@ -9,13 +16,12 @@ use urlencoding;
 use crate::models::{
     AttachDeviceRequest, AttachDeviceResponse, BulkChannelLabelsRequest, ChannelInfo,
     CreateVirtualDeviceRequest, DeviceGeneratorResponse, DeviceInfo, GeneratorStatus,
-    HealthResponse, LatencyInfo, NodeInfo, PatchRouteRequest, RouteDefinition,
-    SetAllGeneratorsRequest, SetGeneratorRequest, StreamInfo, SubscriptionInfo,
-    SubscriptionStatsResponse, UpdateChannelLabelRequest, UpdateDeviceRequest,
-    UpdateVirtualDeviceRequest, VirtualDeviceResponse,
+    HealthResponse, LatencyInfo, NodeInfo, SetAllGeneratorsRequest, SetGeneratorRequest,
+    StreamInfo, SubscriptionInfo, SubscriptionStatsResponse, UpdateChannelLabelRequest,
+    UpdateDeviceRequest, UpdateVirtualDeviceRequest, VirtualDeviceResponse, WaveformType,
 };
 use crate::state::AppState;
-use crate::websocket::{RouteUpdate, WsEvent};
+use crate::websocket::WsEvent;
 use crate::Result;
 
 // Re-export subscription handler
@@ -617,7 +623,7 @@ pub async fn get_channel_generator(
         .unwrap_or_else(|| GeneratorStatus {
             channel,
             enabled: false,
-            waveform: Default::default(),
+            waveform: WaveformType::default(),
             frequency: 1000,
             level_db: -18.0,
         });
@@ -680,129 +686,6 @@ pub async fn set_all_generators(
         device_id,
         channels,
     }))
-}
-
-// --- Route Handlers ---
-
-/// List all routes.
-pub async fn list_routes(State(state): State<AppState>) -> Result<Json<Vec<RouteDefinition>>> {
-    Ok(Json(state.all_routes()))
-}
-
-/// Get a specific route.
-pub async fn get_route(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<RouteDefinition>> {
-    state
-        .get_route(&id)
-        .map(Json)
-        .ok_or_else(|| crate::Error::NotFound(format!("route: {id}")))
-}
-
-/// Create a new route.
-pub async fn create_route(
-    State(state): State<AppState>,
-    Json(route): Json<RouteDefinition>,
-) -> Result<Json<RouteCreatedResponse>> {
-    let id = state
-        .upsert_route(route)
-        .map_err(crate::Error::BadRequest)?;
-
-    state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
-        action: "added".into(),
-        route_id: id.clone(),
-    }));
-
-    Ok(Json(RouteCreatedResponse { id }))
-}
-
-/// Update an existing route.
-pub async fn update_route(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(route): Json<RouteDefinition>,
-) -> Result<Json<RouteDefinition>> {
-    if state.get_route(&id).is_none() {
-        return Err(crate::Error::NotFound(format!("route: {id}")));
-    }
-
-    let new_id = state
-        .upsert_route(route.clone())
-        .map_err(crate::Error::BadRequest)?;
-
-    if new_id != id {
-        let _ = state.remove_route(&id);
-    }
-
-    state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
-        action: "modified".into(),
-        route_id: new_id,
-    }));
-
-    Ok(Json(route))
-}
-
-/// Partially update a route (volume/muted only).
-pub async fn patch_route(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(patch): Json<PatchRouteRequest>,
-) -> Result<Json<RouteDefinition>> {
-    let mut route = state
-        .get_route(&id)
-        .ok_or_else(|| crate::Error::NotFound(format!("route: {id}")))?;
-
-    // Apply patches
-    if let Some(volume) = patch.volume {
-        route.volume = volume;
-    }
-    if let Some(muted) = patch.muted {
-        route.muted = muted;
-    }
-
-    // Save updated route
-    let new_id = state
-        .upsert_route(route.clone())
-        .map_err(crate::Error::BadRequest)?;
-
-    state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
-        action: "modified".into(),
-        route_id: new_id,
-    }));
-
-    Ok(Json(route))
-}
-
-/// Delete a route.
-pub async fn delete_route(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<RouteDeletedResponse>> {
-    let removed = state.remove_route(&id).map_err(crate::Error::Internal)?;
-
-    if removed.is_none() {
-        return Err(crate::Error::NotFound(format!("route: {id}")));
-    }
-
-    state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
-        action: "removed".into(),
-        route_id: id.clone(),
-    }));
-
-    Ok(Json(RouteDeletedResponse { id }))
-}
-
-/// Response for route creation.
-#[derive(Debug, serde::Serialize)]
-pub struct RouteCreatedResponse {
-    pub id: String,
-}
-
-/// Response for route deletion.
-#[derive(Debug, serde::Serialize)]
-pub struct RouteDeletedResponse {
-    pub id: String,
 }
 
 // --- Stream Handlers ---

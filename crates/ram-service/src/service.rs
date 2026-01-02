@@ -27,39 +27,8 @@ use ram_discovery::{
 use crate::audio_processor::AudioProcessor;
 use crate::config::ServiceConfig;
 use crate::device_state::DeviceStateManager;
+use crate::shutdown::ShutdownSignal;
 use crate::vban_manager::{VbanManager, VbanManagerConfig};
-
-/// Service shutdown signal.
-#[derive(Debug, Clone)]
-pub struct ShutdownSignal {
-    sender: broadcast::Sender<()>,
-}
-
-impl ShutdownSignal {
-    /// Creates a new shutdown signal.
-    #[must_use]
-    pub fn new() -> Self {
-        let (sender, _) = broadcast::channel(1);
-        Self { sender }
-    }
-
-    /// Triggers a shutdown.
-    pub fn shutdown(&self) {
-        let _ = self.sender.send(());
-    }
-
-    /// Subscribes to the shutdown signal.
-    #[must_use]
-    pub fn subscribe(&self) -> broadcast::Receiver<()> {
-        self.sender.subscribe()
-    }
-}
-
-impl Default for ShutdownSignal {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Service state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

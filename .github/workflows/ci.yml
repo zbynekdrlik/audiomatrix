@@ -431,6 +431,10 @@ jobs:
         shell: cmd
         run: cargo test -p ram-service --test e2e_tests --no-run
 
+      - name: Build service binary
+        shell: cmd
+        run: cargo build --release -p ram-service
+
       - name: Find and copy test binary
         shell: powershell
         run: |
@@ -447,6 +451,13 @@ jobs:
         with:
           name: behavioral-test-binary
           path: e2e_tests.exe
+          retention-days: 1
+
+      - name: Upload service binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavioral-service-binary
+          path: target/release/audiomatrix.exe
           retention-days: 1
 
   # Run behavioral E2E tests on stagebox1 (real ASIO hardware)
@@ -466,11 +477,37 @@ jobs:
           name: behavioral-test-binary
           path: .
 
+      - name: Download service binary
+        uses: actions/download-artifact@v4
+        with:
+          name: behavioral-service-binary
+          path: .
+
       - name: Download UI dist
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
           path: crates/ram-ui/dist/
+
+      - name: Stop existing AudioMatrix
+        run: |
+          Get-Process audiomatrix* -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
+
+      - name: Start AudioMatrix server
+        run: |
+          Start-Process -FilePath ".\audiomatrix.exe" -ArgumentList "-n stagebox1" -WindowStyle Hidden
+          Start-Sleep -Seconds 5
+          # Verify server is running
+          try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8080/api/v1/health" -UseBasicParsing
+            Write-Host "Server health check: $($response.StatusCode)"
+          } catch {
+            Write-Host "Server health check failed, waiting more..."
+            Start-Sleep -Seconds 5
+          }
+        env:
+          CPAL_ASIO_DIR: "C:\\asio_sdk"
 
       - name: Run behavioral E2E tests
         run: |
@@ -478,6 +515,11 @@ jobs:
         env:
           TEST_SERVER_URL: "localhost:8080"
           CPAL_ASIO_DIR: "C:\\asio_sdk"
+
+      - name: Stop AudioMatrix server
+        if: always()
+        run: |
+          Get-Process audiomatrix* -ErrorAction SilentlyContinue | Stop-Process -Force
 
   # E2E Tests (Playwright)
   e2e:
