@@ -71,19 +71,8 @@ async fn test_attach_device_starts_streams() {
 async fn test_detach_device_stops_streams() {
     let client = TestClient::new();
 
-    let devices: Vec<DeviceInfo> = client
-        .get_json("/nodes/LOCAL/devices")
-        .await
-        .expect("Failed to list devices");
-
-    let device = devices
-        .iter()
-        .find(|d| matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active))
-        .expect(
-            "TEST INFRASTRUCTURE ERROR: No attached devices. \
-             Attach device on stagebox1 first. DO NOT SKIP.",
-        );
-
+    // Ensure we have an attached device to detach (attaches one if needed)
+    let device = ensure_input_attached(&client).await;
     let device_id = urlencoding::encode(&device.id);
 
     let initial_counts: StreamCounts = client
