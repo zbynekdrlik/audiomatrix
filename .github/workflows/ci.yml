@@ -415,6 +415,18 @@ jobs:
         with:
           key: behavioral-tests
 
+      # Install LLVM/Clang (required for ASIO SDK compilation)
+      - name: Install LLVM
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      # Clone ASIO SDK from GitHub (needed for Windows audio)
+      - name: Clone ASIO SDK
+        run: |
+          git clone https://github.com/audiosdk/asio.git $env:RUNNER_TEMP\asio_sdk
+          echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
+
       - name: Build test binary
         shell: powershell
         run: |
