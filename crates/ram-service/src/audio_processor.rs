@@ -570,14 +570,16 @@ impl AudioProcessor {
     /// Starts an input stream for the specified device.
     pub fn start_input_stream(&self, device_id: &str) -> Result<()> {
         self.start_input_stream_with_config(device_id, None)
+            .map(|_| ())
     }
 
     /// Starts an input stream with optional sample rate override.
+    /// Returns the actual sample rate used (may differ from requested if fallback occurs).
     pub fn start_input_stream_with_config(
         &self,
         device_id: &str,
         sample_rate: Option<u32>,
-    ) -> Result<()> {
+    ) -> Result<u32> {
         info!("start_input_stream called for device: {device_id}");
 
         if self.input_streams.read().contains_key(device_id) {
@@ -684,7 +686,7 @@ impl AudioProcessor {
             "Input stream started on {device_id} at {}Hz",
             actual_sample_rate
         );
-        Ok(())
+        Ok(actual_sample_rate)
     }
 
     /// Ensures an input stream is running and returns buffer indices for the requested channels.
@@ -764,14 +766,16 @@ impl AudioProcessor {
     /// Starts an output stream for the specified device.
     pub fn start_output_stream(&self, device_id: &str) -> Result<()> {
         self.start_output_stream_with_config(device_id, None)
+            .map(|_| ())
     }
 
     /// Starts an output stream with optional sample rate override.
+    /// Returns the actual sample rate used (may differ from requested if fallback occurs).
     pub fn start_output_stream_with_config(
         &self,
         device_id: &str,
         sample_rate: Option<u32>,
-    ) -> Result<()> {
+    ) -> Result<u32> {
         info!("start_output_stream called for device: {device_id}");
 
         if self.output_streams.read().contains_key(device_id) {
@@ -876,7 +880,7 @@ impl AudioProcessor {
         );
 
         info!("Output stream started on {device_id} at {actual_sample_rate}Hz");
-        Ok(())
+        Ok(actual_sample_rate)
     }
 
     /// Stops an input stream for the specified device.

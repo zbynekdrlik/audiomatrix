@@ -243,6 +243,17 @@ pub struct RouteDefinition {
     pub muted: bool,
 }
 
+/// Partial route update request for PATCH.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PatchRouteRequest {
+    /// Optional new volume (0.0 to 1.0+).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume: Option<f32>,
+    /// Optional new mute state.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+}
+
 /// Subscription request (sent from destination node to source node).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionRequest {

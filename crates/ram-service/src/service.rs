@@ -791,20 +791,19 @@ impl AudioMatrixService {
                                         // Stop existing streams
                                         audio_processor.stop_device_streams(&device_id);
 
-                                        // Persist new config
-                                        if let Err(e) = device_state_manager.set_device_config(&device_id, Some(sample_rate), Some(buffer_size)) {
-                                            warn!("Failed to persist device config: {e}");
-                                        }
-
                                         // Start streams with new config
-                                        // Note: The audio_processor will read the new config from device state
+                                        // Track actual sample rates used (may differ from requested due to hardware limitations)
                                         let mut input_ok = true;
                                         let mut output_ok = true;
                                         let mut error_msg = String::new();
+                                        let mut actual_sample_rate = sample_rate;
 
                                         if matches!(device_type, DeviceType::Input | DeviceType::Duplex) {
                                             match audio_processor.start_input_stream_with_config(&device_id, Some(sample_rate)) {
-                                                Ok(()) => info!("Input stream restarted for: {device_id} at {sample_rate}Hz"),
+                                                Ok(actual_rate) => {
+                                                    info!("Input stream restarted for: {device_id} at {actual_rate}Hz");
+                                                    actual_sample_rate = actual_rate;
+                                                }
                                                 Err(e) => {
                                                     error!("Failed to restart input stream for {device_id}: {e}");
                                                     input_ok = false;
@@ -815,7 +814,10 @@ impl AudioMatrixService {
 
                                         if matches!(device_type, DeviceType::Output | DeviceType::Duplex) {
                                             match audio_processor.start_output_stream_with_config(&device_id, Some(sample_rate)) {
-                                                Ok(()) => info!("Output stream restarted for: {device_id} at {sample_rate}Hz"),
+                                                Ok(actual_rate) => {
+                                                    info!("Output stream restarted for: {device_id} at {actual_rate}Hz");
+                                                    actual_sample_rate = actual_rate;
+                                                }
                                                 Err(e) => {
                                                     error!("Failed to restart output stream for {device_id}: {e}");
                                                     output_ok = false;
@@ -836,7 +838,22 @@ impl AudioMatrixService {
                                                 message: format!("Failed to reconfigure streams for {}: {}", device_id, error_msg),
                                             }));
                                         } else {
-                                            info!("Device {} reconfigured successfully", device_id);
+                                            info!("Device {} reconfigured successfully at {}Hz", device_id, actual_sample_rate);
+
+                                            // Persist actual config (may differ from requested if hardware doesn't support it)
+                                            if let Err(e) = device_state_manager.set_device_config(&device_id, Some(actual_sample_rate), Some(buffer_size)) {
+                                                warn!("Failed to persist device config: {e}");
+                                            }
+
+                                            // Update device state to reflect actual sample rate
+                                            if actual_sample_rate != sample_rate {
+                                                info!("Device {} sample rate adjusted from {} to {} due to hardware limitations",
+                                                    device_id, sample_rate, actual_sample_rate);
+                                                // Update device sample_rate in API state
+                                                if let Err(e) = app_state.update_device(&device_id, None, Some(actual_sample_rate), None) {
+                                                    warn!("Failed to update device state with actual sample rate: {e}");
+                                                }
+                                            }
                                         }
                                     }
                                 }

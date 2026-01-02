@@ -9,10 +9,10 @@ use urlencoding;
 use crate::models::{
     AttachDeviceRequest, AttachDeviceResponse, BulkChannelLabelsRequest, ChannelInfo,
     CreateVirtualDeviceRequest, DeviceGeneratorResponse, DeviceInfo, GeneratorStatus,
-    HealthResponse, LatencyInfo, NodeInfo, RouteDefinition, SetAllGeneratorsRequest,
-    SetGeneratorRequest, StreamInfo, SubscriptionInfo, SubscriptionStatsResponse,
-    UpdateChannelLabelRequest, UpdateDeviceRequest, UpdateVirtualDeviceRequest,
-    VirtualDeviceResponse,
+    HealthResponse, LatencyInfo, NodeInfo, PatchRouteRequest, RouteDefinition,
+    SetAllGeneratorsRequest, SetGeneratorRequest, StreamInfo, SubscriptionInfo,
+    SubscriptionStatsResponse, UpdateChannelLabelRequest, UpdateDeviceRequest,
+    UpdateVirtualDeviceRequest, VirtualDeviceResponse,
 };
 use crate::state::AppState;
 use crate::websocket::{RouteUpdate, WsEvent};
@@ -599,6 +599,32 @@ pub async fn get_device_generator(
     }))
 }
 
+/// Get generator status for a specific channel.
+pub async fn get_channel_generator(
+    State(state): State<AppState>,
+    Path((node_id, device_id, channel)): Path<(String, String, u16)>,
+) -> Result<Json<GeneratorStatus>> {
+    if !state.is_local_node(&node_id) {
+        return Err(crate::Error::BadRequest(format!(
+            "Generator control only available on local node, not: {node_id}"
+        )));
+    }
+
+    let channels = state.get_generator_status(&device_id);
+    let status = channels
+        .into_iter()
+        .find(|s| s.channel == channel)
+        .unwrap_or_else(|| GeneratorStatus {
+            channel,
+            enabled: false,
+            waveform: Default::default(),
+            frequency: 1000,
+            level_db: -18.0,
+        });
+
+    Ok(Json(status))
+}
+
 /// Set generator for a specific channel.
 pub async fn set_channel_generator(
     State(state): State<AppState>,
@@ -708,6 +734,37 @@ pub async fn update_route(
     if new_id != id {
         let _ = state.remove_route(&id);
     }
+
+    state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
+        action: "modified".into(),
+        route_id: new_id,
+    }));
+
+    Ok(Json(route))
+}
+
+/// Partially update a route (volume/muted only).
+pub async fn patch_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(patch): Json<PatchRouteRequest>,
+) -> Result<Json<RouteDefinition>> {
+    let mut route = state
+        .get_route(&id)
+        .ok_or_else(|| crate::Error::NotFound(format!("route: {id}")))?;
+
+    // Apply patches
+    if let Some(volume) = patch.volume {
+        route.volume = volume;
+    }
+    if let Some(muted) = patch.muted {
+        route.muted = muted;
+    }
+
+    // Save updated route
+    let new_id = state
+        .upsert_route(route.clone())
+        .map_err(crate::Error::BadRequest)?;
 
     state.broadcast_event(WsEvent::RouteChanged(RouteUpdate {
         action: "modified".into(),

@@ -1,6 +1,6 @@
 //! API router configuration.
 
-use axum::routing::{delete, get, patch, post, put};
+use axum::routing::{get, patch, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -58,14 +58,18 @@ pub fn create_router_with_state(state: AppState) -> Router {
         )
         .route(
             "/nodes/:node_id/devices/:device_id/channels/:channel/generator",
-            post(handlers::set_channel_generator),
+            get(handlers::get_channel_generator).post(handlers::set_channel_generator),
         )
         // Routes
         .route("/routes", get(handlers::list_routes))
         .route("/routes", post(handlers::create_route))
-        .route("/routes/:id", get(handlers::get_route))
-        .route("/routes/:id", put(handlers::update_route))
-        .route("/routes/:id", delete(handlers::delete_route))
+        .route(
+            "/routes/:id",
+            get(handlers::get_route)
+                .put(handlers::update_route)
+                .patch(handlers::patch_route)
+                .delete(handlers::delete_route),
+        )
         .route("/routes/:id/latency", get(handlers::get_route_latency))
         // Streams
         .route("/streams", get(handlers::list_streams))
