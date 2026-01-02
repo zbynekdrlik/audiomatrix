@@ -428,14 +428,8 @@ jobs:
           echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
 
       - name: Build test binary
-        shell: powershell
-        run: |
-          cargo test -p ram-service --test e2e_tests --no-run 2>&1 | Tee-Object -Variable buildOutput
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Build failed. Full output:"
-            Write-Host $buildOutput
-            exit $LASTEXITCODE
-          }
+        shell: cmd
+        run: cargo test -p ram-service --test e2e_tests --no-run
 
       - name: Find and copy test binary
         shell: powershell
