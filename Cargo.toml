@@ -81,7 +81,7 @@ muda = "0.17"
 image = { version = "0.25", default-features = false, features = ["png", "ico"] }
 winit = "0.30"
 winrt-notification = "0.5"
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading"] }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
 
 # Testing
 proptest = "1.5"
