@@ -813,7 +813,7 @@ pub async fn get_debug_info(State(state): State<AppState>) -> Json<DebugInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{DeviceStatus, DeviceType};
+    use crate::models::{DeviceStatus, DeviceType, RouteDefinition};
 
     #[tokio::test]
     async fn health_returns_ok() {

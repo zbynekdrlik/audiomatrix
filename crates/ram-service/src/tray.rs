@@ -29,7 +29,7 @@ use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::WindowId;
 use winrt_notification::{Sound, Toast};
 
-use crate::service::ShutdownSignal;
+use crate::shutdown::ShutdownSignal;
 
 // ============================================================================
 // SINGLE INSTANCE GUARD - Prevent multiple tray apps
