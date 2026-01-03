@@ -161,7 +161,7 @@ jobs:
 
       # Run all unit tests (skip E2E - those run on stagebox1 with real hardware)
       - name: Run workspace tests
-        run: cargo test --workspace -- --skip e2e::
+        run: "cargo test --workspace -- --skip e2e::"
 
       - name: Run doc tests
         run: cargo test --doc
