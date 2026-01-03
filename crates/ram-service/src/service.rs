@@ -630,13 +630,36 @@ impl AudioMatrixService {
             // Broadcast metering at 30 Hz (every ~33ms)
             let interval = std::time::Duration::from_millis(33);
 
+            let mut debug_counter = 0u64;
             while running.load(Ordering::SeqCst) {
                 std::thread::sleep(interval);
+                debug_counter += 1;
 
                 // Collect input meters
-                for (device_id, levels) in metering_contexts.all_input_meters() {
+                let input_meters = metering_contexts.all_input_meters();
+
+                // Debug: log every 30 iterations (once per second)
+                if debug_counter % 30 == 1 {
+                    tracing::debug!(
+                        "Metering broadcast: {} input devices registered",
+                        input_meters.len()
+                    );
+                }
+
+                for (device_id, levels) in input_meters {
                     let db_levels: Vec<f32> = levels.iter().map(|l| l.rms_db).collect();
                     let db_peaks: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
+
+                    // Debug: log levels for first device every second
+                    if debug_counter % 30 == 1 {
+                        let max_level = db_levels.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                        tracing::debug!(
+                            "Device {}: {} channels, max level: {:.1} dB",
+                            device_id,
+                            levels.len(),
+                            max_level
+                        );
+                    }
 
                     // Only broadcast if there are non-silent levels
                     if db_levels.iter().any(|&l| l > -120.0) {

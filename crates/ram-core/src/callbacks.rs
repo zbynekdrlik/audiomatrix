@@ -218,6 +218,7 @@ impl OutputCallbackContext {
 pub fn create_input_callback(
     context: Arc<InputCallbackContext>,
 ) -> impl FnMut(&[Sample]) + Send + 'static {
+    let mut callback_count = 0u64;
     move |data: &[Sample]| {
         let channels = context.channel_count;
         if channels == 0 {
@@ -227,6 +228,22 @@ pub fn create_input_callback(
         let samples_per_channel = data.len() / channels;
         if samples_per_channel == 0 {
             return;
+        }
+
+        callback_count += 1;
+
+        // Debug: log every ~1000 callbacks (~30 seconds at 30Hz)
+        if callback_count % 1000 == 1 {
+            // Calculate max sample in buffer
+            let max_sample = data.iter().fold(0.0f32, |max, &s| s.abs().max(max));
+            tracing::debug!(
+                "Input callback #{} for {}: {} samples, {} channels, max sample: {:.4}",
+                callback_count,
+                context.device_id,
+                data.len(),
+                channels,
+                max_sample
+            );
         }
 
         // Update meters with interleaved data
