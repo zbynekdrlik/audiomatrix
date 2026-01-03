@@ -149,20 +149,42 @@ pub async fn ensure_output_attached(client: &TestClient) -> DeviceInfo {
 /// Ensure a duplex device is attached.
 /// Returns None if no duplex devices are available.
 pub async fn ensure_duplex_attached(client: &TestClient) -> Option<DeviceInfo> {
-    let devices: Vec<DeviceInfo> = client.get_json("/nodes/LOCAL/devices").await.ok()?;
+    let devices: Vec<DeviceInfo> = match client.get_json("/nodes/LOCAL/devices").await {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("DUPLEX_DEBUG: Failed to get devices: {e}");
+            return None;
+        },
+    };
+
+    // Debug: Print all devices and their types
+    eprintln!("DUPLEX_DEBUG: Found {} devices:", devices.len());
+    for d in &devices {
+        eprintln!(
+            "  - {} ({:?}) type={:?} status={:?}",
+            d.name, d.id, d.device_type, d.status
+        );
+    }
 
     // First try to find an already attached duplex device
     if let Some(attached) = devices.iter().find(|d| {
         matches!(d.device_type, DeviceType::Duplex)
             && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
     }) {
+        eprintln!("DUPLEX_DEBUG: Found attached duplex: {}", attached.name);
         return Some(attached.clone());
     }
 
     // Try to attach an available duplex device
-    let available = devices.iter().find(|d| {
+    let available = match devices.iter().find(|d| {
         matches!(d.device_type, DeviceType::Duplex) && matches!(d.status, DeviceStatus::Available)
-    })?;
+    }) {
+        Some(d) => d,
+        None => {
+            eprintln!("DUPLEX_DEBUG: No duplex devices found!");
+            return None;
+        },
+    };
 
     let device_id = urlencoding::encode(&available.id);
     let response = client
