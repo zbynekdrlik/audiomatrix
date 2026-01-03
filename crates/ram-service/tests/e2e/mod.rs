@@ -26,9 +26,21 @@ pub struct TestClient {
 }
 
 impl TestClient {
-    /// Creates a new test client connecting to localhost:8080.
+    /// Creates a new test client.
+    ///
+    /// Uses `TEST_SERVER_URL` environment variable if set,
+    /// otherwise defaults to localhost:8080.
     pub fn new() -> Self {
-        Self::with_url("http://localhost:8080")
+        let base_url = std::env::var("TEST_SERVER_URL")
+            .map(|url| {
+                if url.starts_with("http://") || url.starts_with("https://") {
+                    url
+                } else {
+                    format!("http://{url}")
+                }
+            })
+            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        Self::with_url(&base_url)
     }
 
     /// Creates a new test client with a custom URL.
