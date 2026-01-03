@@ -74,7 +74,10 @@ pub async fn get_debug_metering(State(state): State<AppState>) -> Json<DebugMete
             let rms_levels: Vec<f32> = levels.iter().map(|l| l.rms_db).collect();
             let peak_levels: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
             let max_rms = rms_levels.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-            let max_peak = peak_levels.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let max_peak = peak_levels
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
 
             input_meters.push(DeviceMeterDebug {
                 device_id,
@@ -91,7 +94,10 @@ pub async fn get_debug_metering(State(state): State<AppState>) -> Json<DebugMete
             let rms_levels: Vec<f32> = levels.iter().map(|l| l.rms_db).collect();
             let peak_levels: Vec<f32> = levels.iter().map(|l| l.peak_db).collect();
             let max_rms = rms_levels.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-            let max_peak = peak_levels.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let max_peak = peak_levels
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
 
             output_meters.push(DeviceMeterDebug {
                 device_id,
