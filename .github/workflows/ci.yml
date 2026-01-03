@@ -131,12 +131,21 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --all-features
 
-  # Windows ASIO build verification
+  # Windows ASIO build verification - runs full workspace tests on Windows
   test-windows-asio:
     name: Test Windows ASIO
+    needs: build-ui
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+
+      # Download UI artifacts (required for ram-api embedded assets)
+      - name: Download UI dist
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: crates/ram-ui/dist/
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
