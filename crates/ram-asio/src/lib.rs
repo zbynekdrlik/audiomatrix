@@ -10,16 +10,15 @@
 //! - Virtual ASIO device creation for DAW integration
 //! - Real-time audio streaming with lock-free buffers
 //!
-//! # Feature Flags
+//! # ASIO is CORE on Windows
 //!
-//! - `asio` - Enable ASIO support (Windows only, requires ASIO SDK)
+//! ASIO is enabled by default - it is a CORE feature, not optional.
+//! No `--features` flag is needed for Windows builds.
 //!
-//! # Requirements
+//! # Build Requirements (Windows)
 //!
-//! To build with ASIO support:
 //! 1. Install LLVM/Clang and set `LIBCLANG_PATH`
 //! 2. Either set `CPAL_ASIO_DIR` to ASIO SDK path, or let it auto-download
-//! 3. Build with `--features asio`
 //!
 //! # Example
 //!

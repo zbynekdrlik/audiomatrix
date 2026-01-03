@@ -166,9 +166,15 @@ audiomatrix/
 
 | Platform | Backend | Status |
 |----------|---------|--------|
-| **Windows** | ASIO (primary), WASAPI (fallback) | Primary target |
+| **Windows** | ASIO (CORE - always enabled) | Primary target |
 | **Linux** | ALSA | Fully supported |
 | **macOS** | CoreAudio | Basic support |
+
+**IMPORTANT**: ASIO is a CORE feature on Windows, NOT optional:
+- `ram-asio` is a mandatory dependency for Windows builds
+- ASIO is always enabled by default in `ram-asio/Cargo.toml`
+- CI verifies ASIO is compiled in on Windows builds
+- Professional audio production requires ASIO latency - there is no fallback
 
 ## Windows System Tray Integration
 
@@ -188,7 +194,7 @@ Implementation: Use `tray-icon` crate with `muda` for menus.
 
 ## Key Design Decisions
 
-1. **ASIO-First on Windows**: Professional audio production requires ASIO latency
+1. **ASIO is CORE on Windows**: Professional audio requires ASIO - it is a mandatory dependency, not a feature flag
 2. **Destination-Owned Routes**: Subscriptions stored at receiver for resilience
 3. **Lock-Free Audio**: Atomics and ring buffers only, no mutexes in callbacks
 4. **Single Matrix View**: All devices visible regardless of location

@@ -9,15 +9,13 @@ authors.workspace = true
 description = "ASIO device support for AudioMatrix - Windows ASIO driver integration"
 
 [features]
-default = []
-# Enable ASIO support on Windows. Requires:
-# - Steinberg ASIO SDK (auto-downloaded or set CPAL_ASIO_DIR)
-# - LLVM/Clang (set LIBCLANG_PATH)
-# - Windows only
+# ASIO is ALWAYS enabled on Windows - it is a CORE feature, not optional
+# Requires: Steinberg ASIO SDK, LLVM/Clang - Windows only
+default = ["asio"]
 asio = ["cpal/asio"]
 
 [dependencies]
-# Audio - cpal with optional ASIO feature
+# Audio - cpal with ASIO (enabled by default on Windows)
 cpal = { workspace = true }
 
 # Core types

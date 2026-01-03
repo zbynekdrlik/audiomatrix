@@ -116,13 +116,9 @@ jobs:
           echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
           Write-Host "ASIO SDK cloned to $env:RUNNER_TEMP\asio_sdk"
 
-      # Build with ASIO on Windows, standard build on other platforms
-      - name: Build release binary (Windows with ASIO)
-        if: runner.os == 'Windows'
-        run: cargo build --release --target ${{ matrix.target }} -p ram-service --features asio
-
-      - name: Build release binary (Unix)
-        if: runner.os != 'Windows'
+      # ASIO is a CORE feature on Windows - automatically enabled via Cargo.toml
+      # No --features flag needed on any platform
+      - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} -p ram-service
 
       - name: Prepare artifacts (Unix)

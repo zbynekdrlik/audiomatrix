@@ -167,13 +167,13 @@ jobs:
           echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
           Write-Host "ASIO SDK cloned to $env:RUNNER_TEMP\asio_sdk"
 
-      # Build with ASIO feature
-      - name: Build with ASIO feature
-        run: cargo build --release -p ram-asio --features asio
+      # Build ram-asio (ASIO enabled by default on Windows)
+      - name: Build ram-asio
+        run: cargo build --release -p ram-asio
 
       # Run unit tests (no device tests - those need real ASIO hardware)
       - name: Run ASIO unit tests
-        run: cargo test -p ram-asio --features asio
+        run: cargo test -p ram-asio
 
   # Build and test Virtual ASIO C++ driver
   build-virtual-asio:
@@ -427,6 +427,8 @@ jobs:
           git clone https://github.com/audiosdk/asio.git $env:RUNNER_TEMP\asio_sdk
           echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
 
+      # ASIO is a CORE feature on Windows - automatically enabled via Cargo.toml
+      # No --features flag needed - ram-asio is a mandatory Windows dependency
       - name: Build test binary
         shell: cmd
         run: cargo test -p ram-service --test e2e_tests --no-run
@@ -434,6 +436,16 @@ jobs:
       - name: Build service binary
         shell: cmd
         run: cargo build --release -p ram-service
+
+      - name: Verify ASIO is compiled in
+        shell: powershell
+        run: |
+          # ASIO must be compiled in - this is a CORE feature, not optional
+          $output = cargo tree -p ram-service 2>&1
+          if ($output -notmatch "ram-asio") {
+            throw "CRITICAL: ram-asio not found in dependency tree! ASIO is a CORE feature on Windows."
+          }
+          Write-Host "✓ ASIO support verified in build"
 
       - name: Find and copy test binary
         shell: powershell
