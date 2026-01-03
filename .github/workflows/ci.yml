@@ -126,8 +126,9 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
+      # Skip E2E tests - they require a running server (run on stagebox1)
       - name: Run tests
-        run: cargo test --all-features --workspace
+        run: "cargo test --all-features --workspace -- --skip e2e::"
       - name: Run doc tests
         run: cargo test --doc --all-features
 
@@ -441,8 +442,11 @@ jobs:
         shell: powershell
         run: |
           # ASIO must be compiled in - this is a CORE feature, not optional
-          $output = cargo tree -p ram-service 2>&1
+          # Use --target to show Windows-specific dependencies
+          $output = cargo tree -p ram-service --target x86_64-pc-windows-msvc 2>&1
           if ($output -notmatch "ram-asio") {
+            Write-Host "Cargo tree output:"
+            Write-Host $output
             throw "CRITICAL: ram-asio not found in dependency tree! ASIO is a CORE feature on Windows."
           }
           Write-Host "[OK] ASIO support verified in build"
