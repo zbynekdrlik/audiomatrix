@@ -108,9 +108,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # NOTE: macOS and Linux builds disabled to reduce CI costs
-        # Re-enable when needed: os: [ubuntu-latest, windows-latest, macos-latest]
-        os: [windows-latest]
+        # Windows tests handled by test-windows-asio (ASIO is CORE, requires LLVM)
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -127,21 +126,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
-      # Run tests - exclude ASIO on Windows (separate job handles that)
-      - name: Run tests (Unix)
-        if: runner.os != 'Windows'
+      - name: Run tests
         run: cargo test --all-features --workspace
-      - name: Run tests (Windows - no ASIO, skip all E2E)
-        if: runner.os == 'Windows'
-        # Exclude ALL E2E tests - they need running server and audio devices
-        # E2E tests run in dedicated jobs (e2e, e2e-behavioral)
-        run: "cargo test --workspace -- --skip e2e::"
-      - name: Run doc tests (Unix)
-        if: runner.os != 'Windows'
+      - name: Run doc tests
         run: cargo test --doc --all-features
-      - name: Run doc tests (Windows)
-        if: runner.os == 'Windows'
-        run: cargo test --doc
 
   # Windows ASIO build verification
   test-windows-asio:
@@ -167,13 +155,16 @@ jobs:
           echo "CPAL_ASIO_DIR=$env:RUNNER_TEMP\asio_sdk" >> $env:GITHUB_ENV
           Write-Host "ASIO SDK cloned to $env:RUNNER_TEMP\asio_sdk"
 
-      # Build ram-asio (ASIO enabled by default on Windows)
-      - name: Build ram-asio
-        run: cargo build --release -p ram-asio
+      # Build and test full workspace with ASIO (ASIO is CORE on Windows)
+      - name: Build workspace
+        run: cargo build --release --workspace
 
-      # Run unit tests (no device tests - those need real ASIO hardware)
-      - name: Run ASIO unit tests
-        run: cargo test -p ram-asio
+      # Run all unit tests (skip E2E - those run on stagebox1 with real hardware)
+      - name: Run workspace tests
+        run: cargo test --workspace -- --skip e2e::
+
+      - name: Run doc tests
+        run: cargo test --doc
 
   # Build and test Virtual ASIO C++ driver
   build-virtual-asio:
@@ -445,7 +436,7 @@ jobs:
           if ($output -notmatch "ram-asio") {
             throw "CRITICAL: ram-asio not found in dependency tree! ASIO is a CORE feature on Windows."
           }
-          Write-Host "✓ ASIO support verified in build"
+          Write-Host "[OK] ASIO support verified in build"
 
       - name: Find and copy test binary
         shell: powershell

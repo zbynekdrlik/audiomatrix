@@ -176,14 +176,11 @@ pub async fn ensure_duplex_attached(client: &TestClient) -> Option<DeviceInfo> {
     }
 
     // Try to attach an available duplex device
-    let available = match devices.iter().find(|d| {
+    let Some(available) = devices.iter().find(|d| {
         matches!(d.device_type, DeviceType::Duplex) && matches!(d.status, DeviceStatus::Available)
-    }) {
-        Some(d) => d,
-        None => {
-            eprintln!("DUPLEX_DEBUG: No duplex devices found!");
-            return None;
-        },
+    }) else {
+        eprintln!("DUPLEX_DEBUG: No duplex devices found!");
+        return None;
     };
 
     let device_id = urlencoding::encode(&available.id);
