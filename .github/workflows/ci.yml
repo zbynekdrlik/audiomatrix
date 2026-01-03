@@ -240,9 +240,9 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Install ALSA dev
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-      # Don't use --all-features as 'asio' feature is Windows-only
+      # Skip E2E tests (require running server) - don't use --all-features (asio is Windows-only)
       - name: Generate coverage report
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+        run: "cargo llvm-cov --workspace --lcov --output-path lcov.info -- --skip e2e::"
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -251,7 +251,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Check coverage threshold
         run: |
-          COVERAGE=$(cargo llvm-cov --workspace --json 2>/dev/null | jq -r '.data[0].totals.lines.percent // 0')
+          COVERAGE=$(cargo llvm-cov --workspace --json -- --skip e2e:: 2>/dev/null | jq -r '.data[0].totals.lines.percent // 0')
           echo "Coverage: $COVERAGE%"
           if [ -z "$COVERAGE" ] || [ "$COVERAGE" = "null" ]; then
             echo "Warning: Could not determine coverage, skipping threshold check"
