@@ -382,6 +382,7 @@ main (protected)
 - After every push, verify CI pipeline succeeds
 - If CI fails, fix issues immediately before continuing
 - Never leave the repository in a broken state
+- **IMPORTANT:** Use minimum 300 second (5 minute) sleeps when polling CI status to avoid wasting tokens
 
 **Keep repository clean:**
 - Every file in git MUST have a purpose for current implementation
