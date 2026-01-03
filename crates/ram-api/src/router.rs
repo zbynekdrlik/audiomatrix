@@ -76,6 +76,7 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/streams/count", get(handlers::get_stream_count))
         // Debug
         .route("/debug", get(handlers::get_debug_info))
+        .route("/debug/metering", get(handlers::get_debug_metering))
         // Subscriptions
         .route("/subscriptions", get(handlers::list_subscriptions))
         .route("/subscriptions", post(handlers::create_subscription))
