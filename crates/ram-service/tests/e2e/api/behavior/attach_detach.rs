@@ -37,25 +37,44 @@ async fn test_attach_device_starts_streams() {
 
     assert!(response.status().is_success(), "Attach should succeed");
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Poll for stream count to increase (ASIO devices can take several seconds to start)
+    let mut streams_increased = false;
+    let (init_in, init_out) = (initial_counts.input_streams, initial_counts.output_streams);
+    let mut final_counts = initial_counts;
 
-    let final_counts: StreamCounts = client
-        .get_json("/streams/count")
-        .await
-        .expect("Failed to get final stream counts");
+    for attempt in 1..=10 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let streams_increased = match device.device_type {
-        DeviceType::Input => final_counts.input_streams > initial_counts.input_streams,
-        DeviceType::Output => final_counts.output_streams > initial_counts.output_streams,
-        DeviceType::Duplex => {
-            final_counts.input_streams > initial_counts.input_streams
-                || final_counts.output_streams > initial_counts.output_streams
-        },
-    };
+        final_counts = client
+            .get_json("/streams/count")
+            .await
+            .expect("Failed to get stream counts");
+
+        streams_increased = match device.device_type {
+            DeviceType::Input => final_counts.input_streams > init_in,
+            DeviceType::Output => final_counts.output_streams > init_out,
+            DeviceType::Duplex => {
+                final_counts.input_streams > init_in || final_counts.output_streams > init_out
+            },
+        };
+
+        if streams_increased {
+            println!("Stream started after {} seconds", attempt);
+            break;
+        }
+
+        if attempt % 3 == 0 {
+            println!(
+                "Attempt {}/10: in={}/{}, out={}/{}, waiting...",
+                attempt, final_counts.input_streams, init_in, final_counts.output_streams, init_out
+            );
+        }
+    }
 
     assert!(
         streams_increased,
-        "Stream count should increase after attach"
+        "Stream count should increase after attach (initial: in={}, out={}; final: in={}, out={})",
+        init_in, init_out, final_counts.input_streams, final_counts.output_streams
     );
 
     let _ = client
