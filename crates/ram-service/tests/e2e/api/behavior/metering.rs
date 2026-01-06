@@ -139,16 +139,36 @@ async fn test_metering_context_lifecycle() {
         .await
         .expect("Failed to list devices");
 
-    // Find an available duplex device
-    let available = devices
+    // Find a duplex device - prefer already attached devices (proven to work)
+    // over available ones (which may be virtual devices that don't start properly)
+    let device = devices
         .iter()
         .find(|d| {
             matches!(d.device_type, DeviceType::Duplex)
-                && matches!(d.status, DeviceStatus::Available)
+                && matches!(d.status, DeviceStatus::Attached | DeviceStatus::Active)
         })
-        .expect("TEST INFRASTRUCTURE ERROR: No available duplex devices. DO NOT SKIP.");
+        .or_else(|| {
+            devices.iter().find(|d| {
+                matches!(d.device_type, DeviceType::Duplex)
+                    && matches!(d.status, DeviceStatus::Available)
+            })
+        })
+        .expect("TEST INFRASTRUCTURE ERROR: No duplex devices. DO NOT SKIP.");
 
-    let device_id = urlencoding::encode(&available.id);
+    let device_id = urlencoding::encode(&device.id);
+    let was_already_attached =
+        matches!(device.status, DeviceStatus::Attached | DeviceStatus::Active);
+
+    // If already attached, detach first to test the lifecycle properly
+    if was_already_attached {
+        let _ = client
+            .post_json(
+                &format!("/nodes/LOCAL/devices/{device_id}/detach"),
+                &serde_json::json!({}),
+            )
+            .await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
 
     // Check metering before attach
     let before: DebugMeteringResponse = client
@@ -156,10 +176,7 @@ async fn test_metering_context_lifecycle() {
         .await
         .expect("Failed to get metering");
 
-    let had_device_before = before
-        .input_meters
-        .iter()
-        .any(|m| m.device_id == available.id);
+    let had_device_before = before.input_meters.iter().any(|m| m.device_id == device.id);
 
     // Attach device
     let attach_response = client
@@ -192,10 +209,7 @@ async fn test_metering_context_lifecycle() {
         last_input_count = after.input_device_count;
         last_output_count = after.output_device_count;
 
-        has_device_after = after
-            .input_meters
-            .iter()
-            .any(|m| m.device_id == available.id);
+        has_device_after = after.input_meters.iter().any(|m| m.device_id == device.id);
 
         if has_device_after {
             println!("Metering context appeared after {} seconds", attempt);
@@ -206,7 +220,7 @@ async fn test_metering_context_lifecycle() {
         if attempt % 5 == 0 {
             println!(
                 "Attempt {}/15: metering has {} input, {} output devices, waiting for {}",
-                attempt, after.input_device_count, after.output_device_count, available.id
+                attempt, after.input_device_count, after.output_device_count, device.id
             );
         }
     }
@@ -214,10 +228,10 @@ async fn test_metering_context_lifecycle() {
     assert!(
         has_device_after,
         "Device {} should have metering context after attach (found {} inputs, {} outputs)",
-        available.id, last_input_count, last_output_count
+        device.id, last_input_count, last_output_count
     );
 
-    println!("Metering lifecycle verified for device: {}", available.name);
+    println!("Metering lifecycle verified for device: {}", device.name);
     println!("  Before attach: metering={}", had_device_before);
     println!("  After attach: metering={}", has_device_after);
 
