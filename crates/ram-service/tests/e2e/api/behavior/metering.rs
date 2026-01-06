@@ -143,7 +143,8 @@ async fn test_metering_context_lifecycle() {
     let available = devices
         .iter()
         .find(|d| {
-            matches!(d.device_type, DeviceType::Duplex) && matches!(d.status, DeviceStatus::Available)
+            matches!(d.device_type, DeviceType::Duplex)
+                && matches!(d.status, DeviceStatus::Available)
         })
         .expect("TEST INFRASTRUCTURE ERROR: No available duplex devices. DO NOT SKIP.");
 
@@ -174,8 +175,8 @@ async fn test_metering_context_lifecycle() {
         "Device attachment should succeed"
     );
 
-    // Wait for streams to start
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Wait for streams to start (ASIO devices need more time for initialization)
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Check metering after attach
     let after: DebugMeteringResponse = client
@@ -194,10 +195,7 @@ async fn test_metering_context_lifecycle() {
         available.id
     );
 
-    println!(
-        "Metering lifecycle verified for device: {}",
-        available.name
-    );
+    println!("Metering lifecycle verified for device: {}", available.name);
     println!("  Before attach: metering={}", had_device_before);
     println!("  After attach: metering={}", has_device_after);
 
@@ -216,6 +214,7 @@ async fn test_metering_context_lifecycle() {
 /// - Events use correct format: {"type": "metering", "data": {...}}
 /// - Data includes node, device, direction, levels, peaks
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn test_websocket_metering_format() {
     let client = TestClient::new();
     let base_url =
@@ -283,10 +282,8 @@ async fn test_websocket_metering_format() {
                                         if let Some(db) = level.as_f64() {
                                             if db > 0.0 {
                                                 metering_format_valid = false;
-                                                format_error = Some(format!(
-                                                    "Level {} dB should be <= 0",
-                                                    db
-                                                ));
+                                                format_error =
+                                                    Some(format!("Level {} dB should be <= 0", db));
                                                 break;
                                             }
                                         }

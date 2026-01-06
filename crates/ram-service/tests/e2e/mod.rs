@@ -31,15 +31,16 @@ impl TestClient {
     /// Uses `TEST_SERVER_URL` environment variable if set,
     /// otherwise defaults to localhost:8080.
     pub fn new() -> Self {
-        let base_url = std::env::var("TEST_SERVER_URL")
-            .map(|url| {
+        let base_url = std::env::var("TEST_SERVER_URL").map_or_else(
+            |_| "http://localhost:8080".to_string(),
+            |url| {
                 if url.starts_with("http://") || url.starts_with("https://") {
                     url
                 } else {
                     format!("http://{url}")
                 }
-            })
-            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+            },
+        );
         Self::with_url(&base_url)
     }
 
