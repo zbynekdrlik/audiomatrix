@@ -757,11 +757,12 @@ impl AudioMatrixService {
                                     DeviceCommand::ReconfigureStreams { device_id, device_type, sample_rate, buffer_size } => {
                                         info!("Reconfiguring streams for device: {device_id} (sample_rate: {sample_rate}, buffer_size: {buffer_size})");
 
-                                        // Stop existing streams
-                                        audio_processor.stop_device_streams(&device_id);
+                                        // Release device completely to allow sample rate change
+                                        // ASIO drivers lock sample rate while streams are active
+                                        // Wait 200ms for driver to fully release before reacquiring
+                                        audio_processor.release_device_for_reconfigure(&device_id, 200);
 
                                         // Start streams with new config
-                                        // Track actual sample rates used (may differ from requested due to hardware limitations)
                                         let mut input_ok = true;
                                         let mut output_ok = true;
                                         let mut error_msg = String::new();
