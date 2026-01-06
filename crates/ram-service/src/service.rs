@@ -755,93 +755,54 @@ impl AudioMatrixService {
                                         audio_processor.stop_device_streams(&device_id);
                                     }
                                     DeviceCommand::ReconfigureStreams { device_id, device_type, sample_rate, buffer_size } => {
-                                        info!("Reconfiguring streams for device: {device_id} (sample_rate: {sample_rate}, buffer_size: {buffer_size})");
+                                        info!("Reconfiguring streams for device: {device_id} (rate={sample_rate}, buf={buffer_size})");
+                                        let original_rate = app_state.get_device(&device_id).map(|d| d.sample_rate).unwrap_or(48000);
 
-                                        // Get original sample rate for fallback
-                                        let original_rate = app_state.get_device(&device_id)
-                                            .map(|d| d.sample_rate)
-                                            .unwrap_or(48000);
-
-                                        // Release device completely to allow sample rate change
-                                        // ASIO drivers lock sample rate while streams are active
-                                        // Wait 200ms for driver to fully release before reacquiring
+                                        // Release device (ASIO locks rate while streams active), wait 200ms
                                         audio_processor.release_device_for_reconfigure(&device_id, 200);
 
-                                        // Helper to start streams at a given rate
-                                        let try_start_streams = |rate: u32| -> (bool, bool, u32, String) {
-                                            let mut input_ok = true;
-                                            let mut output_ok = true;
-                                            let mut actual_rate = rate;
-                                            let mut err_msg = String::new();
-
+                                        let try_start = |rate: u32| -> (bool, bool, u32, String) {
+                                            let (mut in_ok, mut out_ok, mut actual, mut err) = (true, true, rate, String::new());
                                             if matches!(device_type, DeviceType::Input | DeviceType::Duplex) {
                                                 match audio_processor.start_input_stream_with_config(&device_id, Some(rate)) {
-                                                    Ok(r) => {
-                                                        info!("Input stream started for: {device_id} at {r}Hz");
-                                                        actual_rate = r;
-                                                    }
-                                                    Err(e) => {
-                                                        warn!("Failed to start input stream for {device_id} at {rate}Hz: {e}");
-                                                        input_ok = false;
-                                                        err_msg = format!("Input: {e}");
-                                                    }
+                                                    Ok(r) => { info!("Input started: {device_id} at {r}Hz"); actual = r; }
+                                                    Err(e) => { warn!("Input failed {device_id} at {rate}Hz: {e}"); in_ok = false; err = format!("In: {e}"); }
                                                 }
                                             }
-
                                             if matches!(device_type, DeviceType::Output | DeviceType::Duplex) {
                                                 match audio_processor.start_output_stream_with_config(&device_id, Some(rate)) {
-                                                    Ok(r) => {
-                                                        info!("Output stream started for: {device_id} at {r}Hz");
-                                                        actual_rate = r;
-                                                    }
-                                                    Err(e) => {
-                                                        warn!("Failed to start output stream for {device_id} at {rate}Hz: {e}");
-                                                        output_ok = false;
-                                                        if !err_msg.is_empty() {
-                                                            err_msg.push_str("; ");
-                                                        }
-                                                        use std::fmt::Write;
-                                                        let _ = write!(err_msg, "Output: {e}");
-                                                    }
+                                                    Ok(r) => { info!("Output started: {device_id} at {r}Hz"); actual = r; }
+                                                    Err(e) => { warn!("Output failed {device_id} at {rate}Hz: {e}"); out_ok = false;
+                                                        if !err.is_empty() { err.push_str("; "); }
+                                                        use std::fmt::Write; let _ = write!(err, "Out: {e}"); }
                                                 }
                                             }
-
-                                            (input_ok, output_ok, actual_rate, err_msg)
+                                            (in_ok, out_ok, actual, err)
                                         };
 
-                                        // Try requested sample rate first
-                                        let (input_ok, output_ok, actual_sample_rate, error_msg) = try_start_streams(sample_rate);
-
-                                        // If new rate failed completely, try fallback to original rate
-                                        let (final_input_ok, final_output_ok, final_rate, final_error) = if !input_ok && !output_ok && original_rate != sample_rate {
-                                            warn!("Sample rate {sample_rate}Hz failed, falling back to original {original_rate}Hz");
+                                        let (in_ok, out_ok, actual_rate, err_msg) = try_start(sample_rate);
+                                        let (fin_in, fin_out, fin_rate, fin_err) = if !in_ok && !out_ok && original_rate != sample_rate {
+                                            warn!("Rate {sample_rate}Hz failed, fallback to {original_rate}Hz");
                                             audio_processor.release_device_for_reconfigure(&device_id, 100);
-                                            try_start_streams(original_rate)
-                                        } else {
-                                            (input_ok, output_ok, actual_sample_rate, error_msg)
-                                        };
+                                            try_start(original_rate)
+                                        } else { (in_ok, out_ok, actual_rate, err_msg) };
 
-                                        if !final_input_ok && !final_output_ok {
-                                            error!("All streams failed to restart for {device_id}");
+                                        if !fin_in && !fin_out {
+                                            error!("All streams failed for {device_id}");
                                             app_state.set_device_status(&device_id, DeviceStatus::Error);
                                             app_state.broadcast_event(WsEvent::Error(ErrorUpdate {
                                                 code: "STREAM_RECONFIGURE_FAILED".to_string(),
-                                                message: format!("Failed to reconfigure streams for {}: {}", device_id, final_error),
+                                                message: format!("Reconfigure failed for {}: {}", device_id, fin_err),
                                             }));
                                         } else {
-                                            info!("Device {} reconfigured successfully at {}Hz", device_id, final_rate);
-
-                                            // Persist actual config
-                                            if let Err(e) = device_state_manager.set_device_config(&device_id, Some(final_rate), Some(buffer_size)) {
-                                                warn!("Failed to persist device config: {e}");
+                                            info!("Device {} reconfigured at {}Hz", device_id, fin_rate);
+                                            if let Err(e) = device_state_manager.set_device_config(&device_id, Some(fin_rate), Some(buffer_size)) {
+                                                warn!("Failed to persist config: {e}");
                                             }
-
-                                            // Update device state to reflect actual sample rate
-                                            if final_rate != sample_rate {
-                                                info!("Device {} sample rate: requested {}Hz, actual {}Hz (fallback or hardware limitation)",
-                                                    device_id, sample_rate, final_rate);
-                                                if let Err(e) = app_state.update_device(&device_id, None, Some(final_rate), None) {
-                                                    warn!("Failed to update device state: {e}");
+                                            if fin_rate != sample_rate {
+                                                info!("Device {} rate: requested {}Hz, actual {}Hz", device_id, sample_rate, fin_rate);
+                                                if let Err(e) = app_state.update_device(&device_id, None, Some(fin_rate), None) {
+                                                    warn!("Failed to update state: {e}");
                                                 }
                                             }
                                         }
