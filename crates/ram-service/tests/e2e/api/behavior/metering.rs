@@ -175,24 +175,46 @@ async fn test_metering_context_lifecycle() {
         "Device attachment should succeed"
     );
 
-    // Wait for streams to start (ASIO devices need more time for initialization)
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Poll for metering context to appear (stream start is async, may take variable time)
+    // ASIO devices can take several seconds to initialize streams
+    let mut has_device_after = false;
+    let mut last_input_count = 0;
+    let mut last_output_count = 0;
 
-    // Check metering after attach
-    let after: DebugMeteringResponse = client
-        .get_json("/debug/metering")
-        .await
-        .expect("Failed to get metering after attach");
+    for attempt in 1..=15 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let has_device_after = after
-        .input_meters
-        .iter()
-        .any(|m| m.device_id == available.id);
+        let after: DebugMeteringResponse = client
+            .get_json("/debug/metering")
+            .await
+            .expect("Failed to get metering after attach");
+
+        last_input_count = after.input_device_count;
+        last_output_count = after.output_device_count;
+
+        has_device_after = after
+            .input_meters
+            .iter()
+            .any(|m| m.device_id == available.id);
+
+        if has_device_after {
+            println!("Metering context appeared after {} seconds", attempt);
+            break;
+        }
+
+        // Log progress for debugging
+        if attempt % 5 == 0 {
+            println!(
+                "Attempt {}/15: metering has {} input, {} output devices, waiting for {}",
+                attempt, after.input_device_count, after.output_device_count, available.id
+            );
+        }
+    }
 
     assert!(
         has_device_after,
-        "Device {} should have metering context after attach",
-        available.id
+        "Device {} should have metering context after attach (found {} inputs, {} outputs)",
+        available.id, last_input_count, last_output_count
     );
 
     println!("Metering lifecycle verified for device: {}", available.name);
