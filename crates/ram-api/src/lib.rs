@@ -46,8 +46,6 @@ pub mod models;
 
 // Server-only modules
 #[cfg(feature = "server")]
-pub mod auth;
-#[cfg(feature = "server")]
 mod cross_node;
 #[cfg(feature = "server")]
 pub mod error;
@@ -64,8 +62,6 @@ pub mod subscription_client;
 #[cfg(feature = "server")]
 pub mod websocket;
 
-#[cfg(feature = "server")]
-pub use auth::{Auth, AuthContext, AuthManager, Permission, SecurityConfig, SecurityMode};
 #[cfg(feature = "server")]
 pub use error::{Error, Result};
 #[cfg(feature = "server")]

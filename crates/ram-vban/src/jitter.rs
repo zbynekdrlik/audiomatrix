@@ -400,10 +400,11 @@ impl JitterBuffer {
             }
 
             if diff == 0 {
-                // Next expected packet
-                let packet = self.packets.pop_front().unwrap();
-                self.sample_buffer.extend(packet.samples);
-                self.next_sequence = Some(next_seq.wrapping_add(1));
+                // Next expected packet (pop is guaranteed to succeed since we just checked front)
+                if let Some(packet) = self.packets.pop_front() {
+                    self.sample_buffer.extend(packet.samples);
+                    self.next_sequence = Some(next_seq.wrapping_add(1));
+                }
             } else if diff > 0 && diff <= 3 && self.packets.len() > 2 {
                 // Small gap with enough buffered packets - fill with silence
                 // Only fill gaps when we have some buffer to work with

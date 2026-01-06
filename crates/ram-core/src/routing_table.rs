@@ -15,6 +15,7 @@
 //! - Safe memory reclamation via reference counting
 
 use crate::routing_snapshot::RoutingSnapshot;
+use arc_swap::ArcSwap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -46,10 +47,9 @@ use std::sync::Arc;
 /// ```
 #[derive(Debug)]
 pub struct RoutingTable {
-    /// Current routing snapshot wrapped in Arc for reference counting.
-    /// Uses parking_lot::RwLock for the Arc swap - this is NOT in the audio path.
-    /// Audio thread only reads the Arc (atomic reference count increment).
-    current: parking_lot::RwLock<Arc<RoutingSnapshot>>,
+    /// Current routing snapshot using ArcSwap for truly lock-free reads.
+    /// Audio thread reads are wait-free (single atomic load).
+    current: ArcSwap<RoutingSnapshot>,
 
     /// Generation counter for detecting updates.
     /// Incremented on each update() call.
@@ -61,7 +61,7 @@ impl RoutingTable {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            current: parking_lot::RwLock::new(Arc::new(RoutingSnapshot::new())),
+            current: ArcSwap::from_pointee(RoutingSnapshot::new()),
             generation: AtomicU64::new(0),
         }
     }
@@ -71,7 +71,7 @@ impl RoutingTable {
     pub fn with_snapshot(snapshot: RoutingSnapshot) -> Self {
         let generation = snapshot.generation;
         Self {
-            current: parking_lot::RwLock::new(Arc::new(snapshot)),
+            current: ArcSwap::from_pointee(snapshot),
             generation: AtomicU64::new(generation),
         }
     }
@@ -79,16 +79,16 @@ impl RoutingTable {
     /// Returns the current routing snapshot.
     ///
     /// This is the primary read path for the audio thread.
-    /// While this does acquire a read lock, `parking_lot::RwLock` is designed
-    /// for very fast uncontended reads. The actual audio processing uses the
-    /// returned Arc without any locking.
+    /// Uses ArcSwap for truly lock-free, wait-free reads.
     ///
-    /// For truly lock-free reads in the hottest path, use `snapshot_if_changed()`
-    /// with a cached snapshot.
+    /// # Lock-Free Guarantee
+    ///
+    /// This method performs only atomic operations - no locks, no waiting.
+    /// Safe to call from real-time audio threads.
     #[inline]
     #[must_use]
     pub fn snapshot(&self) -> Arc<RoutingSnapshot> {
-        Arc::clone(&self.current.read())
+        self.current.load_full()
     }
 
     /// Returns the current generation counter.
@@ -143,9 +143,8 @@ impl RoutingTable {
         let new_gen = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
         snapshot.generation = new_gen;
 
-        // Swap in the new snapshot
-        let new_arc = Arc::new(snapshot);
-        *self.current.write() = new_arc;
+        // Swap in the new snapshot (atomic)
+        self.current.store(Arc::new(snapshot));
     }
 
     /// Updates the routing table using a closure that modifies the current snapshot.
@@ -185,11 +184,9 @@ impl RoutingTable {
     }
 
     /// Returns the number of destinations in the current snapshot.
-    ///
-    /// This acquires a read lock briefly to get the count.
     #[must_use]
     pub fn destination_count(&self) -> usize {
-        self.current.read().destinations.len()
+        self.current.load().destinations.len()
     }
 
     /// Checks if the routing table is empty (no destinations).
@@ -204,13 +201,6 @@ impl Default for RoutingTable {
         Self::new()
     }
 }
-
-// Safety: RoutingTable can be safely shared between threads
-// - parking_lot::RwLock is Send + Sync
-// - Arc<RoutingSnapshot> is Send + Sync
-// - AtomicU64 is Send + Sync
-unsafe impl Send for RoutingTable {}
-unsafe impl Sync for RoutingTable {}
 
 #[cfg(test)]
 mod tests {

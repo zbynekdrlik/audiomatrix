@@ -1,14 +1,17 @@
 <!-- OPENSPEC:START -->
+
 # OpenSpec Instructions
 
 These instructions are for AI assistants working in this project.
 
 Always open `@/openspec/AGENTS.md` when the request:
+
 - Mentions planning or proposals (words like proposal, spec, change, plan)
 - Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
 - Sounds ambiguous and you need the authoritative spec before coding
 
 Use `@/openspec/AGENTS.md` to learn:
+
 - How to create and apply change proposals
 - Spec format and conventions
 - Project structure and guidelines
@@ -31,6 +34,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ### Development Phase Flexibility
 
 **We are in active development phase.** You are free to:
+
 - Redesign components and APIs
 - Change architecture patterns
 - Fully rework code sections
@@ -38,6 +42,45 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Update ARCHITECTURE.md to reflect changes
 
 This flexibility allows rapid iteration toward the best solution.
+
+### MVP Philosophy - STRICT ENFORCEMENT
+
+**This is an MVP. Code must be clean, focused, and free of unnecessary complexity.**
+
+#### NO Backward Compatibility
+
+- **NEVER** add code for backward compatibility
+- **NEVER** create database migrations or versioned schemas
+- **NEVER** add deprecated code paths or legacy support
+- **NEVER** keep old functionality "just in case"
+- If something changes, it changes completely - delete the old, implement the new
+
+#### NO Web Security Overhead
+
+AudioMatrix is a **Dante-like professional audio controller** running on **trusted local networks**:
+
+- **NO** authentication systems - trusted LAN environment
+- **NO** CORS restrictions - all nodes are trusted
+- **NO** rate limiting - contradicts zero-latency goal
+- **NO** API tokens or session management
+- **NO** security headers or CSP policies
+- `CorsLayer::permissive()` is CORRECT for this use case
+
+#### Code Cleanliness Rules
+
+- Every file must have a clear, current purpose
+- Delete unused code immediately - git history is the archive
+- No "just in case" abstractions or future-proofing
+- No compatibility shims or adapter patterns for old behavior
+- If code doesn't serve the current MVP, it doesn't exist
+
+#### Focus on What Matters
+
+- **DO** optimize for audio latency (microseconds matter)
+- **DO** ensure lock-free audio paths
+- **DO** make the happy path fast and clean
+- **DON'T** add complexity for edge cases that won't happen on trusted LANs
+- **DON'T** waste time on security theater for internal networks
 
 ### Core Principles
 
@@ -71,6 +114,7 @@ This project uses **OpenSpec** for spec-driven development. All significant chan
 ### When to Create a Proposal
 
 Create a change proposal (`openspec/changes/<change-id>/`) for:
+
 - New audio routing features
 - API endpoint additions/modifications
 - VBAN protocol changes
@@ -81,6 +125,7 @@ Create a change proposal (`openspec/changes/<change-id>/`) for:
 ### When to Skip Proposals
 
 Proceed directly with code for:
+
 - Bug fixes restoring documented behavior
 - Test additions for existing functionality
 - Documentation updates
@@ -126,6 +171,7 @@ openspec archive add-feature-name --yes
 ### When to Update ARCHITECTURE.md
 
 Update immediately when:
+
 - Discovering a design flaw that requires a different approach
 - Implementation reveals a better pattern than documented
 - Adding new components, APIs, or data structures
@@ -144,6 +190,7 @@ Update immediately when:
 ### What NOT to Change Without Discussion
 
 These sections require team review before modification:
+
 - Core threading model (ASIO callback → Router → Network)
 - Destination-owned subscription model
 - VBAN packet format (protocol compatibility)
@@ -153,6 +200,7 @@ These sections require team review before modification:
 ### Consistency Checks
 
 During code review, verify:
+
 - [ ] New structs/enums match ARCHITECTURE.md data models
 - [ ] API endpoints match documented routes
 - [ ] Config file fields match documented schema
@@ -165,6 +213,7 @@ During code review, verify:
 ### File Size Limits
 
 **Maximum 1000 lines per file.** Split larger files by:
+
 - Extracting types to separate modules
 - Moving implementations to dedicated files
 - Using feature-based module organization
@@ -261,10 +310,12 @@ mod vban_protocol;
 4. **Fix the environment, not the tests** - When E2E tests fail, fix the test infrastructure
 
 **Why This Matters:**
+
 - Previous approach: "Skip if no devices" → Silent regressions for months
 - Correct approach: "FAIL if no devices" → Team immediately knows to fix infrastructure
 
 **E2E Test Categories (all MANDATORY):**
+
 - Device attach/detach → Streams actually start/stop
 - Sample rate/buffer changes → Streams reconfigure correctly
 - Route CRUD → Audio paths established/removed
@@ -273,6 +324,7 @@ mod vban_protocol;
 - Metering → WebSocket provides real-time levels
 
 **Running E2E Tests:**
+
 ```bash
 # On stagebox1 (self-hosted runner) - automatic via CI
 cargo test -p ram-service --test e2e_tests
@@ -368,23 +420,27 @@ main (protected)
 ### Git Workflow Rules (CRITICAL)
 
 **ALWAYS commit and push your work:**
+
 - Commit frequently with meaningful messages
 - Push to remote after every significant change (backup + visibility)
 - NEVER skip pushing - remote serves as backup and enables CI validation
 
 **NEVER push directly to `main`:**
+
 - All work happens on `develop` or feature branches
 - Create PRs from `develop` → `main`
 - Only the user merges PRs via GitHub web interface
 - Claude creates PRs but does NOT merge them
 
 **Monitor GitHub Actions:**
+
 - After every push, verify CI pipeline succeeds
 - If CI fails, fix issues immediately before continuing
 - Never leave the repository in a broken state
 - **IMPORTANT:** Use minimum 300 second (5 minute) sleeps when polling CI status to avoid wasting tokens
 
 **Keep repository clean:**
+
 - Every file in git MUST have a purpose for current implementation
 - NO temporary files, experiments, or obsolete code
 - NO archiving old versions in git - use git history instead
@@ -408,17 +464,20 @@ main (protected)
 **Single Source of Truth:** Version is defined ONLY in the root `Cargo.toml` workspace section. All crates inherit via `version.workspace = true`.
 
 **Develop Branch (MANDATORY):**
+
 - Version MUST be in format: `X.Y.Z-dev.N` (e.g., `0.1.0-dev.1`, `0.2.0-dev.5`)
 - The `-dev.N` suffix is REQUIRED - CI will REJECT versions without it
 - Increment `N` for each significant change (features, fixes)
 - NEVER have a release version (without `-dev`) on develop branch
 
 **Main Branch (RELEASES ONLY):**
+
 - Version MUST be in format: `X.Y.Z` (e.g., `0.1.0`, `1.0.0`)
 - NO `-dev` suffix allowed - CI will REJECT dev versions
 - Version must match the release tag exactly
 
 **Release Process:**
+
 1. On develop: Version is `X.Y.Z-dev.N`
 2. Create PR from develop → main
 3. In PR: Update version from `X.Y.Z-dev.N` → `X.Y.Z`
@@ -428,6 +487,7 @@ main (protected)
 7. Immediately after: On develop, bump to next dev version (e.g., `0.2.0-dev.1`)
 
 **Version Bump Examples:**
+
 ```bash
 # Current: 0.1.0-dev.3 → Adding a feature
 # New: 0.1.0-dev.4
@@ -438,6 +498,7 @@ main (protected)
 ```
 
 **CI Enforcement:**
+
 - `version-check` job validates version format per branch
 - Develop push with `0.1.0` (no -dev) → CI FAILS
 - Main push with `0.1.0-dev.1` → CI FAILS
@@ -446,11 +507,13 @@ main (protected)
 ### IRM Installer (Windows)
 
 Releases include a PowerShell installer script that displays version on startup:
+
 ```powershell
 irm https://github.com/zbynekdrlik/audiomatrix/releases/latest/download/install.ps1 | iex
 ```
 
 The installer:
+
 1. Prints `AudioMatrix Installer vX.Y.Z` on start
 2. Downloads the correct version binary
 3. Installs to `$env:LOCALAPPDATA\AudioMatrix`
@@ -460,9 +523,11 @@ The installer:
 
 ```markdown
 ## Summary
+
 <!-- Brief description of changes -->
 
 ## Type
+
 - [ ] Feature
 - [ ] Bug fix
 - [ ] Refactor
@@ -470,11 +535,13 @@ The installer:
 - [ ] CI/CD
 
 ## Testing
+
 - [ ] Unit tests added/updated
 - [ ] Integration tests added/updated
 - [ ] Manual testing performed
 
 ## Checklist
+
 - [ ] Code follows project style guidelines
 - [ ] No files exceed 1000 lines
 - [ ] All tests pass locally
@@ -482,6 +549,7 @@ The installer:
 - [ ] CHANGELOG updated (if applicable)
 
 ## Related Issues
+
 Closes #XXX
 ```
 
@@ -498,6 +566,7 @@ Closes #XXX
 Types: `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `perf`, `chore`
 
 Example:
+
 ```
 feat(vban): implement adaptive jitter buffer
 
@@ -532,13 +601,14 @@ version.workspace = true
 
 ### Version Format Rules (STRICT)
 
-| Branch | Version Format | Example |
-|--------|---------------|---------|
-| `develop` | `X.Y.Z-dev.N` | `0.1.0-dev.1`, `0.1.0-dev.2` |
-| `main` | `X.Y.Z` | `0.1.0`, `0.2.0`, `1.0.0` |
-| `release/*` | `X.Y.Z` | `0.1.0` |
+| Branch      | Version Format | Example                      |
+| ----------- | -------------- | ---------------------------- |
+| `develop`   | `X.Y.Z-dev.N`  | `0.1.0-dev.1`, `0.1.0-dev.2` |
+| `main`      | `X.Y.Z`        | `0.1.0`, `0.2.0`, `1.0.0`    |
+| `release/*` | `X.Y.Z`        | `0.1.0`                      |
 
 **CI Enforcement:**
+
 - Push to `develop` with non-dev version → **CI FAILS**
 - Push to `main` with dev version → **CI FAILS**
 - PR from `develop` to `main` must bump version to release format
@@ -562,6 +632,7 @@ version.workspace = true
 ### Release Artifacts
 
 Each GitHub Release includes:
+
 - `audiomatrix-x.y.z-windows-x64.exe` - Windows installer
 - `audiomatrix-x.y.z-windows-x64.zip` - Windows portable
 - `audiomatrix-x.y.z-linux-x64.tar.gz` - Linux binary
@@ -578,6 +649,7 @@ irm https://raw.githubusercontent.com/zbynekdrlik/audiomatrix/main/scripts/insta
 ```
 
 The installer script:
+
 1. **Always prints version** at start
 2. Downloads latest release binary
 3. Verifies SHA256 checksum
@@ -738,6 +810,7 @@ jobs:
 ### Required Status Checks
 
 All PRs to `main` must pass:
+
 - `fmt`
 - `clippy`
 - `test` (all matrix entries)
@@ -781,9 +854,12 @@ Create project-specific skills:
 
 ```markdown
 # .claude/skills/run-tests.md
+
 ---
+
 name: test
 description: Run project tests with coverage
+
 ---
 
 Run the following test workflow:
@@ -796,9 +872,12 @@ Run the following test workflow:
 
 ```markdown
 # .claude/skills/review-audio.md
+
 ---
+
 name: review-audio
 description: Review audio code for real-time safety
+
 ---
 
 Analyze the provided audio code for:
@@ -833,6 +912,7 @@ For long sessions, use structured memory:
 ```
 
 Key patterns to remember:
+
 - Connection ID format: `{src}:{dev}:{ch}>{dst}:{dev}:{ch}`
 - 1-based channel indexing in API/UI
 - Destination-owned subscription model
@@ -844,12 +924,12 @@ Key patterns to remember:
 
 ### Latency Budgets
 
-| Operation | Target | Max Acceptable |
-|-----------|--------|----------------|
-| Local route (buffer copy) | < 0.1ms | 0.5ms |
-| Full local path | < 3ms | 5ms |
-| Network path (LAN) | < 5ms | 10ms |
-| ASIO callback processing | < 0.5ms | 1ms |
+| Operation                 | Target  | Max Acceptable |
+| ------------------------- | ------- | -------------- |
+| Local route (buffer copy) | < 0.1ms | 0.5ms          |
+| Full local path           | < 3ms   | 5ms            |
+| Network path (LAN)        | < 5ms   | 10ms           |
+| ASIO callback processing  | < 0.5ms | 1ms            |
 
 ### Benchmarking
 
@@ -930,7 +1010,7 @@ reorder_imports = true
 
 ### Code Documentation
 
-```rust
+````rust
 /// Processes incoming audio samples through the routing matrix.
 ///
 /// This function is called from the audio thread and MUST be lock-free.
@@ -966,7 +1046,7 @@ reorder_imports = true
 pub fn process(&self, input: &[f32], output: &mut [f32]) -> usize {
     // Implementation
 }
-```
+````
 
 ### Architecture Decision Records (ADRs)
 
@@ -976,18 +1056,23 @@ Store in `docs/adr/`:
 # ADR-001: Use VBAN for Network Audio Transport
 
 ## Status
+
 Accepted
 
 ## Context
+
 We need a network audio protocol that is:
+
 - Low latency (< 5ms)
 - Compatible with existing software
 - Well-documented
 
 ## Decision
+
 Use VBAN protocol as the transport layer.
 
 ## Consequences
+
 - Good: Compatible with VB-Audio ecosystem
 - Good: Simple UDP-based protocol
 - Bad: No built-in authentication
@@ -1045,6 +1130,7 @@ Checklist for reviewers:
 ### Common Issues
 
 **Clippy too strict?**
+
 ```bash
 # Allow specific lint temporarily (add comment explaining why)
 #[allow(clippy::too_many_arguments)]  // Builder pattern pending refactor
@@ -1052,6 +1138,7 @@ fn complex_function(/* 7 args */) { }
 ```
 
 **Coverage too low?**
+
 ```bash
 # Find uncovered lines
 cargo llvm-cov --html
@@ -1059,6 +1146,7 @@ open target/llvm-cov/html/index.html
 ```
 
 **Benchmark flaky?**
+
 ```bash
 # Run with more samples
 cargo bench -- --sample-size 100
@@ -1086,11 +1174,11 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 
 **Use sshpass for SSH access.** Credentials are in TARGETS.md.
 
-| Machine | Hostname | IP | OS | User | Role |
-|---------|----------|----|----|------|------|
-| **stagebox1** | stagebox1.lan | 10.77.9.237 | Windows | newlevel | PRIMARY Windows testing |
-| **develbox** | develbox | 10.77.9.21 | Linux | newlevel | Development + Linux testing |
-| **iem** | iem | 10.77.9.231 | Windows | iem | Windows test target |
+| Machine       | Hostname      | IP          | OS      | User     | Role                        |
+| ------------- | ------------- | ----------- | ------- | -------- | --------------------------- |
+| **stagebox1** | stagebox1.lan | 10.77.9.237 | Windows | newlevel | PRIMARY Windows testing     |
+| **develbox**  | develbox      | 10.77.9.21  | Linux   | newlevel | Development + Linux testing |
+| **iem**       | iem           | 10.77.9.231 | Windows | iem      | Windows test target         |
 
 **ALL THREE MACHINES ARE MANDATORY DEPLOYMENT TARGETS. NEVER SKIP ANY.**
 
@@ -1131,6 +1219,7 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 ```
 
 **Basic Connectivity:**
+
 - [ ] Local audio routing on stagebox1 (Windows)
 - [ ] Local audio routing on develbox (Linux)
 - [ ] Network routing: stagebox1 → develbox
@@ -1140,6 +1229,7 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 - [ ] Cross-platform device discovery
 
 **Deep Feature Testing (per ARCHITECTURE.md):**
+
 - [ ] Generate sine waves to virtual ASIO devices
 - [ ] Add multiple virtual ASIO devices
 - [ ] Connect to physical ASIO devices
@@ -1152,6 +1242,7 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@hostname
 ### Self-Hosted GitHub Actions Runner (Future)
 
 **stagebox1.lan can be configured as a self-hosted runner** for automated testing:
+
 - Runs Windows-specific tests (ASIO, Virtual ASIO driver)
 - Executes full E2E tests with real audio hardware
 - Verifies network routing to develbox
@@ -1162,6 +1253,7 @@ This enables fully automated testing of ALL features before merge.
 ### CRITICAL: Build via GitHub Actions, NOT on Target Machines
 
 **ALL building MUST happen via GitHub Actions CI/CD:**
+
 - Windows binaries: Built by `windows-latest` runner in GitHub Actions
 - C++ components (Virtual ASIO driver): Built by GitHub Actions with MSVC
 - NEVER attempt to install compilers, build tools, or SDKs on target machines
@@ -1173,6 +1265,7 @@ This enables fully automated testing of ALL features before merge.
 **CRITICAL: Claude MUST perform all testing autonomously.**
 
 You have SSH access to all test machines with credentials in TARGETS.md. You are REQUIRED to:
+
 - Deploy binaries yourself via SSH/SCP
 - Run tests yourself on all target machines
 - Verify functionality yourself before reporting completion
@@ -1187,6 +1280,7 @@ You have SSH access to all test machines with credentials in TARGETS.md. You are
 1. **Wait for CI**: Monitor until dev release is available
 
 2. **Deploy to stagebox1.lan** (Windows):
+
    ```bash
    # Stop existing process
    sshpass -p "newlevel" ssh newlevel@stagebox1.lan "powershell -Command \"Get-Process audiomatrix* -ErrorAction SilentlyContinue | Stop-Process -Force\""
@@ -1197,6 +1291,7 @@ You have SSH access to all test machines with credentials in TARGETS.md. You are
    ```
 
 3. **Deploy to develbox** (Linux):
+
    ```bash
    curl -LO https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-linux-x64
    chmod +x audiomatrix-dev-linux-x64
@@ -1222,28 +1317,33 @@ You have SSH access to all test machines with credentials in TARGETS.md. You are
 **Solution**: Use `/RU "CONSOLE_USER"` to run task as the logged-in desktop user.
 
 **Step 1: Download to Public folder:**
+
 ```bash
 sshpass -p "PASSWORD" ssh user@HOST "powershell -Command \"Invoke-WebRequest -Uri 'https://github.com/zbynekdrlik/audiomatrix/releases/download/dev/audiomatrix-dev-windows-x64.exe' -OutFile 'C:\Users\Public\audiomatrix.exe'\""
 ```
 
 **Step 2: Check who is logged into desktop:**
+
 ```bash
 sshpass -p "PASSWORD" ssh user@HOST "query user"
 # Look for USERNAME in "console" session - this is the DESKTOP USER
 ```
 
 **Step 3: Create task as CONSOLE USER (not SSH user!):**
+
 ```bash
 # Replace CONSOLE_USER with username from step 2
 sshpass -p "PASSWORD" ssh user@HOST "schtasks /Create /TN AudioMatrixConsole /TR \"C:\Users\Public\audiomatrix.exe -n NODENAME\" /SC ONCE /ST 00:00 /RU \"CONSOLE_USER\" /RL HIGHEST /IT /F"
 ```
 
 **Step 4: Run immediately - TRAY ICON APPEARS:**
+
 ```bash
 sshpass -p "PASSWORD" ssh user@HOST "schtasks /Run /TN AudioMatrixConsole"
 ```
 
 **Step 5: Verify running in Console session:**
+
 ```bash
 sshpass -p "PASSWORD" ssh user@HOST "tasklist /FI \"IMAGENAME eq audiomatrix.exe\""
 # Must show "Console" and session "1" (not "Services" session "0")
@@ -1251,6 +1351,7 @@ curl http://HOST:8080/api/v1/health
 ```
 
 **THE KEY:** `/RU "CONSOLE_USER"` makes the task run as the desktop user, not the SSH user.
+
 - SSH user connects remotely (Session 0 = no GUI)
 - Console user is logged into desktop (Session 1 = has GUI)
 - Task runs as console user → process gets GUI access → tray icon works
@@ -1260,6 +1361,7 @@ curl http://HOST:8080/api/v1/health
 Run these tests via SSH after deployment:
 
 **1. Health Check (all machines):**
+
 ```bash
 curl http://stagebox1.lan:8080/api/v1/health
 curl http://10.77.9.21:8080/api/v1/health
@@ -1267,11 +1369,13 @@ curl http://10.77.9.231:8080/api/v1/health  # if iem running
 ```
 
 **2. Device Enumeration (verify ASIO on Windows):**
+
 ```bash
 curl http://stagebox1.lan:8080/api/v1/nodes/local/devices | jq '.[] | .name'
 ```
 
 **3. Route CRUD Test:**
+
 ```bash
 # Create route
 curl -X POST http://stagebox1.lan:8080/api/v1/routes -H "Content-Type: application/json" -d '{"source_node":"LOCAL","source_device":"device1","source_channel":1,"destination_node":"LOCAL","destination_device":"device2","destination_channel":1,"volume":1.0,"muted":false}'
@@ -1282,12 +1386,14 @@ curl -X DELETE "http://stagebox1.lan:8080/api/v1/routes/ROUTE_ID"
 ```
 
 **4. Cross-Node Discovery:**
+
 ```bash
 curl http://stagebox1.lan:8080/api/v1/nodes | jq '.[] | .name'
 # Should show both stagebox1 and develbox
 ```
 
 **5. Network Route Test (stagebox1 ↔ develbox):**
+
 ```bash
 # Create cross-node route
 curl -X POST http://stagebox1.lan:8080/api/v1/routes -H "Content-Type: application/json" -d '{"source_node":"develbox","source_device":"device1","source_channel":1,"destination_node":"LOCAL","destination_device":"device2","destination_channel":1,"volume":1.0,"muted":false}'
@@ -1296,6 +1402,7 @@ curl -X POST http://stagebox1.lan:8080/api/v1/routes -H "Content-Type: applicati
 ### E2E Test Implementation Requirements
 
 Before asking user to test anything, implement and run E2E tests that cover:
+
 - UI loads with real devices displayed
 - Route creation via API works
 - Route deletion via API works
@@ -1306,11 +1413,13 @@ Before asking user to test anything, implement and run E2E tests that cover:
 ### TARGETS.md Management
 
 The file `TARGETS.md` (gitignored, local only) contains additional details:
+
 - SSH/remote access credentials (user/password)
 - Current deployment status
 - Additional test machines
 
 **Important:**
+
 - TARGETS.md is gitignored - never commit credentials
 - Always verify target availability before testing
 - stagebox1.lan is the PRIMARY Windows test target
@@ -1326,4 +1435,4 @@ The file `TARGETS.md` (gitignored, local only) contains additional details:
 
 ---
 
-*This document is the development contract. All contributors must follow these guidelines.*
+_This document is the development contract. All contributors must follow these guidelines._

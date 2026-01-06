@@ -27,7 +27,7 @@
 use crate::destination::HeadroomMode;
 use crate::metering::MeterBank;
 use crate::ring_buffer_pool::RingBufferPool;
-use crate::routing_snapshot::{DestinationSnapshot, RoutingSnapshot};
+use crate::routing_snapshot::DestinationSnapshot;
 use crate::routing_table::RoutingTable;
 use crate::Sample;
 use std::sync::atomic::Ordering;
@@ -115,32 +115,16 @@ impl InputCallbackContext {
 /// access to the routing table and buffer pool.
 #[derive(Debug)]
 pub struct OutputCallbackContext {
-    /// Routing table for reading current configuration
+    /// Routing table for reading current configuration (lock-free via ArcSwap)
     routing_table: Arc<RoutingTable>,
     /// Buffer pool for reading source samples
     buffer_pool: Arc<RingBufferPool>,
     /// Destination indices to process (indices into the routing snapshot)
     dest_indices: Vec<usize>,
-    /// Cached routing snapshot and its generation
-    cached_snapshot: parking_lot::Mutex<CachedSnapshot>,
     /// Device ID for logging/debugging
     device_id: String,
     /// Meter bank for level metering
     meters: MeterBank,
-}
-
-/// Cached routing snapshot to avoid repeated Arc clones.
-struct CachedSnapshot {
-    snapshot: Arc<RoutingSnapshot>,
-    generation: u64,
-}
-
-impl std::fmt::Debug for CachedSnapshot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CachedSnapshot")
-            .field("generation", &self.generation)
-            .finish_non_exhaustive()
-    }
 }
 
 impl OutputCallbackContext {
@@ -159,18 +143,12 @@ impl OutputCallbackContext {
         dest_indices: Vec<usize>,
         device_id: impl Into<String>,
     ) -> Self {
-        let snapshot = routing_table.snapshot();
-        let generation = snapshot.generation;
         let channel_count = dest_indices.len();
         let meters = MeterBank::new(channel_count);
         Self {
             routing_table,
             buffer_pool,
             dest_indices,
-            cached_snapshot: parking_lot::Mutex::new(CachedSnapshot {
-                snapshot,
-                generation,
-            }),
             device_id: device_id.into(),
             meters,
         }
@@ -278,8 +256,8 @@ pub fn create_input_callback(
 ///
 /// # Lock-Free Guarantees
 ///
-/// The only lock acquired is on the cached snapshot, which is held briefly.
-/// All audio processing uses atomic operations and pure math only.
+/// This callback is fully lock-free. All operations use atomic loads only.
+/// The routing table uses ArcSwap for wait-free snapshot reads.
 #[allow(clippy::too_many_lines)]
 pub fn create_output_callback(
     context: Arc<OutputCallbackContext>,
@@ -297,16 +275,8 @@ pub fn create_output_callback(
             return;
         }
 
-        // Check if routing has changed and update cached snapshot if needed
-        let snapshot = {
-            let current_gen = context.routing_table.generation();
-            let mut cached = context.cached_snapshot.lock();
-            if cached.generation != current_gen {
-                cached.snapshot = context.routing_table.snapshot();
-                cached.generation = cached.snapshot.generation;
-            }
-            Arc::clone(&cached.snapshot)
-        };
+        // Get current routing snapshot (lock-free via ArcSwap)
+        let snapshot = context.routing_table.snapshot();
 
         // Stack-allocated buffers for mixing
         let mut mix_buffer = [0.0f32; MAX_BUFFER_SIZE];

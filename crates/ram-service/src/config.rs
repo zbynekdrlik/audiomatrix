@@ -7,8 +7,6 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use ram_api::SecurityConfig;
-
 /// Service configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceConfig {
@@ -24,9 +22,6 @@ pub struct ServiceConfig {
     /// Discovery configuration.
     #[serde(default)]
     pub discovery: DiscoveryConfig,
-    /// Security configuration.
-    #[serde(default)]
-    pub security: SecurityConfig,
     /// Logging configuration.
     #[serde(default)]
     pub logging: LoggingConfig,
@@ -49,7 +44,6 @@ impl Default for ServiceConfig {
             api: ApiConfig::default(),
             vban: VbanConfig::default(),
             discovery: DiscoveryConfig::default(),
-            security: SecurityConfig::default(),
             logging: LoggingConfig::default(),
             audio: AudioConfig::default(),
         }
