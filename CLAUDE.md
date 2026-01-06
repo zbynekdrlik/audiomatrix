@@ -1426,6 +1426,45 @@ The file `TARGETS.md` (gitignored, local only) contains additional details:
 
 ---
 
+## Work Completion Requirements
+
+**MANDATORY: When finishing any development task, ALWAYS provide these URLs:**
+
+1. **GitHub Actions CI Status** - Verify all checks are green:
+
+   ```
+   https://github.com/zbynekdrlik/audiomatrix/actions
+   ```
+
+2. **stagebox1 Web UI** - Primary Windows test target:
+
+   ```
+   http://stagebox1.lan:8080
+   ```
+
+3. **stagebox1 API Health** - Verify service is running:
+   ```
+   http://stagebox1.lan:8080/api/v1/health
+   ```
+
+**After pushing changes:**
+
+- Wait for CI to complete (use 300s polling interval)
+- Verify all GitHub Actions jobs are green
+- Deploy to stagebox1 if CI passes
+- Provide all three URLs to user as confirmation
+
+**Example completion message:**
+
+```
+✅ Changes pushed and verified:
+- CI Status: https://github.com/zbynekdrlik/audiomatrix/actions (all green)
+- Web UI: http://stagebox1.lan:8080
+- Health: http://stagebox1.lan:8080/api/v1/health
+```
+
+---
+
 ## Contact & Resources
 
 - **Architecture**: `ARCHITECTURE.md`
